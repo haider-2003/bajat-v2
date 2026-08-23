@@ -1,8 +1,7 @@
 import { AppShell } from "@/components/layout/app-shell"
 import { SidebarTrigger } from "@/components/layout/sidebar"
 
-import { RequestsClient } from "./requests-client"
-import { requests } from "./data"
+import { RequestsClient, RequestsCount } from "./components/requests-client"
 
 export const metadata = {
   title: "Members Requests · Bajat",
@@ -31,8 +30,9 @@ export default function MembersRequestsPage() {
               Members Requests
             </h1>
             <p className="mt-1 text-[13px] text-text-muted">
-              {requests.length} ID requests awaiting review, printing, and
-              delivery.
+              {/* Reads the same query as the table, so it shares the cache
+                  rather than firing a second request. */}
+              <RequestsCount /> join requests awaiting review.
             </p>
           </div>
         </div>

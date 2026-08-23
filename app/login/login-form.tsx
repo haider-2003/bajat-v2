@@ -14,9 +14,19 @@ import {
 } from "lucide-react"
 
 import { BajatMark } from "@/components/brand/bajat-mark"
-import { signIn } from "@/lib/prototype-session"
+import {
+  getAuthErrorMessage,
+  requiresRecaptcha,
+  use2FAEnable,
+  use2FASetup,
+  useLogin,
+  useSendOTP,
+} from "@/features/auth/api"
+import { useAuthStore } from "@/features/auth/store"
+import type { User } from "@/features/users/types"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input, InputGroup, InputGroupAddon } from "@/components/ui/input"
+import { TEMP_TOKEN_KEY } from "@/utils/api/auth-helpers"
 import { cn } from "@/lib/utils"
 
 import { OtpInput } from "./otp-input"
@@ -25,15 +35,52 @@ import { PremiumButton } from "./premium-button"
 /**
  * Bajat sign-in — three steps: credentials → SMS code → authenticator app.
  *
- * UI ONLY. Nothing is submitted, validated, or persisted; the step buttons
- * just move between screens so each state can be reviewed. Follows
- * DESIGN.md §10 (inputs 36px/8px radius, labels above at 13/500, 16px field
- * gap) and §20.2 (36px primary action, solid black / white).
+ * Wired to the real endpoints per docs/authentication.md §2:
+ *   send_otp  →  login (returns a *temp* token)  →  2fa/enable (returns the
+ *   session token). TOTP is not optional; the flow always runs all three.
+ *
+ * Layout follows DESIGN.md §10 (inputs 36px/8px radius, labels above at
+ * 13/500, 16px field gap) and §20.2 (36px primary action, solid black / white).
  */
 
 type Step = "credentials" | "otp" | "authenticator"
 
 const STEPS: Step[] = ["credentials", "otp", "authenticator"]
+
+/** Seconds before "Resend code" becomes available again. */
+const RESEND_COOLDOWN = 60
+
+/* ------------------------------------------------------------------ *
+ * Phone handling
+ * ------------------------------------------------------------------ */
+
+/**
+ * The field collects the local part; the API wants a full number.
+ *
+ * A leading zero is dropped because "0770…" and "770…" are the same subscriber
+ * and users type both. If the backend turns out to want a different shape
+ * (a leading "+", or the bare local number), this is the only place to change.
+ */
+function normalizePhone(input: string): string {
+  const digits = input.replace(/\D/g, "").replace(/^0+/, "")
+  return `964${digits}`
+}
+
+/** Iraqi mobile numbers are 10 local digits (7XX XXX XXXX). */
+function isPhoneComplete(input: string): boolean {
+  return input.replace(/\D/g, "").replace(/^0+/, "").length === 10
+}
+
+/** "7701234567" → "+964 770 ••• 4567" */
+function maskPhone(input: string): string {
+  const digits = input.replace(/\D/g, "").replace(/^0+/, "")
+  if (digits.length < 7) return `+964 ${digits}`
+  return `+964 ${digits.slice(0, 3)} ••• ${digits.slice(-4)}`
+}
+
+function formatCountdown(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+}
 
 /* ------------------------------------------------------------------ *
  * Field wrapper — label above, 6px gap, optional helper (§10.10)
@@ -67,6 +114,19 @@ function Field({
 }
 
 /* ------------------------------------------------------------------ *
+ * Error line — renders only on failure, so the resting layout is unchanged
+ * ------------------------------------------------------------------ */
+
+function FormError({ children }: { children?: string | null }) {
+  if (!children) return null
+  return (
+    <p role="alert" className="mt-4 text-[13px] leading-relaxed text-danger">
+      {children}
+    </p>
+  )
+}
+
+/* ------------------------------------------------------------------ *
  * Step progress — three dots, current one widened (§14.3 dots)
  * ------------------------------------------------------------------ */
 
@@ -91,7 +151,19 @@ function StepDots({ step }: { step: Step }) {
  * Steps
  * ------------------------------------------------------------------ */
 
-function Credentials({ onNext }: { onNext: () => void }) {
+function Credentials({
+  phone,
+  onPhoneChange,
+  onNext,
+  pending,
+  error,
+}: {
+  phone: string
+  onPhoneChange: (next: string) => void
+  onNext: () => void
+  pending: boolean
+  error: string | null
+}) {
   const [show, setShow] = React.useState(false)
 
   return (
@@ -125,6 +197,11 @@ function Credentials({ onNext }: { onNext: () => void }) {
               placeholder="770 123 4567"
               autoComplete="tel"
               className="font-mono"
+              value={phone}
+              onChange={(e) => onPhoneChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !pending) onNext()
+              }}
             />
           </InputGroup>
         </Field>
@@ -141,6 +218,9 @@ function Credentials({ onNext }: { onNext: () => void }) {
             </Link>
           }
         >
+          {/* Not submitted: the API authenticates by SMS code, not password.
+              See the note in docs/authentication.md §2 — kept because the
+              screen was signed off with it. */}
           <div className="relative">
             <Input
               id="password"
@@ -176,15 +256,40 @@ function Credentials({ onNext }: { onNext: () => void }) {
         </label>
       </div>
 
-      <PremiumButton className="mt-7 w-full" onClick={onNext}>
-        Continue
+      <FormError>{error}</FormError>
+
+      <PremiumButton
+        className="mt-7 w-full"
+        onClick={onNext}
+        disabled={pending || !isPhoneComplete(phone)}
+      >
+        {pending ? "Sending code…" : "Continue"}
       </PremiumButton>
     </>
   )
 }
 
-function Otp({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+function Otp({
+  phone,
+  onSubmit,
+  onBack,
+  onResend,
+  pending,
+  resending,
+  error,
+  resendIn,
+}: {
+  phone: string
+  onSubmit: (code: string) => void
+  onBack: () => void
+  onResend: () => void
+  pending: boolean
+  resending: boolean
+  error: string | null
+  resendIn: number
+}) {
   const [code, setCode] = React.useState("")
+  const complete = code.trim().length === 6
 
   return (
     <>
@@ -196,26 +301,43 @@ function Otp({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
         </h1>
         <p className="text-[13px] leading-relaxed text-text-muted">
           We sent a 6-digit code to{" "}
-          <span className="font-mono text-text">+964 770 ••• 4567</span>.
+          <span className="font-mono text-text">{maskPhone(phone)}</span>.
         </p>
       </header>
 
       <div className="mt-8">
-        <OtpInput value={code} onChange={setCode} autoFocus />
+        <OtpInput
+          value={code}
+          onChange={setCode}
+          invalid={!!error}
+          autoFocus
+        />
         <p className="mt-3 text-xs text-text-muted">
           Didn&apos;t get it?{" "}
           <button
             type="button"
+            onClick={onResend}
+            disabled={resendIn > 0 || resending}
             className="font-medium text-text underline-offset-4 hover:underline"
           >
             Resend code
           </button>{" "}
-          <span className="text-text-placeholder">· available in 0:42</span>
+          <span className="text-text-placeholder">
+            {resendIn > 0
+              ? `· available in ${formatCountdown(resendIn)}`
+              : "· available now"}
+          </span>
         </p>
       </div>
 
-      <PremiumButton className="mt-7 w-full" onClick={onNext}>
-        Verify
+      <FormError>{error}</FormError>
+
+      <PremiumButton
+        className="mt-7 w-full"
+        onClick={() => onSubmit(code)}
+        disabled={pending || !complete}
+      >
+        {pending ? "Verifying…" : "Verify"}
       </PremiumButton>
       <BackLink onClick={onBack}>Use a different number</BackLink>
     </>
@@ -223,13 +345,18 @@ function Otp({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
 }
 
 function Authenticator({
-  onDone,
+  onSubmit,
   onBack,
+  pending,
+  error,
 }: {
-  onDone: () => void
+  onSubmit: (code: string) => void
   onBack: () => void
+  pending: boolean
+  error: string | null
 }) {
   const [code, setCode] = React.useState("")
+  const complete = code.trim().length === 6
 
   return (
     <>
@@ -245,7 +372,12 @@ function Authenticator({
       </header>
 
       <div className="mt-8">
-        <OtpInput value={code} onChange={setCode} autoFocus />
+        <OtpInput
+          value={code}
+          onChange={setCode}
+          invalid={!!error}
+          autoFocus
+        />
 
         {/* Helper card — §9.1 card metrics at a compact scale */}
         <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-border bg-background-subtle p-3">
@@ -261,15 +393,22 @@ function Authenticator({
         </div>
       </div>
 
-      <PremiumButton className="mt-7 w-full" onClick={onDone}>
-        Sign in
+      <FormError>{error}</FormError>
+
+      <PremiumButton
+        className="mt-7 w-full"
+        onClick={() => onSubmit(code)}
+        disabled={pending || !complete}
+      >
+        {pending ? "Signing in…" : "Sign in"}
       </PremiumButton>
 
+      {/* No recovery-code endpoint exists yet (docs/authentication.md §9 lists
+          every auth route). Left in place, inert, until one does. */}
       <PremiumButton
         variant="soft"
         icon={KeyRound}
         className="mt-2.5 w-full"
-        onClick={onDone}
       >
         Use a recovery code
       </PremiumButton>
@@ -333,14 +472,118 @@ function BackLink({
 
 export function LoginForm() {
   const router = useRouter()
-  const [step, setStep] = React.useState<Step>("credentials")
+  const setAuth = useAuthStore((s) => s.setAuth)
 
-  // No auth yet: finishing the flow just flips the prototype flag and hands
-  // over to the dashboard, so the whole app can be clicked through.
-  const finish = React.useCallback(() => {
-    signIn()
-    router.push("/")
-  }, [router])
+  const [step, setStep] = React.useState<Step>("credentials")
+  const [phone, setPhone] = React.useState("")
+  const [error, setError] = React.useState<string | null>(null)
+  const [resendIn, setResendIn] = React.useState(0)
+
+  // Held from the login response so it can be paired with the access token
+  // that only arrives at the end of the TOTP step.
+  const [user, setUser] = React.useState<User | null>(null)
+
+  const sendOtp = useSendOTP()
+  const login = useLogin()
+  const enable2FA = use2FAEnable()
+
+  // Provisions the enrolment secret for a user who has no authenticator yet.
+  // The QR it returns has nowhere to render in this screen — see the note in
+  // the handover; the request still has to happen for `2fa/enable` to succeed.
+  use2FASetup(step === "authenticator" && user?.tfaEnabled === false)
+
+  // Resend cooldown.
+  React.useEffect(() => {
+    if (resendIn <= 0) return
+    const id = setTimeout(() => setResendIn((s) => s - 1), 1000)
+    return () => clearTimeout(id)
+  }, [resendIn])
+
+  const requestOtp = React.useCallback(
+    (options?: { advance?: boolean }) => {
+      setError(null)
+      sendOtp.mutate(
+        { phone: normalizePhone(phone) },
+        {
+          onSuccess: () => {
+            setResendIn(RESEND_COOLDOWN)
+            if (options?.advance) setStep("otp")
+          },
+          onError: (err) => {
+            setError(
+              getAuthErrorMessage(
+                err,
+                "Couldn't send the code. Check the number and try again."
+              )
+            )
+          },
+        }
+      )
+    },
+    [phone, sendOtp]
+  )
+
+  const verifyOtp = React.useCallback(
+    (code: string) => {
+      setError(null)
+      login.mutate(
+        { phone: normalizePhone(phone), otp: code, captchaToken: null },
+        {
+          onSuccess: (data) => {
+            // Not a session yet — this token authorizes the 2FA calls only.
+            if (data.tempToken) {
+              localStorage.setItem(TEMP_TOKEN_KEY, data.tempToken)
+            }
+            setUser(data.user)
+            setStep("authenticator")
+          },
+          onError: (err) => {
+            setError(
+              requiresRecaptcha(err)
+                ? "This sign-in needs a captcha, which this screen can't show yet. Contact your administrator."
+                : getAuthErrorMessage(err, "That code isn't right. Try again.")
+            )
+          },
+        }
+      )
+    },
+    [phone, login]
+  )
+
+  const verifyTotp = React.useCallback(
+    (code: string) => {
+      setError(null)
+      enable2FA.mutate(
+        { otp: code },
+        {
+          onSuccess: (data) => {
+            // The temp token MUST go first: `getAuthToken` prefers it, so
+            // leaving it behind would shadow the real session token forever.
+            localStorage.removeItem(TEMP_TOKEN_KEY)
+
+            const account = data.user ?? user
+            if (data.accessToken && account) {
+              setAuth(account, data.accessToken)
+              router.push("/")
+            } else {
+              setError("Sign-in didn't return a session. Try again.")
+            }
+          },
+          onError: (err) => {
+            setError(
+              getAuthErrorMessage(err, "That code isn't right. Try again.")
+            )
+          },
+        }
+      )
+    },
+    [enable2FA, router, setAuth, user]
+  )
+
+  const goBack = React.useCallback((to: Step) => {
+    setError(null)
+    setStep(to)
+  }, [])
 
   return (
     <div className="flex min-h-svh flex-col px-6 py-8 sm:px-10 lg:px-14">
@@ -361,16 +604,36 @@ export function LoginForm() {
           className="w-full max-w-[380px] animate-[intro-rise_620ms_cubic-bezier(0.2,0.8,0.2,1)_both]"
         >
           {step === "credentials" && (
-            <Credentials onNext={() => setStep("otp")} />
+            <Credentials
+              phone={phone}
+              onPhoneChange={(next) => {
+                setPhone(next)
+                setError(null)
+              }}
+              onNext={() => requestOtp({ advance: true })}
+              pending={sendOtp.isPending}
+              error={error}
+            />
           )}
           {step === "otp" && (
             <Otp
-              onNext={() => setStep("authenticator")}
-              onBack={() => setStep("credentials")}
+              phone={phone}
+              onSubmit={verifyOtp}
+              onBack={() => goBack("credentials")}
+              onResend={() => requestOtp()}
+              pending={login.isPending}
+              resending={sendOtp.isPending}
+              error={error}
+              resendIn={resendIn}
             />
           )}
           {step === "authenticator" && (
-            <Authenticator onDone={finish} onBack={() => setStep("otp")} />
+            <Authenticator
+              onSubmit={verifyTotp}
+              onBack={() => goBack("otp")}
+              pending={enable2FA.isPending}
+              error={error}
+            />
           )}
 
           <div className="mt-10 flex items-center justify-between">

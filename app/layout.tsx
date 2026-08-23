@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider, themeInitScript } from "@/components/layout/theme-provider";
 import { IntroSplash, introInitScript } from "@/components/layout/intro-splash";
+import { ReactQueryProvider } from "@/providers/react-query-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -51,10 +52,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: introInitScript }} />
       </head>
       <body className="min-h-full">
-        <ThemeProvider>
-          <IntroSplash />
-          {children}
-        </ThemeProvider>
+        <ReactQueryProvider>
+          <ThemeProvider>
+            <IntroSplash />
+            {children}
+          </ThemeProvider>
+        </ReactQueryProvider>
       </body>
     </html>
   );

@@ -13,19 +13,25 @@ import {
 import { cn } from "@/lib/utils"
 
 import type { Features } from "@/lib/table-features"
-import { currencyFmt, type MemberRequest } from "./shared"
+import type { MemberRequest } from "@/features/members-requests/types"
 
 /**
  * Table view — DESIGN.md §8.
  *
  * 40px sticky header on a subtle tint, 48px rows, hairline separators, no
- * zebra striping, and a sticky aggregate footer (§8.8). Selected rows get a
- * full outline plus a radius so they lift out of the list (§8.7).
+ * zebra striping. The pagination bar is passed in as `footer` so it sits
+ * inside the same border as the table rather than floating beneath it (§8.9).
  */
-export function TableView({ table }: { table: TanTable<Features, MemberRequest> }) {
+export function TableView({
+  table,
+  footer,
+}: {
+  table: TanTable<Features, MemberRequest>
+  /** The pagination bar, rendered inside the table's own border (§8.9). */
+  footer?: React.ReactNode
+}) {
   const rows = table.getRowModel().rows
   const visibleCount = table.getVisibleLeafColumns().length
-  const sum = rows.reduce((acc, r) => acc + r.original.amount, 0)
 
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-surface">
@@ -63,16 +69,9 @@ export function TableView({ table }: { table: TanTable<Features, MemberRequest> 
             {rows.map((row) => (
               <TableRow
                 key={row.id}
-                data-state={row.getIsSelected() ? "selected" : undefined}
-                onClick={() => row.toggleSelected(!row.getIsSelected())}
                 className={cn(
-                  "group/row h-12 cursor-pointer border-b-0",
-                  "hover:bg-[rgba(0,0,0,0.025)] dark:hover:bg-[rgba(255,255,255,0.035)]",
-                  // Selected: tint + full outline + radius (§8.7).
-                  "data-[state=selected]:bg-selected",
-                  "data-[state=selected]:[&>td]:border-y data-[state=selected]:[&>td]:border-border-strong",
-                  "data-[state=selected]:[&>td:first-child]:rounded-l-md data-[state=selected]:[&>td:first-child]:border-l",
-                  "data-[state=selected]:[&>td:last-child]:rounded-r-md data-[state=selected]:[&>td:last-child]:border-r"
+                  "h-12 border-b-0",
+                  "hover:bg-[rgba(0,0,0,0.025)] dark:hover:bg-[rgba(255,255,255,0.035)]"
                 )}
               >
                 {row.getVisibleCells().map((cell) => (
@@ -103,15 +102,7 @@ export function TableView({ table }: { table: TanTable<Features, MemberRequest> 
         </Table>
       </div>
 
-      {/* Sticky aggregate bar (§8.8) */}
-      <div className="flex h-12 items-center gap-6 border-t border-border bg-background-subtle px-5">
-        <span className="text-[13px] text-text-muted">
-          Total: {rows.length} request{rows.length === 1 ? "" : "s"}
-        </span>
-        <span className="text-[13px] text-text-muted">
-          Sum: <span className="tabular-nums">{currencyFmt.format(sum)}</span> IQD
-        </span>
-      </div>
+      {footer}
     </div>
   )
 }

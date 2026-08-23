@@ -19,7 +19,8 @@ import {
 } from "lucide-react"
 
 import { BajatMark } from "@/components/brand/bajat-mark"
-import { signOut } from "@/lib/prototype-session"
+import { useLogout } from "@/features/auth/api"
+import { useAuthStore } from "@/features/auth/store"
 import { cn } from "@/lib/utils"
 import {
   footerNav,
@@ -502,19 +503,26 @@ function SidebarSearch({ collapsed }: { collapsed: boolean }) {
 
 function ProfileRow({ collapsed }: { collapsed: boolean }) {
   const router = useRouter()
+  const user = useAuthStore((s) => s.user)
+  const logout = useAuthStore((s) => s.logout)
+  const logoutMutation = useLogout()
 
-  // No account menu yet. Until there is one, this doubles as the way back to
-  // the login flow — otherwise the only way to re-test sign-in is a new tab.
+  // No account menu yet, so the row doubles as sign-out. The local logout runs
+  // either way: a failed server call must never trap someone in a signed-in
+  // shell (docs/authentication.md §7).
   const onClick = () => {
-    signOut()
-    router.push("/login")
+    const finish = () => {
+      logout()
+      router.push("/login")
+    }
+    logoutMutation.mutate(undefined, { onSuccess: finish, onError: finish })
   }
 
   return (
     <button
       type="button"
       onClick={onClick}
-      title="Sign out (prototype)"
+      title="Sign out"
       aria-label="Account menu"
       className={cn(
         "group/profile flex h-[52px] w-full items-center gap-2.5 rounded-md px-2.5",
@@ -534,10 +542,10 @@ function ProfileRow({ collapsed }: { collapsed: boolean }) {
         <>
           <span className="flex min-w-0 flex-1 flex-col items-start">
             <span className="w-full truncate text-[13px] font-medium leading-tight text-text">
-              Sara Alwan
+              {user?.name ?? "Signed in"}
             </span>
             <span className="w-full truncate text-[11px] leading-tight text-text-muted">
-              sara@bajat.io
+              {user?.email ?? user?.phone ?? ""}
             </span>
           </span>
           <ChevronsUpDown

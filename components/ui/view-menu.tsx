@@ -17,8 +17,9 @@ import { cn } from "@/lib/utils"
  * check glyph with no background fill** — the check alone carries the state,
  * rather than a boxed checkbox.
  *
- * Reordering uses native HTML5 drag-and-drop so no extra dependency is needed;
- * explicit up/down buttons are provided because drag alone is inaccessible.
+ * Reordering uses native HTML5 drag-and-drop so no extra dependency is needed.
+ * The up/down arrow buttons that used to sit on each row were removed by
+ * request, so reordering is now pointer-only.
  *
  * Typed against the app's concrete `Features` set: in v9 a generic
  * `TableFeatures` constraint cannot prove that column visibility and ordering
@@ -78,12 +79,6 @@ export function ViewMenu<TData extends RowData>({
     next.splice(toIdx, 0, ...next.splice(fromIdx, 1))
     // Pinned columns keep their leading position.
     table.setColumnOrder([...pinned, ...next])
-  }
-
-  const nudge = (id: string, delta: -1 | 1) => {
-    const idx = order.indexOf(id)
-    const target = order[idx + delta]
-    if (target) move(id, target)
   }
 
   return (
@@ -205,25 +200,6 @@ export function ViewMenu<TData extends RowData>({
                     )}
                   </button>
 
-                  {/* Keyboard reordering — drag alone is not accessible */}
-                  <span className="flex shrink-0 opacity-0 transition-opacity group-hover/col:opacity-100 focus-within:opacity-100">
-                    <button
-                      type="button"
-                      onClick={() => nudge(col.id, -1)}
-                      aria-label={`Move ${label} up`}
-                      className="inline-flex size-4 items-center justify-center rounded-xs text-text-placeholder hover:text-text outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span aria-hidden className="text-[10px] leading-none">▲</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => nudge(col.id, 1)}
-                      aria-label={`Move ${label} down`}
-                      className="inline-flex size-4 items-center justify-center rounded-xs text-text-placeholder hover:text-text outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span aria-hidden className="text-[10px] leading-none">▼</span>
-                    </button>
-                  </span>
                 </li>
               )
             })}
