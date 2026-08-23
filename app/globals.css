@@ -1,26 +1,457 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+
+  /* DESIGN.md semantic surfaces (§2, §19.1) */
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-background-subtle: var(--background-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-border-subtle: var(--border-subtle);
+  --color-text: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-placeholder: var(--text-placeholder);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  /* Violet accent — focus, selection, links (§2.1). Declared here so the
+     `accent-violet` / `accent-soft` utilities actually generate. */
+  --color-accent-violet: var(--accent-violet);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-border: var(--accent-border);
+
+  /* DESIGN.md component metrics (§19.6–19.8) */
+  --spacing-sidebar: 248px;
+  --spacing-sidebar-collapsed: 56px;
+  --spacing-sidebar-drawer: 280px;
+  --spacing-nav-item: 34px;
+  --spacing-nav-subitem: 32px;
+  --spacing-header: 56px;
+  --spacing-toolbar: 48px;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  /* Fixed radius scale — DESIGN.md §1.4 / §19.4.
+     Pinned rather than derived: the spec's steps (4/6/8/12/14/16) are not a
+     constant ratio, and controls must land on exactly 8px. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 16px;
+  --radius-3xl: 20px;
+  --radius-4xl: 24px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ============================================================
+   Light mode — DESIGN.md §2.2 / §17
+   Page is grey, content is white. Never the inverse.
+   ============================================================ */
+:root {
+  /* Surfaces */
+  --background: #f4f4f5;
+  --background-subtle: #fafafa;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-sunken: #f7f7f8;
+  --foreground: #171717;
+
+  /* Text ramp (§2.2) */
+  --text: #171717;
+  --text-secondary: #525252;
+  --text-muted: #737373;
+  --text-placeholder: #a3a3a3;
+
+  /* Cards / popovers */
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+
+  /* Primary is neutral-black (Strategy A, §2.1) */
+  --primary: #111111;
+  --primary-foreground: #ffffff;
+  --secondary: #ffffff;
+  --secondary-foreground: #171717;
+
+  /* Muted = the ~3.5% neutral hover shift (§2.2) */
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  --accent: #f5f5f5;
+  --accent-foreground: #171717;
+
+  /* Violet accent reserved for focus / selection (§2.1) */
+  --accent-violet: #7c3aed;
+  --accent-soft: #f3eeff;
+  --accent-border: #e3d8ff;
+
+  /* Borders — hairlines at ~7% black (§1.6) */
+  --border: #eaeaea;
+  --border-strong: #d4d4d4;
+  --border-subtle: #f1f1f1;
+  --input: #eaeaea;
+  --ring: rgba(124, 58, 237, 0.35);
+
+  /* Status (§2.2) */
+  --success: #16a34a;
+  --success-bg: #e8f8ee;
+  --warning: #ea580c;
+  --warning-bg: #fff1e7;
+  --danger: #dc2626;
+  --danger-bg: #feecec;
+  --destructive: #dc2626;
+  --info: #2563eb;
+  --info-bg: #eaf1fe;
+
+  /* Chart series — theme-stable (§2.2) */
+  --chart-1: #3b82f6;
+  --chart-2: #22c55e;
+  --chart-3: #f97316;
+  --chart-4: #a855f7;
+  --chart-5: #ef4444;
+
+  /* 12px cards / 8px controls (§1.4) */
+  --radius: 0.75rem;
+
+  /* Sidebar — Variant A: same grey as the page (§5.3) */
+  --sidebar: #f4f4f5;
+  --sidebar-foreground: #525252;
+  --sidebar-primary: #111111;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(0, 0, 0, 0.04);
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: #eaeaea;
+  --sidebar-ring: rgba(124, 58, 237, 0.35);
+
+  /* Overlay (§13.2) */
+  --overlay: rgba(15, 15, 15, 0.32);
+}
+
+/* ============================================================
+   Dark mode — DESIGN.md §2.3 / §16
+   Not an inversion. Elevation = lightness; borders lighten the
+   ground; text stops at #EDEDED; status tints become alpha
+   overlays; inputs recess below their card.
+   ============================================================ */
+.dark {
+  /* Surfaces step LIGHTER as they elevate (§16.2) */
+  --background: #0a0a0a;
+  --background-subtle: #121212;
+  --surface: #161616;
+  --surface-elevated: #1e1e1e;
+  --surface-sunken: #111111;
+  --foreground: #ededed;
+
+  /* Text ramp — never pure white (§16.1) */
+  --text: #ededed;
+  --text-secondary: #a1a1a1;
+  --text-muted: #7a7a7a;
+  --text-placeholder: #5a5a5a;
+
+  --card: #161616;
+  --card-foreground: #ededed;
+  --popover: #1e1e1e;
+  --popover-foreground: #ededed;
+
+  /* Primary inverts to white-on-black (§7.2) */
+  --primary: #ffffff;
+  --primary-foreground: #0a0a0a;
+  --secondary: rgba(255, 255, 255, 0.04);
+  --secondary-foreground: #ededed;
+
+  /* Additive white hover, never a hue tint (§16.4) */
+  --muted: rgba(255, 255, 255, 0.045);
+  --muted-foreground: #7a7a7a;
+  --accent: rgba(255, 255, 255, 0.045);
+  --accent-foreground: #ededed;
+
+  --accent-violet: #a78bfa;
+  --accent-soft: rgba(167, 139, 250, 0.14);
+  --accent-border: rgba(167, 139, 250, 0.32);
+
+  /* Borders LIGHTEN the ground (§16.1) */
+  --border: #262626;
+  --border-strong: #3a3a3a;
+  --border-subtle: #1c1c1c;
+  --input: #2a2a2a;
+  --ring: rgba(167, 139, 250, 0.45);
+
+  /* Status lightened; backgrounds become low-alpha overlays (§2.3) */
+  --success: #4ade80;
+  --success-bg: rgba(74, 222, 128, 0.12);
+  --warning: #fb923c;
+  --warning-bg: rgba(251, 146, 60, 0.12);
+  --danger: #f87171;
+  --danger-bg: rgba(248, 113, 113, 0.12);
+  --destructive: #f87171;
+  --info: #60a5fa;
+  --info-bg: rgba(96, 165, 250, 0.12);
+
+  /* Chart series unchanged across themes (§2.3) */
+  --chart-1: #3b82f6;
+  --chart-2: #22c55e;
+  --chart-3: #f97316;
+  --chart-4: #a855f7;
+  --chart-5: #ef4444;
+
+  /* Sidebar is the DARKEST surface (§5.3) */
+  --sidebar: #0d0d0d;
+  --sidebar-foreground: #a1a1a1;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #ededed;
+  --sidebar-border: #262626;
+  --sidebar-ring: rgba(167, 139, 250, 0.45);
+
+  --overlay: rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================================
+   Login brand-panel motion (§18.0 rule 10)
+
+   Top-level keyframes rather than @theme entries: they are consumed
+   through arbitrary `animate-[...]` utilities in one component, so
+   there is no reason to mint theme tokens for them.
+
+   The reduced-motion block in @layer base clamps every duration to
+   0.01ms, which lands `card-in` on its final frame (it is `both`-filled)
+   and freezes the ambient float. No per-component guard needed.
+   ============================================================ */
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(26px) scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: var(--fan);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Splash entrance: the same landing, from further away and held longer. */
+@keyframes intro-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(96px) scale(0.78);
+  }
+  to {
+    opacity: 1;
+    transform: var(--fan);
+  }
+}
+
+@keyframes glow-drift {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.72;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+}
+
+/* Splash glow: blooms once behind the stack rather than breathing. */
+@keyframes intro-glow {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes intro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/**
+ * Entrances that must wait for the splash.
+ *
+ * The app renders *underneath* the intro overlay, so any mount-triggered
+ * animation runs and finishes while it is still covered — the login panel's
+ * cards were settling at ~900ms behind a splash that stays up until ~2600ms,
+ * so nobody ever saw them move.
+ *
+ * Pausing rather than delaying: the animation is held at frame zero and starts
+ * the moment `data-intro` is removed, whenever that happens. A fixed
+ * `animation-delay` would have to guess the splash's duration and would still
+ * be wrong for a returning visitor who never sees one, for anyone who hits
+ * Skip, or under reduced motion where the splash never runs at all.
+ *
+ * Unlayered and `!important`, both of which are load-bearing. The `animation`
+ * shorthand resets `animation-play-state` to `running`, and it arrives from
+ * two directions that outrank a layered rule: Tailwind's `animate-[…]` sits in
+ * `@layer utilities` (which beats `@layer base`), and IdCardStack sets
+ * `style={{ animation }}` inline (which beats every layer). An unlayered
+ * `!important` declaration outranks both.
+ */
+html[data-intro="playing"] [data-await-intro] {
+  animation-play-state: paused !important;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+    /* Mobile-first baseline (DESIGN.md §18.0): the page itself never scrolls
+       sideways — wide content scrolls inside its own container. */
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Scroll lock while the intro splash is up. Driven by the marker the intro
+     init script sets, so no inline body style is needed (which would trip a
+     hydration attribute mismatch). */
+  html[data-intro="playing"],
+  html[data-intro="playing"] body {
+    overflow: hidden;
+  }
+
+  /**
+   * Autofill.
+   *
+   * Chrome paints its own pale-yellow fill over any autofilled field, which
+   * overrides every surface token and looks broken in dark mode. The fix is
+   * the transition delay, not `-webkit-box-shadow`: Tailwind builds focus
+   * rings out of `box-shadow`, so the usual `inset 0 0 0 1000px` trick
+   * silently deletes the ring on exactly the fields most likely to be
+   * autofilled. Delaying the background transition parks the UA colour
+   * permanently out of reach and leaves the ring intact.
+   */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--text);
+    caret-color: var(--text);
+    transition: background-color 5000s ease-in-out 0s;
+  }
+
+  /* §18.0 rule 10 — collapse motion to instant state changes. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /**
+   * Quiet overlay scrollbar.
+   *
+   * DESIGN.md keeps chrome recessed (§1.1), so the scrollbar is a 6px
+   * transparent-track thumb that only becomes visible while the region is
+   * hovered or actively scrolling. It overlays rather than reserving a
+   * gutter, so the 56px collapsed rail stays exactly 56px.
+   */
+  .scrollbar-quiet {
+    /* Firefox: thin thumb, no track. Faint at rest so the region reads as
+       scrollable, stronger on hover. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    transition: scrollbar-color 150ms ease;
+  }
+
+  .scrollbar-quiet:hover,
+  .scrollbar-quiet:focus-within {
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  /* WebKit: a 6px overlay thumb with a transparent track, so no gutter is
+     reserved and the 56px collapsed rail stays exactly 56px. */
+  .scrollbar-quiet::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-quiet::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-quiet::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 999px;
+    transition: background-color 150ms ease;
+  }
+
+  .scrollbar-quiet:hover::-webkit-scrollbar-thumb,
+  .scrollbar-quiet:focus-within::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+  }
+
+  .scrollbar-quiet::-webkit-scrollbar-thumb:hover,
+  .scrollbar-quiet::-webkit-scrollbar-thumb:active {
+    background-color: var(--text-placeholder);
+  }
+
+  .scrollbar-quiet::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
