@@ -176,6 +176,9 @@ export function IdCardStack({
 
   return (
     <div
+      // The splash flies its own copy of this stack onto this one; see the
+      // hand-off note in globals.css.
+      data-handoff-target={mode === "panel" ? "" : undefined}
       className={cn(
         // `perspective` alone, deliberately NOT `transform-style: preserve-3d`
         // — see the note on plane intersection above.
@@ -187,9 +190,6 @@ export function IdCardStack({
         <div
           key={card.key}
           aria-hidden
-          // Panel cards sit behind the splash and must wait for it; the
-          // splash's own stack is the thing being waited for.
-          data-await-intro={mode === "panel" ? "" : undefined}
           className={cn(
             "absolute inset-0",
             card.depth === "front" ? "z-20" : "z-10"

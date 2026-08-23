@@ -341,6 +341,39 @@
  * `style={{ animation }}` inline (which beats every layer). An unlayered
  * `!important` declaration outranks both.
  */
+/**
+ * Hand-off target.
+ *
+ * While the splash is up, the login panel's cards hold their resting position
+ * but stay invisible: the flight has to arrive into an *empty* space. Leaving
+ * them visible meant the destination was already occupied, so the flying cards
+ * read as a second set sliding on top of the first rather than as the same
+ * cards being set down.
+ *
+ * `opacity` rather than `display`/`visibility` on purpose — the element must
+ * keep its box so the splash can measure where to fly to.
+ *
+ * The swap is instant and needs no transition. `data-intro` is removed in the
+ * same tick that unmounts the overlay, so the panel's cards become visible on
+ * exactly the frame the flown ones disappear — and since they are the same
+ * artwork at the same place, there is nothing to see.
+ *
+ * `data-handoff="done"` is stamped on by the splash once a flight actually
+ * runs, and outlives `data-intro`. Without it the cards would re-animate from
+ * opacity 0 the instant the splash removed its marker — replaying, on top of
+ * the cards that had just landed there, the exact entrance the flight was
+ * meant to replace. When no flight ran (no panel on screen, Skip, reduced
+ * motion) it is never set, and that entrance correctly plays instead.
+ */
+html[data-intro="playing"] [data-handoff-target] > * {
+  animation: none !important;
+  opacity: 0 !important;
+}
+
+[data-handoff-target][data-handoff="done"] > * {
+  animation: none !important;
+}
+
 html[data-intro="playing"] [data-await-intro] {
   animation-play-state: paused !important;
 }
