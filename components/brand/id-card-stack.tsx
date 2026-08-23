@@ -160,8 +160,8 @@ const ENTRANCE = {
     delays: [0, 90, 180],
   },
   intro: {
-    animation: "intro-card-in 900ms cubic-bezier(0.16, 0.84, 0.28, 1) both",
-    delays: [140, 260, 380],
+    animation: "intro-card-in 700ms cubic-bezier(0.16, 0.84, 0.28, 1) both",
+    delays: [120, 220, 320],
   },
 } as const
 

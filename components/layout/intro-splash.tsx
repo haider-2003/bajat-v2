@@ -48,11 +48,15 @@ import { cn } from "@/lib/utils"
 
 const SESSION_KEY = "bajat-intro-played"
 const COVER_ID = "bajat-intro-cover"
-/** Cards land at ~1280ms; this holds the finished frame briefly. */
-const HOLD_MS = 2150
+/**
+ * Timeline. Cards land at ~1020ms and the subtitle settles at ~1180ms, so the
+ * hold leaves roughly half a second on the finished frame before it leaves —
+ * enough to read the line, not enough to wait on it.
+ */
+const HOLD_MS = 1750
 const FADE_MS = 450
 /** Flight time when the splash hands its cards to the login panel. */
-const HANDOFF_MS = 720
+const HANDOFF_MS = 620
 /**
  * Splash ground, per theme. Dark reuses the login panel's blue-black so the
  * handoff to the sign-in screen has no seam; light uses the page grey.
@@ -278,15 +282,40 @@ export function IntroSplash() {
           resolution. */}
       <div
         className={cn(
-          "relative mt-14 flex items-center gap-2.5",
-          "animate-[intro-rise_600ms_cubic-bezier(0.2,0.8,0.2,1)_both] [animation-delay:820ms]",
+          "relative mt-12 flex flex-col items-center",
           "transition-opacity duration-200 ease-out",
           leaving && "opacity-0!"
         )}
       >
-        <BajatMark className="size-7 text-text dark:text-white" />
-        <span className="text-lg font-semibold tracking-[-0.01em] text-text dark:text-white">
-          Bajat
+        <div className="flex items-center gap-2.5 animate-[intro-rise_480ms_cubic-bezier(0.2,0.8,0.2,1)_both] [animation-delay:560ms]">
+          <BajatMark className="size-7 text-text dark:text-white" />
+          <span className="text-lg font-semibold tracking-[-0.01em] text-text dark:text-white">
+            Bajat
+          </span>
+        </div>
+
+        {/* The product's own subtitle, not new marketing copy — the login
+            panel already carries the longer positioning line, and repeating
+            it here would say the same thing twice in six seconds.
+
+            Three things this line needs that the Latin one did not:
+              - `lang`/`dir`, so the text is shaped and ordered as Arabic
+              - `font-arabic`, since Geist has no Arabic glyphs
+              - NO letter-spacing. Tracking pulls Arabic's joined letterforms
+                apart and breaks the connections between them; the Latin
+                version's `tracking-[0.01em]` had to go, not be inherited. */}
+        <span
+          lang="ar"
+          dir="rtl"
+          className={cn(
+            "mt-3 font-arabic text-[15px] leading-relaxed",
+            // A step brighter than the Latin line was: Arabic sits at a
+            // smaller optical size for the same px, so it needs the contrast.
+            "text-text-secondary dark:text-white/70",
+            "animate-[intro-rise_480ms_cubic-bezier(0.2,0.8,0.2,1)_both] [animation-delay:700ms]"
+          )}
+        >
+          نظام الهوية الذكية
         </span>
       </div>
 

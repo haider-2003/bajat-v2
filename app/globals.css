@@ -9,6 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-arabic: var(--font-noto-arabic);
   --font-heading: var(--font-geist-sans);
 
   /* DESIGN.md semantic surfaces (§2, §19.1) */
