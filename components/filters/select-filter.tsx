@@ -43,6 +43,7 @@ export function SelectFilter({
   allLabel = "All",
   emptyLabel = "Nothing to choose from",
   loading = false,
+  className,
 }: {
   label: string
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
@@ -53,6 +54,8 @@ export function SelectFilter({
   allLabel?: string
   emptyLabel?: string
   loading?: boolean
+  /** Passed to the trigger — the filter sheet uses it to go full-width. */
+  className?: string
 }) {
   const selected = options.find((option) => option.value === value)
 
@@ -60,7 +63,12 @@ export function SelectFilter({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <FilterButton icon={Icon} label={label} value={selected?.label} />
+          <FilterButton
+            icon={Icon}
+            label={label}
+            value={selected?.label}
+            className={className}
+          />
         }
       />
       <DropdownMenuContent align="end" className="max-h-72 w-56 overflow-y-auto">

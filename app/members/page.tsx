@@ -1,14 +1,14 @@
 import { AppShell } from "@/components/layout/app-shell"
 import { SidebarTrigger } from "@/components/layout/sidebar"
 
-import { CreateRequestDialog } from "./components/create-request-dialog"
-import { RequestsClient, RequestsCount } from "./components/requests-client"
+import { CreateMemberDialog } from "./components/create-member-dialog"
+import { MembersClient, MembersCount } from "./components/members-client"
 
 export const metadata = {
-  title: "Members Requests · Bajat",
+  title: "App Users · Bajat",
 }
 
-export default function MembersRequestsPage() {
+export default function MembersPage() {
   return (
     <AppShell>
       {/* Identity bar (§6.1) */}
@@ -16,10 +16,10 @@ export default function MembersRequestsPage() {
         <SidebarTrigger />
         <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2">
           <span className="hidden text-sm text-text-secondary sm:inline">
-            Members
+            Operations
           </span>
           <span className="hidden text-sm text-text-placeholder sm:inline">/</span>
-          <span className="truncate text-sm font-medium text-text">Requests</span>
+          <span className="truncate text-sm font-medium text-text">App Users</span>
         </nav>
       </header>
 
@@ -28,22 +28,21 @@ export default function MembersRequestsPage() {
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold tracking-[-0.015em] text-text sm:text-xl">
-              Members Requests
+              App Users
             </h1>
             <p className="mt-1 text-[13px] text-text-muted">
               {/* Reads the same query as the table, so it shares the cache
                   rather than firing a second request. */}
-              <RequestsCount /> join requests awaiting review.
+              <MembersCount /> members across your organizations.
             </p>
           </div>
 
           {/* §4.6.2 — the primary action right-aligns to the opposite gutter,
-              on the title's own row rather than in the filter toolbar below:
-              creating a request is not a way of looking at the list. */}
-          <CreateRequestDialog />
+              on the title's own row rather than in the filter toolbar below. */}
+          <CreateMemberDialog />
         </div>
 
-        <RequestsClient />
+        <MembersClient />
       </div>
     </AppShell>
   )

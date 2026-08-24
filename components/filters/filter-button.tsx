@@ -41,7 +41,9 @@ export function FilterButton({
     <button
       type="button"
       className={cn(
-        "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5",
+        // §18.7 — a 44px touch target, back to the §6.6 32px chip at lg,
+        // which is the first width where the toolbar renders inline at all.
+        "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-md px-2.5 lg:h-8",
         "text-sm font-medium whitespace-nowrap",
         "transition-[box-shadow,background-color,color] duration-120",
         "outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -52,9 +54,15 @@ export function FilterButton({
       {...props}
     >
       <Icon className={cn("size-4 shrink-0", surface.muted)} strokeWidth={1.5} />
-      <span className="hidden sm:inline-flex sm:items-baseline sm:gap-1">
+      {/* The label used to hide below `sm`, back when this button sat in a
+          toolbar that stayed inline at every width and had to survive 375px.
+          It doesn't any more — below `lg` the toolbar collapses into the
+          filter sheet (§18.3), where the button is full-width and the label is
+          the only thing telling you what it filters. An icon on its own was
+          the thing that made the mobile toolbar unreadable. */}
+      <span className="inline-flex items-baseline gap-1">
         <span className={surface.muted}>{label}</span>
-        {value && <span className="max-w-[140px] truncate">{value}</span>}
+        {value && <span className="max-w-35 truncate">{value}</span>}
       </span>
     </button>
   )

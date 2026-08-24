@@ -143,7 +143,8 @@ export function DatePicker({
     <PopoverPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Trigger
         className={cn(
-          "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5",
+          // §18.7 — 44px for touch, the §6.6 32px chip at lg.
+          "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-md px-2.5 lg:h-8",
           "text-sm font-medium whitespace-nowrap",
           "transition-[box-shadow,background-color,color] duration-120",
           "outline-none focus-visible:ring-2 focus-visible:ring-ring",

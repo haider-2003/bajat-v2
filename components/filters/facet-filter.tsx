@@ -21,8 +21,14 @@ export type FacetOption = {
 }
 
 /**
- * A multi-select facet — the trigger shows how many are ticked, and the value
- * is the array of ticked keys (`?statuses[]=a&statuses[]=b`).
+ * A multi-select facet — the value is the array of ticked keys, sent as one
+ * repeated parameter (`?statuses[]=a&statuses[]=b`).
+ *
+ * Use this wherever the backend takes a **plural** field. Reaching for
+ * `SelectFilter` because "you usually pick one" is how a screen ends up
+ * sending `organization_id=23` to an endpoint that reads `organization_ids[]`
+ * — a real query parameter, ignored, with no error anywhere and a table that
+ * quietly shows everything (docs/filtering-sorting-pagination.md §6).
  *
  * **The label must stay inside a group.** `DropdownMenuLabel` is Base UI's
  * `Menu.GroupLabel`, which *throws* — "MenuGroupContext is missing" — unless a
@@ -35,13 +41,38 @@ export function FacetFilter({
   options,
   selected,
   onToggle,
+  emptyLabel = "Nothing to choose from",
+  loading = false,
+  className,
 }: {
   label: string
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
   options: FacetOption[]
   selected: string[]
   onToggle: (key: string) => void
+  /** Shown when there is nothing to tick and nothing is loading. */
+  emptyLabel?: string
+  /** Options usually come from a list endpoint; this is not the same as empty. */
+  loading?: boolean
+  /** Passed to the trigger — the filter sheet uses it to go full-width. */
+  className?: string
 }) {
+  /**
+   * The full-contrast half of the trigger (§6.6).
+   *
+   * One tick shows the thing itself; more than one shows a count, because
+   * "Baghdad, Basra, Erbil…" in a 32px chip is a truncated string that names
+   * neither how many nor which. Zero shows nothing at all, so an untouched
+   * facet reads as the attribute alone.
+   */
+  const value = React.useMemo(() => {
+    if (selected.length === 0) return undefined
+    if (selected.length === 1) {
+      return options.find((option) => option.key === selected[0])?.label
+    }
+    return `(${selected.length})`
+  }, [options, selected])
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -49,11 +80,15 @@ export function FacetFilter({
           <FilterButton
             icon={Icon}
             label={label}
-            value={selected.length > 0 ? `(${selected.length})` : undefined}
+            value={value}
+            className={className}
           />
         }
       />
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent
+        align="end"
+        className="max-h-72 w-56 overflow-y-auto"
+      >
         <DropdownMenuGroup>
           <DropdownMenuLabel>{label}</DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -67,6 +102,11 @@ export function FacetFilter({
             </DropdownMenuCheckboxItem>
           ))}
         </DropdownMenuGroup>
+        {options.length === 0 && (
+          <p className="px-1.5 py-1.5 text-[13px] text-text-muted">
+            {loading ? "Loading…" : emptyLabel}
+          </p>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

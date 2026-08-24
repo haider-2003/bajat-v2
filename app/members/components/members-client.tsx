@@ -10,9 +10,7 @@ import {
 import {
   AlertCircle,
   Building2,
-  KanbanSquare,
   LayoutGrid,
-  ListFilter,
   Phone,
   Rows3,
   Search,
@@ -27,40 +25,42 @@ import {
   toggleKey,
   type ActiveFilter,
 } from "@/components/filters"
+import { LoadFailed, LoadingRows } from "@/components/table/load-states"
+import { TableView } from "@/components/table/table-view"
 import { DatePicker, formatDateValue } from "@/components/ui/date-picker"
 import { Pagination } from "@/components/ui/pagination"
 import { ViewMenu } from "@/components/ui/view-menu"
-import { useGetMembersRequests } from "@/features/members-requests/api"
-import { STATUS_META } from "@/features/members-requests/status"
+import { useGetMembers } from "@/features/members/api"
 import { useGetOrganizations } from "@/features/organizations/api"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useListQuery } from "@/hooks/use-list-query"
+import { features } from "@/lib/table-features"
+import { cn } from "@/lib/utils"
 import { buildFilter } from "@/utils/api/filters"
 import { readPageInfo } from "@/utils/api/pagination"
+import { DEFAULT_PAGE_SIZE } from "@/utils/constants"
 import { toInstant } from "@/utils/date"
 import { phoneDigits } from "@/utils/format"
-import { DEFAULT_PAGE_SIZE } from "@/utils/constants"
-import { cn } from "@/lib/utils"
 
 import { columns } from "./columns"
-import { features } from "@/lib/table-features"
-import { BoardView } from "./view-board"
-import { LoadFailed, LoadingRows } from "@/components/table/load-states"
-import { TableView } from "@/components/table/table-view"
 import { CardView } from "./view-cards"
 
 /**
- * Members Requests — view switcher + toolbar.
+ * App Users — view switcher + toolbar.
  *
- * Layout choice is the user's (table / board / cards) and persists per
- * browser. Below `lg` the table is unavailable and the choice falls back to
- * cards, per DESIGN.md §8.12.
+ * The same architecture as Members Requests: server-driven list, filters as
+ * top-level query params, `useListQuery` owning the page, `keepPreviousData`
+ * so paging doesn't blink. See docs/filtering-sorting-pagination.md.
  *
- * Rows come from `GET /member_request`, **paged and filtered by the server**.
- * Search and the status facet travel as query params (`?search=`, `?status=`),
- * per the `filter` contract every list endpoint shares — see
- * docs/api-types.md § standard query parameters. Doing it client-side would
- * only ever filter the page in front of you, which is the wrong answer.
+ * ### Two views, not three
+ *
+ * Members Requests offers table / board / cards. The board groups by status,
+ * and a member has no status — approving a request is what produces one, so
+ * there is nothing to group into columns. A board here would be one column
+ * called "All", which is a table with worse density.
+ *
+ * Rows come from `GET /member`, **paged and filtered by the server**
+ * (docs/api-types.md § members).
  */
 
 /** Typing shouldn't fire a request per keystroke. */
@@ -69,27 +69,27 @@ const SEARCH_DEBOUNCE_MS = 300
 /**
  * The page-header count. Deliberately the **unfiltered** total, and pinned to
  * the default query so it shares the table's first cache entry instead of
- * firing a second request: a page title should say how much work exists, not
- * how much survived the current filter — the pagination bar covers that.
+ * firing a second request: a page title should say how much exists, not how
+ * much survived the current filter — the pagination bar covers that.
  */
 const COUNT_QUERY = { page: 1, pageSize: DEFAULT_PAGE_SIZE } as const
 
 /**
  * The organization facet's source list. Module-level and frozen so it is one
- * stable cache key rather than a new object every render.
+ * stable cache key rather than a new object every render — and the same key
+ * Members Requests uses, so the two screens share one cached response.
  */
 const ORGANIZATIONS_QUERY = { page: 1, pageSize: 100 } as const
 
-
-export function RequestsCount() {
-  const query = useGetMembersRequests(COUNT_QUERY)
+export function MembersCount() {
+  const query = useGetMembers(COUNT_QUERY)
   const total = readPageInfo(query.data?.data).total
 
   if (query.isPending) return <span className="text-text-placeholder">—</span>
   return <>{total ?? query.data?.data.data?.length ?? 0}</>
 }
 
-type ViewMode = "table" | "board" | "cards"
+type ViewMode = "table" | "cards"
 
 const VIEWS: {
   id: ViewMode
@@ -99,19 +99,12 @@ const VIEWS: {
   desktopOnly?: boolean
 }[] = [
   { id: "table", label: "Table", icon: Rows3, desktopOnly: true },
-  { id: "board", label: "Board", icon: KanbanSquare },
   { id: "cards", label: "Cards", icon: LayoutGrid },
 ]
 
-const STORAGE_KEY = "bajat-requests-view"
+const STORAGE_KEY = "bajat-members-view"
 
-/** The status facet's options, in the order §8.4 groups them. */
-const STATUS_OPTIONS = Object.entries(STATUS_META).map(([key, meta]) => ({
-  key,
-  label: meta.label,
-}))
-
-export function RequestsClient() {
+export function MembersClient() {
   // Lazy initialiser rather than an effect: the saved view is read once, and
   // reading it during the first render avoids a flash of the default layout.
   // Guarded for SSR, where `localStorage` does not exist.
@@ -127,19 +120,17 @@ export function RequestsClient() {
   })
   const [isDesktop, setIsDesktop] = React.useState(true)
   const [sorting, setSorting] = React.useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = React.useState<ColumnVisibilityState>(
-    {}
-  )
+  const [columnVisibility, setColumnVisibility] =
+    React.useState<ColumnVisibilityState>({})
 
   // Server-driven: every one of these goes out as a query param, so changing
   // any of them refetches rather than re-filtering what is already on screen.
-  const [statusFilter, setStatusFilter] = React.useState<string[]>([])
   /**
    * Organization ids, as strings. Empty means every organization.
    *
-   * Plural because the endpoint is: it reads `organization_ids[]`, so this
-   * filters to several at once and a single id under the singular name is a
-   * parameter the backend ignores.
+   * Plural because the endpoint is: it reads `organization_ids[]`, so a member
+   * can be filtered to several at once and a single id under the singular name
+   * is a parameter the backend ignores.
    */
   const [organizationIds, setOrganizationIds] = React.useState<string[]>([])
   // The created-at day, held as `yyyy-mm-dd` — what the calendar selects, with
@@ -147,8 +138,7 @@ export function RequestsClient() {
   const [createdAt, setCreatedAt] = React.useState("")
 
   // Each pair is "what the field shows" and "what the server is asked for" —
-  // the second trailing the first by a debounce, so typing doesn't fire a
-  // request per keystroke.
+  // the second trailing the first by a debounce.
   const [query, setQuery] = React.useState("")
   const search = useDebounce(query.trim(), SEARCH_DEBOUNCE_MS)
 
@@ -173,8 +163,6 @@ export function RequestsClient() {
     }
   }
 
-  // Organizations for the facet below. One page of 100 is the whole list in
-  // practice, and it is cached across every screen that needs it.
   const organizationsQuery = useGetOrganizations(ORGANIZATIONS_QUERY)
   const organizations = React.useMemo(
     () => organizationsQuery.data?.data.data ?? [],
@@ -184,62 +172,59 @@ export function RequestsClient() {
   /**
    * Everything this screen filters on, keyed by the field name it is sent as.
    *
-   * `buildFilter` drops the empty ones and sorts the rest, so the clause array
-   * — and therefore the React Query key — depends only on *which* filters are
-   * set, not on the order they were written or applied.
+   * `search`, `phone`, `organizationIds` and `createdAtRange` — the last
+   * carrying one ISO instant.
    *
-   * Each key is spread as one top-level param, decamelized by the request
-   * interceptor. The wire names are the backend's, and they are not always the
-   * field they filter: the status facet sends **`statuses`** as an array even
-   * for a single tick, the organization facet sends **`organization_ids[]`**
-   * the same way, and the date sends **`created_at_range[]`** carrying one ISO
-   * instant. See docs/filtering-sorting-pagination.md §6.
+   * **`organizationIds` is plural and an array**, decamelized to
+   * `organization_ids` and serialized as `organization_ids[]=23&…`. It was
+   * `organizationId` with a single value, which is precisely the failure §6 of
+   * docs/filtering-sorting-pagination.md describes: a field name the backend
+   * does not know still becomes a real query parameter, raises no error
+   * anywhere, and leaves the table quietly unfiltered.
    */
   const filter = React.useMemo(
     () =>
       buildFilter({
         search,
         phone,
-        statuses: statusFilter,
         organizationIds,
         createdAtRange: createdAt ? [toInstant(createdAt)] : undefined,
       }),
-    [search, phone, statusFilter, organizationIds, createdAt]
+    [search, phone, organizationIds, createdAt]
   )
 
   // Page state lives with the filters: `useListQuery` derives page 1 whenever
   // the filter set or the page size changes, so no control here has to
   // remember to reset it.
-  const { query: listQuery, page, pageSize, setPage, setPageSize } =
-    useListQuery(filter, { pageSize: DEFAULT_PAGE_SIZE })
+  const {
+    query: listQuery,
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+  } = useListQuery(filter, { pageSize: DEFAULT_PAGE_SIZE })
 
   // `useGetList` hands back the whole Axios response, so rows sit two `data`
-  // levels down. Falls back to an empty list while loading or after an error.
-  //
-  // `keepPreviousData` is what makes paging work at all: every page is a new
-  // query key, so without it `data` would be undefined for the whole trip and
-  // the row count, the total and the page range would all blink to zero
-  // between pages. It also keeps the skeleton from flashing on every click.
-  const requestsQuery = useGetMembersRequests(listQuery, {
+  // levels down. `keepPreviousData` is what makes paging work at all: every
+  // page is a new query key, so without it `data` would be undefined for the
+  // whole trip and the row count, the total and the page range would all blink
+  // to zero between pages.
+  const membersQuery = useGetMembers(listQuery, {
     placeholderData: keepPreviousData,
   })
   const data = React.useMemo(
-    () => requestsQuery.data?.data.data ?? [],
-    [requestsQuery.data]
+    () => membersQuery.data?.data.data ?? [],
+    [membersQuery.data]
   )
 
-  // `meta.total` is the documented contract, but this endpoint does not always
-  // send a `meta` block — `readPageInfo` also looks at the body root, where a
-  // bare Laravel paginator puts `total` / `last_page` / `per_page`. That gap is
-  // what killed Next: rows arrived, the total didn't, and with no total the bar
-  // fell back to "is this page exactly `pageSize` rows?" — which is false the
-  // moment the server pages by a size of its own.
-  //
-  // A still-missing total means "unknown", never "zero": zero would disable
-  // Next forever and print "No requests" over a table that plainly has some.
+  // `meta.total` is the documented contract, but not every endpoint sends a
+  // `meta` block — `readPageInfo` also looks at the body root, where a bare
+  // Laravel paginator puts `total` / `last_page` / `per_page`. A missing total
+  // means "unknown", never "zero": zero would disable Next forever and print
+  // "No members" over a table that plainly has some.
   const pageInfo = React.useMemo(
-    () => readPageInfo(requestsQuery.data?.data),
-    [requestsQuery.data]
+    () => readPageInfo(membersQuery.data?.data),
+    [membersQuery.data]
   )
   const { total, perPage } = pageInfo
 
@@ -248,16 +233,10 @@ export function RequestsClient() {
     (total === undefined ? undefined : Math.max(1, Math.ceil(total / pageSize)))
 
   /**
-   * The only way `page` changes.
-   *
-   * This used to be a `setPage` in the render body, clamping against the total.
-   * Setting state during render re-runs the component immediately, so any
-   * moment the total read low — a not-yet-loaded page, a placeholder, a failed
-   * fetch — the clamp fought the click and snapped straight back to page 1.
-   * Clamping in the handler cannot do that: it runs once, on a real click.
-   *
-   * Nothing else needs the old behaviour, because every control that can
-   * shrink the result set already resets to page 1 explicitly.
+   * The only way `page` changes. Clamping in the handler rather than during
+   * render: setting state while rendering re-runs the component immediately,
+   * so any moment the total read low — a not-yet-loaded page, a placeholder, a
+   * failed fetch — the clamp would fight the click and snap back to page 1.
    */
   const goToPage = (next: number) => {
     const highest = lastPage ?? next
@@ -268,10 +247,7 @@ export function RequestsClient() {
     features,
     data,
     columns,
-    state: {
-      sorting,
-      columnVisibility,
-    },
+    state: { sorting, columnVisibility },
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
     getRowId: (r) => String(r.id),
@@ -279,8 +255,7 @@ export function RequestsClient() {
 
   const hasRows = data.length > 0
 
-  const effectiveView: ViewMode =
-    view === "table" && !isDesktop ? "cards" : view
+  const effectiveView: ViewMode = view === "table" && !isDesktop ? "cards" : view
 
   const pagination = (
     <Pagination
@@ -296,9 +271,8 @@ export function RequestsClient() {
       // what the page number is valid for.
       onPageSizeChange={setPageSize}
       // Deliberately not disabled while fetching: with the previous page still
-      // on screen the controls stay meaningful, and disabling them mid-click
-      // is what made Next feel dead.
-      busy={requestsQuery.isFetching}
+      // on screen the controls stay meaningful.
+      busy={membersQuery.isFetching}
       className={effectiveView === "table" ? undefined : "border-t-0"}
     />
   )
@@ -315,24 +289,14 @@ export function RequestsClient() {
    * people reach for first (§6.7).
    */
   const clearSheetFilters = () => {
-    setStatusFilter([])
     setOrganizationIds([])
     setCreatedAt("")
     setPhoneQuery("")
   }
 
-  /**
-   * The badge on the collapsed trigger.
-   *
-   * Counts the *typed* phone rather than the debounced one: this is feedback
-   * on the control you are holding, not a claim about what the server has been
-   * asked for — that is the chip row's job.
-   */
+  /** The badge on the collapsed trigger — the typed phone, not the debounced. */
   const sheetFilterCount =
-    statusFilter.length +
-    organizationIds.length +
-    (createdAt ? 1 : 0) +
-    (phoneQuery.trim() ? 1 : 0)
+    organizationIds.length + (createdAt ? 1 : 0) + (phoneQuery.trim() ? 1 : 0)
 
   const clearFilters = () => {
     clearSheetFilters()
@@ -340,13 +304,10 @@ export function RequestsClient() {
   }
 
   /**
-   * The four controls that collapse into the sheet below `lg`.
+   * The three controls that collapse into the sheet below `lg`.
    *
    * One definition rendered into two layouts rather than two copies: the only
-   * difference between them is how wide each trigger is, so that is the only
-   * thing the argument decides. Inside the sheet they become a single
-   * full-width stack — which is also why `FilterButton` no longer hides its
-   * label on narrow screens, since here the label is all there is to read.
+   * difference between them is how wide each trigger is.
    */
   const collapsibleFilters = (inSheet: boolean) => (
     <>
@@ -365,15 +326,6 @@ export function RequestsClient() {
       />
 
       <FacetFilter
-        label="Status"
-        icon={ListFilter}
-        options={STATUS_OPTIONS}
-        selected={statusFilter}
-        onToggle={(key) => setStatusFilter((current) => toggleKey(current, key))}
-        className={inSheet ? SHEET_CONTROL : undefined}
-      />
-
-      <FacetFilter
         label="Organization"
         icon={Building2}
         options={organizationOptions}
@@ -387,7 +339,7 @@ export function RequestsClient() {
       />
 
       <DatePicker
-        label="Created"
+        label="Added"
         value={createdAt}
         onChange={setCreatedAt}
         className={inSheet ? SHEET_CONTROL : undefined}
@@ -401,25 +353,20 @@ export function RequestsClient() {
    * not been asked for yet.
    */
   const activeFilters: ActiveFilter[] = [
-    ...statusFilter.map((key) => ({
-      key: `status-${key}`,
-      attribute: "Status",
-      value: STATUS_META[key as keyof typeof STATUS_META].label,
-      onRemove: () => setStatusFilter((current) => toggleKey(current, key)),
-    })),
     // One chip per ticked organization, so each can be removed on its own —
     // a single "Organization (2)" chip can only ever clear both.
     ...organizationIds.map((id) => ({
       key: `organization-${id}`,
       attribute: "Organization",
       value: organizationOptions.find((o) => o.key === id)?.label ?? id,
-      onRemove: () => setOrganizationIds((current) => toggleKey(current, id)),
+      onRemove: () =>
+        setOrganizationIds((current) => toggleKey(current, id)),
     })),
     ...(createdAt
       ? [
           {
             key: "created",
-            attribute: "Created",
+            attribute: "Added",
             value: formatDateValue(createdAt),
             onRemove: () => setCreatedAt(""),
           },
@@ -450,16 +397,16 @@ export function RequestsClient() {
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar — left group is the view switcher, right group the controls
-          (§6.1). They are pushed apart with a gutter between.
-
-          Below `lg` that single row becomes two: the switcher and one Filters
-          button, then search across the full width. §18.3 collapses the
-          toolbar's controls into a sheet at that width rather than letting
-          five controls of five different widths wrap into a ragged stack. */}
+          (§6.1). Below `lg` that single row becomes two: the switcher and one
+          Filters button, then search across the full width, per §18.3. */}
       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
         <div className="flex items-center justify-between gap-2">
           {/* View switcher — active tab is a surface chip (§6.5) */}
-          <div className="flex items-center gap-0.5" role="tablist" aria-label="Layout">
+          <div
+            className="flex items-center gap-0.5"
+            role="tablist"
+            aria-label="Layout"
+          >
             {VIEWS.map((v) => {
               const Icon = v.icon
               const active = effectiveView === v.id
@@ -492,8 +439,7 @@ export function RequestsClient() {
           </div>
 
           {/* The collapsed toolbar. Holds the same control components the
-              desktop cluster does — passed in, not duplicated — so a filter
-              can never exist in one layout and be missing from the other. */}
+              desktop cluster does — passed in, not duplicated. */}
           <FilterSheet
             className="lg:hidden"
             count={sheetFilterCount}
@@ -504,8 +450,7 @@ export function RequestsClient() {
         </div>
 
         {/* Search stays on the bar at every width — it is the control people
-            reach for first (§6.7). Below `lg` it owns its own full-width row,
-            which is the only way it is legible at 375px. */}
+            reach for first (§6.7). Below `lg` it owns its own full-width row. */}
         <div className="flex w-full flex-wrap items-center gap-2 lg:ms-auto lg:w-auto">
           {/* Nothing here resets the page — `useListQuery` derives that from
               the filter set changing. */}
@@ -513,8 +458,8 @@ export function RequestsClient() {
             icon={Search}
             value={query}
             onChange={setQuery}
-            placeholder="Search requests"
-            label="Search requests"
+            placeholder="Search members"
+            label="Search members"
             className="w-full lg:w-56"
           />
 
@@ -533,50 +478,47 @@ export function RequestsClient() {
           Once rows are on screen — paging away from a page that loaded — an
           error becomes a strip above them, so the table and its pager stay put
           instead of vanishing and looking like the click did nothing. */}
-      {requestsQuery.isError && hasRows && (
+      {membersQuery.isError && hasRows && (
         <div
           role="alert"
           className="flex items-center gap-3 rounded-md border border-border bg-danger-bg px-4 py-2.5"
         >
           <AlertCircle className="size-4 shrink-0 text-danger" strokeWidth={1.5} />
-          <p className="text-[13px] text-danger">
-            Couldn&apos;t load page {page}.
-          </p>
+          <p className="text-[13px] text-danger">Couldn&apos;t load page {page}.</p>
           <button
             type="button"
-            onClick={() => requestsQuery.refetch()}
-            className="ms-auto text-[13px] font-medium text-danger underline-offset-4 hover:underline outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            onClick={() => membersQuery.refetch()}
+            className="ms-auto rounded-sm text-[13px] font-medium text-danger underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
           >
             Retry
           </button>
         </div>
       )}
 
-      {requestsQuery.isPending ? (
+      {membersQuery.isPending ? (
         <LoadingRows />
-      ) : requestsQuery.isError && !hasRows ? (
+      ) : membersQuery.isError && !hasRows ? (
         <LoadFailed
-          title="Couldn't load requests"
-          onRetry={() => requestsQuery.refetch()}
-          retrying={requestsQuery.isFetching}
+          title="Couldn't load members"
+          onRetry={() => membersQuery.refetch()}
+          retrying={membersQuery.isFetching}
         />
       ) : (
         <>
           {effectiveView === "table" && (
             <TableView
               table={table}
-              emptyTitle="No requests match these filters"
+              emptyTitle="No members match these filters"
               footer={pagination}
             />
           )}
 
-          {effectiveView !== "table" && (
+          {effectiveView === "cards" && (
             <>
-              {effectiveView === "board" && <BoardView table={table} />}
-              {effectiveView === "cards" && <CardView table={table} />}
+              <CardView table={table} />
 
-              {/* Board and cards have no container of their own, so the bar
-                  gets one — minus the top border it would double up on. */}
+              {/* Cards have no container of their own, so the bar gets one —
+                  minus the top border it would double up on. */}
               <div className="overflow-hidden rounded-xl border border-border">
                 {pagination}
               </div>

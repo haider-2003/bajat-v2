@@ -2,6 +2,7 @@
 
 import type { Table as TanTable } from "@tanstack/react-table"
 
+import { EmptyState } from "@/components/table/empty-state"
 import { SoftBadge } from "@/components/ui/data-bits"
 
 import type { Features } from "@/lib/table-features"
@@ -88,13 +89,8 @@ export function CardView({ table }: { table: TanTable<Features, MemberRequest> }
 
   if (requests.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-surface py-16 text-center">
-        <p className="text-base font-semibold text-text">
-          No requests match these filters
-        </p>
-        <p className="mx-auto mt-2 max-w-[320px] text-[13px] text-text-muted">
-          Try clearing a filter or widening the search.
-        </p>
+      <div className="rounded-xl border border-border bg-surface py-16">
+        <EmptyState title="No requests match these filters" />
       </div>
     )
   }

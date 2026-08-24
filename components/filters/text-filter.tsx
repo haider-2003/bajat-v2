@@ -39,11 +39,18 @@ export function TextFilter({
   label: string
   type?: string
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"]
-  /** Width belongs to the caller; everything else is fixed. */
+  /**
+   * Width belongs to the caller; everything else is fixed.
+   *
+   * Applied to the **wrapper**, not the input. The input is `w-full` inside
+   * it, so sizing the input instead left the wrapper measuring itself against
+   * a percentage of its own content — which is why a `w-full` search field
+   * came out at whatever width a bare `<input>` defaults to.
+   */
   className?: string
 }) {
   return (
-    <div className="relative">
+    <div className={cn("relative", className)}>
       <Icon
         className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-text-placeholder"
         strokeWidth={1.5}
@@ -56,10 +63,13 @@ export function TextFilter({
         placeholder={placeholder}
         aria-label={label}
         className={cn(
-          "h-8 w-full rounded-md bg-surface-sunken pl-8 pr-3 text-sm",
+          // §18.7 — 44px for touch, the §6.7 32px field at lg. 16px text below
+          // that: iOS zooms the page when a smaller field takes focus, and on
+          // a filter bar that throws the whole toolbar off-screen.
+          "h-11 w-full rounded-md bg-surface-sunken pl-8 pr-3 text-base",
+          "lg:h-8 lg:text-sm",
           "text-text placeholder:text-text-placeholder",
-          "outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          className
+          "outline-none focus-visible:ring-2 focus-visible:ring-ring"
         )}
       />
     </div>

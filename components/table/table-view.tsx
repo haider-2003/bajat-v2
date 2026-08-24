@@ -2,6 +2,7 @@
 
 import { flexRender, type Table as TanTable } from "@tanstack/react-table"
 
+import { EmptyState } from "@/components/table/empty-state"
 import {
   Table,
   TableBody,
@@ -10,10 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { cn } from "@/lib/utils"
-
 import type { Features } from "@/lib/table-features"
-import type { MemberRequest } from "@/features/members-requests/types"
+import { cn } from "@/lib/utils"
 
 /**
  * Table view — DESIGN.md §8.
@@ -21,12 +20,27 @@ import type { MemberRequest } from "@/features/members-requests/types"
  * 40px sticky header on a subtle tint, 48px rows, hairline separators, no
  * zebra striping. The pagination bar is passed in as `footer` so it sits
  * inside the same border as the table rather than floating beneath it (§8.9).
+ *
+ * ### Why this one *is* shared, when `columns.tsx` is not
+ *
+ * A column list maps one entity's fields to one table's columns, so there is
+ * nothing in it another screen could reuse. The chrome around those columns is
+ * the opposite: every table in this product has the same header height, the
+ * same row height, the same scroll boundary and the same empty state, and a
+ * second copy of it is a second place for those to drift.
+ *
+ * So it is generic over the row type. The only screen-specific thing left is
+ * what to call the rows when there are none, which is why `emptyTitle` is a
+ * required prop rather than a default nobody would notice was wrong.
  */
-export function TableView({
+export function TableView<TRow extends Record<string, unknown>>({
   table,
+  emptyTitle,
   footer,
 }: {
-  table: TanTable<Features, MemberRequest>
+  table: TanTable<Features, TRow>
+  /** Shown when the filters match nothing — e.g. "No members match these filters". */
+  emptyTitle: string
   /** The pagination bar, rendered inside the table's own border (§8.9). */
   footer?: React.ReactNode
 }) {
@@ -40,10 +54,7 @@ export function TableView({
         <Table className="border-separate border-spacing-0">
           <TableHeader className="[&_tr]:border-b-0">
             {table.getHeaderGroups().map((hg) => (
-              <TableRow
-                key={hg.id}
-                className="border-b-0 hover:bg-transparent"
-              >
+              <TableRow key={hg.id} className="border-b-0 hover:bg-transparent">
                 {hg.headers.map((header) => (
                   <TableHead
                     key={header.id}
@@ -89,12 +100,7 @@ export function TableView({
             {rows.length === 0 && (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={visibleCount} className="h-48 text-center">
-                  <p className="text-base font-semibold text-text">
-                    No requests match these filters
-                  </p>
-                  <p className="mx-auto mt-2 max-w-[320px] text-[13px] text-text-muted">
-                    Try clearing a filter or widening the search.
-                  </p>
+                  <EmptyState title={emptyTitle} />
                 </TableCell>
               </TableRow>
             )}

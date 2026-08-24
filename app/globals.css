@@ -1222,3 +1222,63 @@ html[data-intro="playing"] [data-await-intro] {
     background: transparent;
   }
 }
+/* ------------------------------------------------------------------ *
+ * Printing an ID card (app/printer)
+ *
+ * `window.print()` prints the document, so the printer screen builds a sheet
+ * of its own — `[data-print-sheet]`, portalled straight onto <body> — and this
+ * block is what makes that sheet the only thing on the paper. Portalling it to
+ * the body rather than nesting it in the dialog is load-bearing: the rule below
+ * can hide the app's siblings, but it cannot undo a scrolling ancestor's
+ * clipping, and the dialog is exactly that.
+ *
+ * Outside any @layer, deliberately: these have to beat the utilities that style
+ * the same elements on screen.
+ * ------------------------------------------------------------------ */
+
+[data-print-sheet] {
+  display: none;
+}
+
+@media print {
+  /* Every other top-level node — the app, the dialog's own portal, the
+     route announcer — goes away. */
+  body > *:not([data-print-sheet]) {
+    display: none !important;
+  }
+
+  [data-print-sheet] {
+    display: block !important;
+  }
+
+  /* A real ID-1 / CR80 card: 85.6 x 54 mm. Printing the artwork at "whatever
+     320px maps to" is a wasted blank, and card stock is not cheap. */
+  [data-print-sheet] .print-card {
+    width: 85.6mm;
+    height: 54mm;
+    overflow: hidden;
+  }
+
+  /* One face per page — a duplex card printer feeds the same card twice. */
+  [data-print-sheet] .print-card + .print-card {
+    break-before: page;
+  }
+
+  [data-print-sheet] img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  /* The design *is* the ink. Without this, browsers drop background colours
+     and flatten the artwork to save toner. */
+  [data-print-sheet],
+  [data-print-sheet] * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page {
+    margin: 10mm;
+  }
+}

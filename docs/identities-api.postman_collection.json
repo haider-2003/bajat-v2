@@ -1,0 +1,1635 @@
+{
+  "info": {
+    "_postman_id": "b7f0c2a1-4d3e-4a1f-9c2b-1de4f5a6b7c8",
+    "name": "Identities API - Dashboard v1",
+    "description": "Every endpoint the Identities dashboard front-end calls, reverse-engineered from `features/*/api.ts` + `utils/api/api-factory.ts`.\n\n## Conventions baked into the client\n\n- **Base URL**: `https://identities.g4t.io/api/dashboard/v1/` (`api/client.ts`).\n- **Auth**: `Authorization: Bearer <token>` on every request except the Public folder. A 401 clears storage and redirects to /login.\n- **Key casing**: axios interceptors run `decamelizeKeys` on request bodies AND query params, and `camelizeKeys` on responses. You write `organizationId` in TS but the wire format is `organization_id` - this collection shows the wire format.\n  - Exception: `/identity` sets `disableRequestKeyConversion: true`, so its multipart keys go out verbatim (`template_id`, plus template variable names untouched).\n  - Exception: `/member_request` sets `preserveNestedFormDataKeys: true`, so only the root key is snake_cased (`join_data[0][InputName]` keeps `InputName`).\n- **Updates**: factories with `isFormData: true` (identity, organization, member_request) send POST to `/{resource}/{id}` with a `_method=PUT` field (Laravel convention). JSON factories send a real PUT.\n- **Pagination**: `page` + `per_page` (from `pageSize`, default 10; UI offers 5/10/20/50). `serializeQuery()` currently DROPS sort/order (commented out in `utils/api/api.ts`), so sorting is client-side-key only today.\n- **Array params** serialize as `key[]=v1&key[]=v2`, e.g. `statuses[]=4&statuses[]=5`.\n- **Date-range filters** send two ISO timestamps: `created_at_range[]=<from>&created_at_range[]=<to>`.\n- **List envelope**: `{ data: { data: [...], meta: { total, current_page, per_page } } }`. Single-item GET returns `{ data: {...} }`.\n\nOptional query params are present but disabled - tick them in Postman to use them.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://identities.g4t.io/api/dashboard/v1", "type": "string" },
+    { "key": "publicBaseUrl", "value": "https://api.bajat.net/api/public/v1", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "tempToken", "value": "", "type": "string" },
+    { "key": "identityId", "value": "1", "type": "string" },
+    { "key": "memberId", "value": "1", "type": "string" },
+    { "key": "memberRequestId", "value": "1", "type": "string" },
+    { "key": "organizationId", "value": "1", "type": "string" },
+    { "key": "branchId", "value": "1", "type": "string" },
+    { "key": "branchUserId", "value": "1", "type": "string" },
+    { "key": "organizationUserId", "value": "1", "type": "string" },
+    { "key": "userId", "value": "1", "type": "string" },
+    { "key": "roleId", "value": "1", "type": "string" },
+    { "key": "nodeId", "value": "1", "type": "string" },
+    { "key": "templateId", "value": "1", "type": "string" },
+    { "key": "formId", "value": "1", "type": "string" },
+    { "key": "applicationFormId", "value": "1", "type": "string" },
+    { "key": "customerId", "value": "1", "type": "string" },
+    { "key": "blacklistId", "value": "1", "type": "string" },
+    { "key": "accessKeyId", "value": "1", "type": "string" },
+    { "key": "paymentId", "value": "1", "type": "string" },
+    { "key": "shareKey", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "`features/auth/api.ts`. Phone + OTP login. If the account has TOTP enabled, login returns `temp_token` instead of `access_token` and you must call 2FA enable to exchange it.",
+      "item": [
+        {
+          "name": "Send OTP",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/send_otp", "host": ["{{baseUrl}}"], "path": ["auth", "send_otp"] },
+            "body": { "mode": "raw", "raw": "{\n  \"phone\": \"07701234567\"\n}", "options": { "raw": { "language": "json" } } },
+            "description": "Body `OTPInput`: `phone` only."
+          },
+          "response": []
+        },
+        {
+          "name": "Login (phone + OTP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "const d = b.data || b;",
+                  "if (d.access_token) { pm.collectionVariables.set('token', d.access_token); }",
+                  "if (d.temp_token) { pm.collectionVariables.set('tempToken', d.temp_token); pm.collectionVariables.set('token', d.temp_token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"phone\": \"07701234567\",\n  \"otp\": \"123456\",\n  \"captcha_token\": null\n}", "options": { "raw": { "language": "json" } } },
+            "description": "Body `LoginInput`. `captchaToken` is decamelized to `captcha_token`; send `null` when reCAPTCHA is off.\n\nReturns `{ access_token | temp_token, token_type, expires_in, user }`. The test script stores whichever token came back into `{{token}}`."
+          },
+          "response": []
+        },
+        {
+          "name": "reCAPTCHA check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/recaptcha_check", "host": ["{{baseUrl}}"], "path": ["auth", "recaptcha_check"] },
+            "description": "Tells the login page whether to render the reCAPTCHA widget."
+          },
+          "response": []
+        },
+        {
+          "name": "2FA setup (QR)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/2fa/setup", "host": ["{{baseUrl}}"], "path": ["auth", "2fa", "setup"] },
+            "description": "Call with the temp token. Returns `{ secret, qr_code }` where `qr_code` is an inline SVG string."
+          },
+          "response": []
+        },
+        {
+          "name": "2FA enable / verify",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "const d = b.data || b;",
+                  "if (d.access_token) { pm.collectionVariables.set('token', d.access_token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/2fa/enable", "host": ["{{baseUrl}}"], "path": ["auth", "2fa", "enable"] },
+            "body": { "mode": "raw", "raw": "{\n  \"otp\": \"123456\"\n}", "options": { "raw": { "language": "json" } } },
+            "description": "Body `TotpVerifyInput` = `{ otp }` (6-digit TOTP). Exchanges the temp token for the real `access_token` - this path is the `iss` seen in production JWTs."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] },
+            "description": "No body."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Identities (ID cards)",
+      "description": "`features/ids/api.ts`, endpoint `/identity`, `isFormData: true`, `disableRequestKeyConversion: true` (multipart keys sent verbatim).\n\nThis one list endpoint backs FOUR dashboard screens - they differ only by the default `statuses[]` filter:\n\n| Screen | statuses[] |\n|---|---|\n| /ids | none (all) |\n| /printer | 4,5,6 (WAITING_TO_PRINT, PRINTING, PRINTED) |\n| /delivery | 6,7,8,9 (PRINTED, DELIVERY_IN_PROGRESS, DELIVERED, RETURNED) |\n| /ids-flow | none, uses /identity/node |\n\n**Status enum** (`features/ids/types.ts`): 0 PENDING, 1 PAID, 2 APPROVED, 3 REJECTED, 4 WAITING_TO_PRINT, 5 PRINTING, 6 PRINTED, 7 DELIVERY_IN_PROGRESS, 8 DELIVERED, 9 RETURNED.",
+      "item": [
+        {
+          "name": "List identities",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/identity?page=1&per_page=10&statuses[]=4&statuses[]=5&statuses[]=6",
+              "host": ["{{baseUrl}}"],
+              "path": ["identity"],
+              "query": [
+                { "key": "page", "value": "1", "description": "1-based page number." },
+                { "key": "per_page", "value": "10", "description": "Page size. UI options: 5 / 10 / 20 / 50." },
+                { "key": "statuses[]", "value": "4", "description": "Repeat per status id. 4/5/6 = the printer queue." },
+                { "key": "statuses[]", "value": "5" },
+                { "key": "statuses[]", "value": "6" },
+                { "key": "search", "value": "ahmed", "description": "Free-text search box above the table.", "disabled": true },
+                { "key": "member_name", "value": "Ahmed", "description": "Per-column text filter (TS: memberName).", "disabled": true },
+                { "key": "member_phone", "value": "0770", "description": "Per-column text filter (TS: memberPhone).", "disabled": true },
+                { "key": "template_title", "value": "Staff Card", "description": "TS: templateTitle. Used on /ids and /ids-flow.", "disabled": true },
+                { "key": "organization_id", "value": "{{organizationId}}", "description": "TS: organizationId. Admin-only filter on /ids.", "disabled": true },
+                { "key": "price", "value": "5000", "disabled": true },
+                { "key": "created_at_range[]", "value": "2026-01-01T00:00:00.000Z", "description": "From. Send both entries together.", "disabled": true },
+                { "key": "created_at_range[]", "value": "2026-12-31T23:59:59.000Z", "description": "To.", "disabled": true },
+                { "key": "updated_at_range[]", "value": "2026-01-01T00:00:00.000Z", "disabled": true },
+                { "key": "updated_at_range[]", "value": "2026-12-31T23:59:59.000Z", "disabled": true }
+              ]
+            },
+            "description": "THE endpoint the /printer page uses. There is no /printer API route - `/printer` is only a Next.js page path."
+          },
+          "response": []
+        },
+        {
+          "name": "List identities by node (flow board)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/identity/node?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["identity", "node"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "member_name", "value": "", "disabled": true },
+                { "key": "member_phone", "value": "", "disabled": true },
+                { "key": "template_title", "value": "", "disabled": true },
+                { "key": "organization_id", "value": "{{organizationId}}", "disabled": true },
+                { "key": "statuses[]", "value": "2", "disabled": true },
+                { "key": "price", "value": "", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true }
+              ]
+            },
+            "description": "`useGetIdsNode` - same filter surface as the plain list, but scoped to the nodes the caller can act on (/ids-flow board)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get identity by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/identity/{{identityId}}", "host": ["{{baseUrl}}"], "path": ["identity", "{{identityId}}"] },
+            "description": "Returns the card plus `template`, `member`, `organization`, and `node_history[]`."
+          },
+          "response": []
+        },
+        {
+          "name": "Create identity",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/identity", "host": ["{{baseUrl}}"], "path": ["identity"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Ahmed Ali", "type": "text" },
+                { "key": "phone", "value": "07701234567", "type": "text" },
+                { "key": "identity", "value": "{\"job_title\":\"Engineer\",\"blood_type\":\"O+\"}", "type": "text", "description": "Template variable values. Sent as a nested object -> identity[job_title]=... in real requests." },
+                { "key": "template_id", "value": "{{templateId}}", "type": "text" },
+                { "key": "photo", "value": "", "type": "file", "description": "Any File/Blob field declared by the template becomes its own multipart part.", "disabled": true }
+              ]
+            },
+            "description": "`CreateIDCardInput` = `{ name, phone, identity, template_id }` plus arbitrary template variables. Keys are NOT converted (disableRequestKeyConversion), so send exactly the names the template declares."
+          },
+          "response": []
+        },
+        {
+          "name": "Update identity variables",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/identity/{{identityId}}", "host": ["{{baseUrl}}"], "path": ["identity", "{{identityId}}"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "_method", "value": "PUT", "type": "text", "description": "Laravel method spoofing - the factory appends this for every FormData update." },
+                { "key": "name", "value": "Ahmed Ali", "type": "text", "disabled": true },
+                { "key": "job_title", "value": "Senior Engineer", "type": "text", "description": "`UpdateIdVars` is an open Record<string, unknown> - any template variable." }
+              ]
+            },
+            "description": "`useUpdateIdVars`. POST + `_method=PUT` because PHP cannot parse multipart on a real PUT."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete identity",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/identity/{{identityId}}", "host": ["{{baseUrl}}"], "path": ["identity", "{{identityId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Change status",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/identity/change_status/{{identityId}}", "host": ["{{baseUrl}}"], "path": ["identity", "change_status", "{{identityId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": 5,\n  \"notes\": \"Sent to printer\"\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`ChangeStatusInput` = `{ status: number, notes?: string }`. `status` is the numeric id, not the name. This is what the Send-to-printer button and the delivery screen call."
+          },
+          "response": []
+        },
+        {
+          "name": "Approve identity",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/identity/approve", "host": ["{{baseUrl}}"], "path": ["identity", "approve"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "_method", "value": "PUT", "type": "text" },
+                { "key": "identity_id", "value": "{{identityId}}", "type": "text" },
+                { "key": "notes", "value": "Verified documents", "type": "text" },
+                { "key": "attachments[0]", "value": "", "type": "file", "description": "File[] - repeat with [1], [2]...", "disabled": true },
+                { "key": "fields[0][key]", "value": "reference_no", "type": "text", "disabled": true },
+                { "key": "fields[0][value]", "value": "REF-2026-001", "type": "text", "disabled": true }
+              ]
+            },
+            "description": "`ApprovedSIdInput` = `{ identity_id, notes, attachments: File[], fields?: {key,value}[] }`. Multipart POST with `_method=PUT`; the node-history entry is built from `fields` + `attachments`."
+          },
+          "response": []
+        },
+        {
+          "name": "Reject identity",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/identity/reject", "host": ["{{baseUrl}}"], "path": ["identity", "reject"] },
+            "body": { "mode": "raw", "raw": "{\n  \"identity_id\": \"{{identityId}}\",\n  \"notes\": \"Photo does not meet requirements\"\n}", "options": { "raw": { "language": "json" } } },
+            "description": "Note the id travels in the BODY here, not the path."
+          },
+          "response": []
+        },
+        {
+          "name": "Update issue / expiration date",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/identity/date/{{identityId}}", "host": ["{{baseUrl}}"], "path": ["identity", "date", "{{identityId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"issue_date\": \"2026-08-24\"\n}", "options": { "raw": { "language": "json" } } },
+            "description": "Send EITHER `issue_date` OR `expiration_date` (TS: `issueDate` / `expirationDate`, decamelized by the interceptor)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Members",
+      "description": "`features/members/api.ts`, endpoint `/member`, JSON factory (real PUT on update).",
+      "item": [
+        {
+          "name": "List members",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/member?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["member"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "phone", "value": "", "disabled": true },
+                { "key": "created_at_range[]", "value": "2026-01-01T00:00:00.000Z", "disabled": true },
+                { "key": "created_at_range[]", "value": "2026-12-31T23:59:59.000Z", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get member by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/member/{{memberId}}", "host": ["{{baseUrl}}"], "path": ["member", "{{memberId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create member",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/member", "host": ["{{baseUrl}}"], "path": ["member"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Ahmed Ali\",\n  \"phone\": \"07701234567\",\n  \"organization_id\": {{organizationId}}\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`CreateMembersInput`. `organization_id` is only sent by admins - org users are scoped by their token."
+          },
+          "response": []
+        },
+        {
+          "name": "Update member",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/member/{{memberId}}", "host": ["{{baseUrl}}"], "path": ["member", "{{memberId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Ahmed Ali\",\n  \"phone\": \"07701234567\"\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete member",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/member/{{memberId}}", "host": ["{{baseUrl}}"], "path": ["member", "{{memberId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk upload members (Excel)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/member/excel", "host": ["{{baseUrl}}"], "path": ["member", "excel"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "value": "", "type": "file", "description": "The filled .xlsx template." },
+                { "key": "organization_id", "value": "{{organizationId}}", "type": "text", "disabled": true }
+              ]
+            },
+            "description": "`UploadMembersInput` = `{ file, organization_id? }`. Multipart. Note `/member_request` reuses this same endpoint for its upload button."
+          },
+          "response": []
+        },
+        {
+          "name": "Download members Excel template",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/member/excel/download", "host": ["{{baseUrl}}"], "path": ["member", "excel", "download"] },
+            "description": "Binary .xlsx (client fetches with `responseType: arraybuffer` and skips key conversion). No params."
+          },
+          "response": []
+        },
+        {
+          "name": "Member identities",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/member/{{memberId}}/identity",
+              "host": ["{{baseUrl}}"],
+              "path": ["member", "{{memberId}}", "identity"],
+              "query": [{ "key": "filter", "value": "", "description": "Single free-text `filter` param (not the field/value array used by list endpoints).", "disabled": true }]
+            },
+            "description": "Client tolerates both a bare array and the `{data:{data:[]}}` envelope."
+          },
+          "response": []
+        },
+        {
+          "name": "Member organizations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/member/{{memberId}}/organization",
+              "host": ["{{baseUrl}}"],
+              "path": ["member", "{{memberId}}", "organization"],
+              "query": [{ "key": "filter", "value": "", "disabled": true }]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Member requests (join requests)",
+      "description": "`features/members-requests/api.ts`, endpoint `/member_request`, `isFormData: true` + `preserveNestedFormDataKeys: true` - so `joinData[0][InputName]` goes out as `join_data[0][InputName]` (inner keys keep their PascalCase).",
+      "item": [
+        {
+          "name": "List member requests",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/member_request?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["member_request"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "phone", "value": "", "disabled": true },
+                { "key": "organization_id", "value": "{{organizationId}}", "disabled": true },
+                { "key": "statuses[]", "value": "pending", "description": "STRING statuses here: pending | approved | rejected (unlike identities, which use numeric ids).", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get member request by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/member_request/{{memberRequestId}}", "host": ["{{baseUrl}}"], "path": ["member_request", "{{memberRequestId}}"] },
+            "description": "Includes `join_data[]` - the filled application-form answers, each `{ InputName, InputLabel, InputType, InputRequired, Options?, InputValue }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Create member request",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/member_request", "host": ["{{baseUrl}}"], "path": ["member_request"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Ahmed Ali", "type": "text" },
+                { "key": "phone", "value": "07701234567", "type": "text" },
+                { "key": "organization_id", "value": "{{organizationId}}", "type": "text" },
+                { "key": "join_data[0][InputName]", "value": "national_id", "type": "text" },
+                { "key": "join_data[0][InputLabel]", "value": "National ID", "type": "text" },
+                { "key": "join_data[0][InputType]", "value": "string", "type": "text" },
+                { "key": "join_data[0][InputRequired]", "value": "true", "type": "text" },
+                { "key": "join_data[0][InputValue]", "value": "199012345", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update member request",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/member_request/{{memberRequestId}}", "host": ["{{baseUrl}}"], "path": ["member_request", "{{memberRequestId}}"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "_method", "value": "PUT", "type": "text" },
+                { "key": "name", "value": "Ahmed Ali", "type": "text" }
+              ]
+            },
+            "description": "`UpdateMembersInput` is `{ name }` only."
+          },
+          "response": []
+        },
+        {
+          "name": "Approve / reject member request",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/member_request/change_status/{{memberRequestId}}", "host": ["{{baseUrl}}"], "path": ["member_request", "change_status", "{{memberRequestId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"approved\"\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`status`: `approved` or `rejected`. One endpoint, two buttons (`useApproveMember` / `useRejectMember`)."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete member request",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/member_request/{{memberRequestId}}", "host": ["{{baseUrl}}"], "path": ["member_request", "{{memberRequestId}}"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Organizations",
+      "description": "`features/organizations/api.ts`, endpoint `/organization`, `isFormData: true` (logo upload).",
+      "item": [
+        {
+          "name": "List organizations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/organization?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["organization"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "description", "value": "", "disabled": true },
+                { "key": "website", "value": "", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get organization by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization/{{organizationId}}", "host": ["{{baseUrl}}"], "path": ["organization", "{{organizationId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create organization",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization", "host": ["{{baseUrl}}"], "path": ["organization"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Acme Corp", "type": "text" },
+                { "key": "description", "value": "Manufacturing company", "type": "text" },
+                { "key": "logo", "value": "", "type": "file", "disabled": true },
+                { "key": "website", "value": "https://acme.example", "type": "text", "disabled": true },
+                { "key": "is_enabled", "value": "1", "type": "text", "description": "0/1 as a number, not a boolean.", "disabled": true },
+                { "key": "is_join_requests_enabled", "value": "1", "type": "text", "description": "Turns the public join form on.", "disabled": true },
+                { "key": "lat", "value": "33.3152", "type": "text", "disabled": true },
+                { "key": "lng", "value": "44.3661", "type": "text", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update organization",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization/{{organizationId}}", "host": ["{{baseUrl}}"], "path": ["organization", "{{organizationId}}"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "_method", "value": "PUT", "type": "text" },
+                { "key": "name", "value": "Acme Corp", "type": "text" },
+                { "key": "description", "value": "Manufacturing company", "type": "text" },
+                { "key": "logo", "value": "", "type": "file", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete organization",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization/{{organizationId}}", "host": ["{{baseUrl}}"], "path": ["organization", "{{organizationId}}"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Application form (org join form)",
+      "description": "`features/application-form/api.ts`. Note the asymmetric paths: reading is nested under the org, writing is a flat `/organization/form` resource.",
+      "item": [
+        {
+          "name": "Get application form by org",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization/{{organizationId}}/form", "host": ["{{baseUrl}}"], "path": ["organization", "{{organizationId}}", "form"] },
+            "description": "Returns `{ id, body: ApplicationFormInput[], organization_id }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Create application form",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization/form", "host": ["{{baseUrl}}"], "path": ["organization", "form"] },
+            "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{organizationId}}\",\n  \"body\": [\n    {\n      \"InputName\": \"national_id\",\n      \"InputLabel\": \"National ID\",\n      \"InputType\": \"string\",\n      \"InputRequired\": true\n    },\n    {\n      \"InputName\": \"department\",\n      \"InputLabel\": \"Department\",\n      \"InputType\": \"select\",\n      \"InputRequired\": false,\n      \"Options\": [\"HR\", \"IT\", \"Sales\"]\n    }\n  ]\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`InputType`: string | number | boolean | date | select | image | file. `Options` only applies to `select`. The inner PascalCase keys are inside an array of objects, which `decamelizeKeys` walks - confirm against the backend if it rejects snake_cased inner keys."
+          },
+          "response": []
+        },
+        {
+          "name": "Update application form",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization/form/{{applicationFormId}}", "host": ["{{baseUrl}}"], "path": ["organization", "form", "{{applicationFormId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{organizationId}}\",\n  \"body\": []\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Branches",
+      "description": "`features/branches/api.ts`, endpoint `/branch`, JSON factory.",
+      "item": [
+        {
+          "name": "List branches",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/branch?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["branch"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "organization", "value": "", "description": "Note: plain `organization`, NOT organization_id, on this table.", "disabled": true },
+                { "key": "parent", "value": "", "description": "Parent branch filter.", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get branch by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branch/{{branchId}}", "host": ["{{baseUrl}}"], "path": ["branch", "{{branchId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Branches by template",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branch/template/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["branch", "template", "{{templateId}}"] },
+            "description": "Unpaginated. Used to populate the branch picker when a template has `branch_required`."
+          },
+          "response": []
+        },
+        {
+          "name": "Create branch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branch", "host": ["{{baseUrl}}"], "path": ["branch"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Baghdad Branch\",\n  \"organization_id\": {{organizationId}},\n  \"parent_id\": null,\n  \"node_ids\": [1, 2],\n  \"is_enabled\": 1,\n  \"lat\": \"33.3152\",\n  \"lng\": \"44.3661\"\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`CreateBranchInput`. `node_ids` is required (the workflow nodes this branch handles)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update branch",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branch/{{branchId}}", "host": ["{{baseUrl}}"], "path": ["branch", "{{branchId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Baghdad Branch\",\n  \"node_ids\": [1, 2],\n  \"is_enabled\": 1\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete branch",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branch/{{branchId}}", "host": ["{{baseUrl}}"], "path": ["branch", "{{branchId}}"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users (admin)",
+      "description": "`features/users/api.ts`, endpoint `/user`. Dashboard admins.",
+      "item": [
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/user?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["user"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "phone", "value": "", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get user by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/user/{{userId}}", "host": ["{{baseUrl}}"], "path": ["user", "{{userId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/user", "host": ["{{baseUrl}}"], "path": ["user"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Admin User\",\n  \"phone\": \"07701234567\",\n  \"role_id\": [1],\n  \"is_enabled\": 1\n}", "options": { "raw": { "language": "json" } } },
+            "description": "Careful: this one is `role_id` as an ARRAY (TS `roleId?: number[]`), unlike org/branch users which use `role_ids`."
+          },
+          "response": []
+        },
+        {
+          "name": "Update user",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/user/{{userId}}", "host": ["{{baseUrl}}"], "path": ["user", "{{userId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Admin User\",\n  \"role_id\": [1],\n  \"is_enabled\": 1\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`phone` is not updatable."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete user",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/user/{{userId}}", "host": ["{{baseUrl}}"], "path": ["user", "{{userId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset user MFA",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/user/{{userId}}/reset", "host": ["{{baseUrl}}"], "path": ["user", "{{userId}}", "reset"] },
+            "description": "Empty body. Clears the user's TOTP secret so they re-enroll at next login."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Organization users",
+      "description": "`features/organization-users/api.ts`, endpoint `/organization_user`.",
+      "item": [
+        {
+          "name": "List organization users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/organization_user?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["organization_user"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "phone", "value": "", "disabled": true },
+                { "key": "organization_id", "value": "{{organizationId}}", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get organization user by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization_user/{{organizationUserId}}", "host": ["{{baseUrl}}"], "path": ["organization_user", "{{organizationUserId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create organization user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization_user", "host": ["{{baseUrl}}"], "path": ["organization_user"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Org Manager\",\n  \"phone\": \"07701234567\",\n  \"organization_id\": {{organizationId}},\n  \"role_ids\": [2],\n  \"node_ids\": [1],\n  \"is_enabled\": 1\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`role_ids` (plural) here. `node_ids` limits which workflow nodes the user can act on."
+          },
+          "response": []
+        },
+        {
+          "name": "Update organization user",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization_user/{{organizationUserId}}", "host": ["{{baseUrl}}"], "path": ["organization_user", "{{organizationUserId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Org Manager\",\n  \"role_ids\": [2],\n  \"node_ids\": [1],\n  \"is_enabled\": 1\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete organization user",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization_user/{{organizationUserId}}", "host": ["{{baseUrl}}"], "path": ["organization_user", "{{organizationUserId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset organization user MFA",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/organization_user/{{organizationUserId}}/reset", "host": ["{{baseUrl}}"], "path": ["organization_user", "{{organizationUserId}}", "reset"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Branch users",
+      "description": "`features/branch-users/api.ts`, endpoint `/branch_user`.",
+      "item": [
+        {
+          "name": "List branch users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/branch_user?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["branch_user"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "phone", "value": "", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get branch user by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branch_user/{{branchUserId}}", "host": ["{{baseUrl}}"], "path": ["branch_user", "{{branchUserId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create branch user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branch_user", "host": ["{{baseUrl}}"], "path": ["branch_user"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Branch Clerk\",\n  \"phone\": \"07701234567\",\n  \"branch_id\": {{branchId}},\n  \"organization_id\": {{organizationId}},\n  \"role_ids\": [3],\n  \"node_ids\": [1],\n  \"is_enabled\": 1\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`branch_id` is required."
+          },
+          "response": []
+        },
+        {
+          "name": "Update branch user",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branch_user/{{branchUserId}}", "host": ["{{baseUrl}}"], "path": ["branch_user", "{{branchUserId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Branch Clerk\",\n  \"role_ids\": [3],\n  \"node_ids\": [1],\n  \"is_enabled\": 1\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete branch user",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branch_user/{{branchUserId}}", "host": ["{{baseUrl}}"], "path": ["branch_user", "{{branchUserId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset branch user MFA",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/branch_user/{{branchUserId}}/reset", "host": ["{{baseUrl}}"], "path": ["branch_user", "{{branchUserId}}", "reset"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Roles & permissions",
+      "description": "`features/roles/api.ts` + `features/permissions/api.ts`. One `/role` endpoint serves three screens (admin-roles / organization-roles / branch-roles) via the `type` param.",
+      "item": [
+        {
+          "name": "List roles",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/role?page=1&per_page=10&type=admin",
+              "host": ["{{baseUrl}}"],
+              "path": ["role"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "type", "value": "admin", "description": "REQUIRED in practice - admin | organization | branch. Always appended by the tables." },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get role by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/role/{{roleId}}", "host": ["{{baseUrl}}"], "path": ["role", "{{roleId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create role",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/role", "host": ["{{baseUrl}}"], "path": ["role"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Printer Operator\",\n  \"type\": \"organization\",\n  \"permissions\": [1, 2, 3],\n  \"organization_id\": {{organizationId}}\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`permissions` is an array of permission IDs. Send `organization_id` for type=organization, `branch_id` for type=branch."
+          },
+          "response": []
+        },
+        {
+          "name": "Update role",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/role/{{roleId}}", "host": ["{{baseUrl}}"], "path": ["role", "{{roleId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Printer Operator\",\n  \"permissions\": [1, 2]\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete role",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/role/{{roleId}}", "host": ["{{baseUrl}}"], "path": ["role", "{{roleId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List permissions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/permission?page=1&per_page=100",
+              "host": ["{{baseUrl}}"],
+              "path": ["permission"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "100", "description": "Role modals pull a large page to render the full permission matrix." }
+              ]
+            },
+            "description": "Read-only - the factory only exposes `useGetList`. Permission names are the strings used by `<Permission can=\"create-role\">`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Nodes (workflow steps)",
+      "description": "`features/nodes/api.ts`, endpoint `/node`. Nodes are the stages an identity passes through on the /ids-flow board.",
+      "item": [
+        {
+          "name": "List nodes",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/node?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["node"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "color", "value": "", "disabled": true },
+                { "key": "organization", "value": "", "description": "Plain `organization` on this table (not organization_id).", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get node by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/node/{{nodeId}}", "host": ["{{baseUrl}}"], "path": ["node", "{{nodeId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create node",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/node", "host": ["{{baseUrl}}"], "path": ["node"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Document review\",\n  \"color\": \"#2f9e44\",\n  \"organization_id\": {{organizationId}}\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`color` is a hex string used for the board chip."
+          },
+          "response": []
+        },
+        {
+          "name": "Update node",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/node/{{nodeId}}", "host": ["{{baseUrl}}"], "path": ["node", "{{nodeId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Document review\",\n  \"color\": \"#2f9e44\"\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete node",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/node/{{nodeId}}", "host": ["{{baseUrl}}"], "path": ["node", "{{nodeId}}"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Templates",
+      "description": "`features/templates/api.ts`, endpoint `/template`, JSON factory. `template` holds the Polotno/editor design JSON.",
+      "item": [
+        {
+          "name": "List templates",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/template?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["template"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "organization_id", "value": "{{organizationId}}", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get template by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/template/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["template", "{{templateId}}"] },
+            "description": "Returns `template` (design JSON), `front_image`, `back_image`, `share_key`, `identities_count`, `identity_duration`, `branch_required`."
+          },
+          "response": []
+        },
+        {
+          "name": "Create template",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/template", "host": ["{{baseUrl}}"], "path": ["template"] },
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Staff Card 2026\",\n  \"description\": \"Annual staff identity card\",\n  \"price\": \"5000\",\n  \"template\": { \"pages\": [] },\n  \"front_image\": \"data:image/png;base64,...\",\n  \"back_image\": \"data:image/png;base64,...\",\n  \"is_enabled\": \"1\",\n  \"branch_required\": false,\n  \"identity_duration\": 365\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`price` is a STRING. `is_enabled` is a string on create/update (`\"1\"`), unlike the numeric `is_enabled` on organizations. `identity_duration` is in days. `front_image`/`back_image` are data URLs rendered from the editor."
+          },
+          "response": []
+        },
+        {
+          "name": "Update template",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/template/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["template", "{{templateId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Staff Card 2026\",\n  \"description\": \"Annual staff identity card\",\n  \"price\": \"5000\",\n  \"template\": { \"pages\": [] },\n  \"is_enabled\": \"1\",\n  \"branch_required\": false,\n  \"identity_duration\": 365\n}", "options": { "raw": { "language": "json" } } },
+            "description": "Real PUT (JSON factory). Send the FULL `template` design JSON - a partial write is what blanks out previews."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete template",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/template/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["template", "{{templateId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Clone template",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/template/clone", "host": ["{{baseUrl}}"], "path": ["template", "clone"] },
+            "body": { "mode": "raw", "raw": "{\n  \"template_id\": {{templateId}},\n  \"title\": \"Staff Card 2027\",\n  \"description\": \"Copy for next year\",\n  \"price\": \"5000\",\n  \"organization_id\": {{organizationId}}\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`CloneTemplateInput`. Copies the design into a new template, optionally into another organization."
+          },
+          "response": []
+        },
+        {
+          "name": "Reset sequence numbers",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/template/{{templateId}}/reset", "host": ["{{baseUrl}}"], "path": ["template", "{{templateId}}", "reset"] },
+            "description": "Empty body. Resets the ascending card-number sequence for this template."
+          },
+          "response": []
+        },
+        {
+          "name": "Export template identities (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/template/export/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["template", "export", "{{templateId}}"] },
+            "description": "Queues/produces an export job; the resulting files are listed by Template exports > List exports."
+          },
+          "response": []
+        },
+        {
+          "name": "List template exports",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/export?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["export"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "template_title", "value": "", "disabled": true },
+                { "key": "organization_id", "value": "{{organizationId}}", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true }
+              ]
+            },
+            "description": "Top-level `/export` (not nested under /template). Each row: `{ id, status, file, template, organization, created_at }`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Template flow",
+      "description": "`features/template-flow/api.ts`, endpoint `/template/flow`. Only get-by-id and create are wired in the UI (create doubles as upsert).",
+      "item": [
+        {
+          "name": "Get flow for template",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/template/flow/{{templateId}}", "host": ["{{baseUrl}}"], "path": ["template", "flow", "{{templateId}}"] },
+            "description": "The id in the path is the TEMPLATE id. Returns `{ id, template_id, nodes[] }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Set flow for template",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/template/flow", "host": ["{{baseUrl}}"], "path": ["template", "flow"] },
+            "body": { "mode": "raw", "raw": "{\n  \"template_id\": {{templateId}},\n  \"node_ids\": [1, 2, 3]\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`node_ids` order defines the stage order on the flow board."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Forms (form templates)",
+      "description": "`features/form-template/api.ts`, endpoint `/form`. Standalone public form builder (separate from the org join form).",
+      "item": [
+        {
+          "name": "List forms",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/form?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["form"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get form by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/form/{{formId}}", "host": ["{{baseUrl}}"], "path": ["form", "{{formId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create form",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/form", "host": ["{{baseUrl}}"], "path": ["form"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Membership application\",\n  \"description\": \"Public sign-up form\",\n  \"form\": \"{\\\"fields\\\":[]}\",\n  \"slug\": \"membership-application\",\n  \"organization_id\": {{organizationId}}\n}", "options": { "raw": { "language": "json" } } },
+            "description": "`form` is a STRING (serialized builder schema), not an object. `slug` is the public URL segment."
+          },
+          "response": []
+        },
+        {
+          "name": "Update form",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/form/{{formId}}", "host": ["{{baseUrl}}"], "path": ["form", "{{formId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Membership application\",\n  \"description\": \"Public sign-up form\",\n  \"form\": \"{\\\"fields\\\":[]}\",\n  \"slug\": \"membership-application\"\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete form",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/form/{{formId}}", "host": ["{{baseUrl}}"], "path": ["form", "{{formId}}"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "description": "`features/customers/api.ts`, endpoint `/customers` (note the plural - the only plural endpoint in the API).",
+      "item": [
+        {
+          "name": "List customers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/customers?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["customers"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get customer by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/customers/{{customerId}}", "host": ["{{baseUrl}}"], "path": ["customers", "{{customerId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/customers", "host": ["{{baseUrl}}"], "path": ["customers"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme\"\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        },
+        {
+          "name": "Update customer",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/customers/{{customerId}}", "host": ["{{baseUrl}}"], "path": ["customers", "{{customerId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme\"\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete customer",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/customers/{{customerId}}", "host": ["{{baseUrl}}"], "path": ["customers", "{{customerId}}"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Blacklist",
+      "description": "`features/black-list/api.ts`, endpoint `/blacklist`. No update hook - create and delete only.",
+      "item": [
+        {
+          "name": "List blacklist",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/blacklist?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["blacklist"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "phone", "value": "", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get blacklist entry",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/blacklist/{{blacklistId}}", "host": ["{{baseUrl}}"], "path": ["blacklist", "{{blacklistId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Add to blacklist",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/blacklist", "host": ["{{baseUrl}}"], "path": ["blacklist"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Ahmed Ali\",\n  \"phone\": \"07701234567\",\n  \"organization_id\": {{organizationId}}\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove from blacklist",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/blacklist/{{blacklistId}}", "host": ["{{baseUrl}}"], "path": ["blacklist", "{{blacklistId}}"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "API keys",
+      "description": "`features/api-keys/api.ts`, endpoint `/access_key` (the UI calls them API keys).",
+      "item": [
+        {
+          "name": "List API keys",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/access_key?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["access_key"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "organization", "value": "", "disabled": true },
+                { "key": "user", "value": "", "disabled": true },
+                { "key": "created_at_range[]", "value": "", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get API key",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/access_key/{{accessKeyId}}", "host": ["{{baseUrl}}"], "path": ["access_key", "{{accessKeyId}}"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create API key",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/access_key", "host": ["{{baseUrl}}"], "path": ["access_key"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Kiosk integration\"\n}", "options": { "raw": { "language": "json" } } },
+            "description": "Only `name` is sent; the server generates `key` and binds it to the caller's org/user."
+          },
+          "response": []
+        },
+        {
+          "name": "Update API key",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/access_key/{{accessKeyId}}", "host": ["{{baseUrl}}"], "path": ["access_key", "{{accessKeyId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Kiosk integration v2\"\n}", "options": { "raw": { "language": "json" } } }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete API key",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/access_key/{{accessKeyId}}", "host": ["{{baseUrl}}"], "path": ["access_key", "{{accessKeyId}}"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "description": "`features/payments/api.ts`, endpoint `/payment`. Read-only - the factory exposes only list and get-by-id.",
+      "item": [
+        {
+          "name": "List payments",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/payment?page=1&per_page=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["payment"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "amount", "value": "", "disabled": true },
+                { "key": "currency", "value": "IQD", "disabled": true },
+                { "key": "member_name", "value": "", "disabled": true },
+                { "key": "template_title", "value": "", "disabled": true },
+                { "key": "updated_at_range[]", "value": "", "description": "This table exposes updated_at_range only - no created_at_range filter.", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get payment by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/payment/{{paymentId}}", "host": ["{{baseUrl}}"], "path": ["payment", "{{paymentId}}"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhook",
+      "description": "`features/webhooks/api.ts`. A singleton resource - no id, no list.",
+      "item": [
+        {
+          "name": "Get webhook",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/webhook", "host": ["{{baseUrl}}"], "path": ["webhook"] },
+            "description": "Returns `{ url, secret_key, secret_value, method }`."
+          },
+          "response": []
+        },
+        {
+          "name": "Set webhook",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/webhook", "host": ["{{baseUrl}}"], "path": ["webhook"] },
+            "body": { "mode": "raw", "raw": "{\n  \"webhook_url\": \"https://example.com/hooks/identities\"\n}", "options": { "raw": { "language": "json" } } },
+            "description": "Upsert. Body is `{ webhook_url }` (TS: `webhookUrl`) - asymmetric with the GET response, which returns the field as `url`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Statistics",
+      "description": "`features/statistic/api.ts`. Powers the dashboard home page.",
+      "item": [
+        {
+          "name": "Dashboard statistics",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/statistics", "host": ["{{baseUrl}}"], "path": ["statistics"] },
+            "description": "No params. Returns `total_identities`, `total_members`, `total_member_requests`, `total_pending_member_requests`, `total_organizations`, `identities_in_year[{month,total}]`, `latest_members_requests[]`, `top_organizations[]`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Public (no auth)",
+      "description": "Different host: `https://api.bajat.net/api/public/v1`. Used by the public application form at `/ids-templates-forms/[id]`, where `[id]` is the template `share_key`. No Authorization header.",
+      "item": [
+        {
+          "name": "Get public template by share key",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{publicBaseUrl}}/template/{{shareKey}}", "host": ["{{publicBaseUrl}}"], "path": ["template", "{{shareKey}}"] },
+            "description": "Returns the template design + the variable definitions the public form renders."
+          },
+          "response": []
+        },
+        {
+          "name": "Submit public identity",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{publicBaseUrl}}/identity", "host": ["{{publicBaseUrl}}"], "path": ["identity"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "share_key", "value": "{{shareKey}}", "type": "text", "description": "Injected by the client from the URL segment." },
+                { "key": "name", "value": "Ahmed Ali", "type": "text" },
+                { "key": "phone", "value": "07701234567", "type": "text" },
+                { "key": "identity", "value": "{\"job_title\":\"Engineer\"}", "type": "text", "description": "Template variables, keys sent verbatim." },
+                { "key": "photo", "value": "", "type": "file", "disabled": true }
+              ]
+            },
+            "description": "Multipart, `skipRequestKeyConversion: true` - keys go out exactly as typed. Creates a PENDING (status 0) identity."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

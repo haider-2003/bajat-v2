@@ -37,6 +37,13 @@ export function formatDate(iso: string | null | undefined) {
 }
 
 /**
+ * How many digits an Iraqi number has once the country code and the trunk
+ * `0` are off it. Both the display formatter and the wire normaliser measure
+ * against it, so they cannot disagree about what a complete number is.
+ */
+const PHONE_LOCAL_DIGITS = 10
+
+/**
  * `"9647701234567"` as `+964 770 123 4567`.
  *
  * Iraqi numbers specifically: anything that doesn't come out to ten local
@@ -46,7 +53,7 @@ export function formatPhone(phone: string | null | undefined) {
   if (!phone) return EMPTY_VALUE
   const digits = phoneDigits(phone)
   const local = digits.startsWith("964") ? digits.slice(3) : digits
-  if (local.length !== 10) return phone
+  if (local.length !== PHONE_LOCAL_DIGITS) return phone
   return `+964 ${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`
 }
 
@@ -59,4 +66,43 @@ export function formatPhone(phone: string | null | undefined) {
  */
 export function phoneDigits(value: string) {
   return value.replace(/\D/g, "")
+}
+
+/**
+ * A typed phone number in the shape the API stores — `"9647701234567"`.
+ *
+ * Returns `null` when the input cannot be read as one, so a caller can tell
+ * "not a phone number" from "a phone number I reformatted".
+ *
+ * ### Why this exists
+ *
+ * `formatPhone` above is the contract, read backwards: the stored value is a
+ * `964` country code followed by **ten** local digits. What people type is the
+ * local form with a leading zero — `07877242069` — which is eleven digits and
+ * neither the stored shape nor anything the backend accepts. Sending it
+ * through verbatim is what earns "The phone field format is invalid."
+ *
+ * So every accepted spelling of the same number collapses to one:
+ *
+ * ```
+ * 07877242069      →  9647877242069
+ * 7877242069       →  9647877242069
+ * +964 787 724 2069 → 9647877242069
+ * 009647877242069  →  9647877242069
+ * ```
+ *
+ * The trunk `0` and the `+964` are alternatives to each other, never both, so
+ * the country code is stripped first and the trunk zero only after — otherwise
+ * `9640787…` would lose a digit that belongs to the subscriber.
+ */
+export function toApiPhone(value: string): string | null {
+  let digits = phoneDigits(value)
+
+  // `00` is the dialled form of `+`; drop it before looking for the code.
+  if (digits.startsWith("00")) digits = digits.slice(2)
+  if (digits.startsWith("964")) digits = digits.slice(3)
+  // The national trunk prefix, dropped when the number is written in full.
+  if (digits.startsWith("0")) digits = digits.slice(1)
+
+  return digits.length === PHONE_LOCAL_DIGITS ? `964${digits}` : null
 }

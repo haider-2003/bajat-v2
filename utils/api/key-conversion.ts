@@ -55,8 +55,8 @@ function camelizeSiblings(source: Record<string, unknown>, key: string) {
  *
  * - `skipConfig === true` → returned untouched.
  * - `skipConfig` object → everything camelized except the named properties,
- *   applied per row for a paginated `{ data: { data: [...] } }` envelope and
- *   to the entity itself for a single `{ data: {...} }` one.
+ *   applied per row for either list envelope and to the entity itself for a
+ *   single `{ data: {...} }` one.
  * - otherwise → a plain recursive camelize.
  */
 export function transformResponseKeys<T = unknown>(
@@ -67,6 +67,26 @@ export function transformResponseKeys<T = unknown>(
   if (!skipConfig || typeof skipConfig !== "object") return camelizeKeys<T>(data)
 
   const skip = skipConfig
+
+  /**
+   * The list envelope as it actually arrives.
+   *
+   * The interceptor hands this function `response.data` — the *body* — and a
+   * list body is `{ data: [...], meta }`: rows one level down, not two. The
+   * doubly-nested branch below reads like the same thing because `GetResponse`
+   * describes the whole Axios response, where the body sits under another
+   * `data`; it matches a body only when a single entity is nested under one.
+   *
+   * Without this branch a list falls through to the plain camelize at the
+   * bottom and every skip is ignored — which is silent: the rows render, and
+   * only the keys that were supposed to be left alone come back rewritten.
+   */
+  if (isPlainObject(data) && Array.isArray(data.data)) {
+    return {
+      ...camelizeSiblings(data, "data"),
+      data: data.data.map((row) => camelizeExcept(row, skip)),
+    } as T
+  }
 
   if (isPlainObject(data) && isPlainObject(data.data)) {
     const inner = data.data

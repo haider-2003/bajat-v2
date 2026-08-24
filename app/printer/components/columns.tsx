@@ -1,0 +1,169 @@
+"use client"
+
+import type { ColumnDef } from "@tanstack/react-table"
+import {
+  Building2,
+  CalendarClock,
+  CalendarPlus,
+  IdCard,
+  LayoutTemplate,
+  Phone,
+  Printer,
+  QrCode,
+  User,
+} from "lucide-react"
+
+import {
+  DateCell,
+  HeadCell,
+  IdCell,
+  PhoneCell,
+  TextCell,
+} from "@/components/table/cells"
+import { QrCell } from "@/components/table/qr-cell"
+import { SoftBadge } from "@/components/ui/data-bits"
+import { identityName, identityPhone } from "@/features/ids/fields"
+import { statusMeta } from "@/features/ids/status"
+import type { IDCard } from "@/features/ids/types"
+import type { Features } from "@/lib/table-features"
+
+import { PrintActions } from "./print-actions"
+
+/**
+ * Column definitions — DESIGN.md §8.3 / §8.6.
+ *
+ * A factory rather than a constant, because the actions cell needs a callback
+ * the screen owns: which card is being previewed is the screen's state, not the
+ * row's. Memoize the result — a fresh array every render remounts every cell.
+ *
+ * Every column maps to something a live `/identity` row actually carries
+ * (docs/api-types.md § ids). The cardholder's name is *derived*, not read: list
+ * rows have no top-level `name`, and a column that read `card.name` would print
+ * a column of dashes over rows that plainly have names on them. See
+ * features/ids/fields.ts.
+ *
+ * `meta.priority` drives which columns drop first on narrow viewports (§8.12).
+ */
+export function createColumns(
+  onPreview: (card: IDCard) => void
+): ColumnDef<Features, IDCard, unknown>[] {
+  return [
+    {
+      id: "qr",
+      accessorFn: (row) => row.uniqueKey ?? "",
+      header: () => <HeadCell icon={QrCode}>QR Code</HeadCell>,
+      // First, because it is the column the operator works from: the queue is
+      // cleared by scanning down the left edge, not by reading it.
+      //
+      // Drawn in the browser from `uniqueKey` — the API has no QR endpoint and
+      // sends no QR image. See components/table/qr-cell.tsx for the encoding
+      // rules, which existing printed cards depend on.
+      //
+      // `my-2` is this column's alone: the shared `TableCell` is `py-0`, which
+      // is right for a line of text but leaves a 60px code flush against the
+      // one above it with only the hairline between them. Margin rather than
+      // padding so the focus ring still hugs the code.
+      cell: ({ row }) => (
+        <QrCell value={row.original.uniqueKey} size={60} className="my-2" />
+      ),
+      size: 80,
+      // A code is not text, so there is nothing useful to sort or filter on.
+      enableSorting: false,
+      // The one column that must not drop: without it this is a list, not a
+      // print queue.
+      meta: { priority: 110, label: "QR Code" },
+    },
+    {
+      accessorKey: "id",
+      header: () => <HeadCell icon={IdCard}>Card</HeadCell>,
+      cell: ({ row }) => <IdCell value={row.original.id} />,
+      size: 88,
+      meta: { priority: 90, label: "Card" },
+    },
+    {
+      id: "cardholder",
+      accessorFn: (row) => identityName(row) ?? "",
+      header: () => <HeadCell icon={User}>Cardholder</HeadCell>,
+      // The row's identity, so it carries the primary emphasis (§8.6).
+      cell: ({ row }) => (
+        <TextCell value={identityName(row.original)} emphasis="primary" />
+      ),
+      size: 220,
+      meta: { priority: 100, label: "Cardholder" },
+    },
+    {
+      id: "status",
+      accessorFn: (row) => row.status,
+      header: () => <HeadCell icon={Printer}>Status</HeadCell>,
+      // Flat soft badge for workflow status (§14.1).
+      cell: ({ row }) => {
+        const meta = statusMeta(row.original.status)
+        return <SoftBadge tone={meta.tone}>{meta.label}</SoftBadge>
+      },
+      size: 160,
+      meta: { priority: 95, label: "Status" },
+    },
+    {
+      id: "phone",
+      accessorFn: (row) => identityPhone(row) ?? "",
+      header: () => <HeadCell icon={Phone}>Phone</HeadCell>,
+      cell: ({ row }) => <PhoneCell value={identityPhone(row.original)} />,
+      size: 170,
+      meta: { priority: 60, label: "Phone" },
+    },
+    {
+      id: "organization",
+      accessorFn: (row) => row.organization?.name ?? "",
+      header: () => <HeadCell icon={Building2}>Organization</HeadCell>,
+      cell: ({ row }) => <TextCell value={row.original.organization?.name} />,
+      size: 200,
+      meta: { priority: 70, label: "Organization" },
+    },
+    {
+      id: "template",
+      accessorFn: (row) => row.template?.title ?? "",
+      header: () => <HeadCell icon={LayoutTemplate}>Template</HeadCell>,
+      // Which design is on the printer matters more on this screen than on any
+      // other: it is what decides the stock in the tray.
+      cell: ({ row }) => (
+        <TextCell value={row.original.template?.title} emphasis="quiet" />
+      ),
+      size: 200,
+      meta: { priority: 50, label: "Template" },
+    },
+    {
+      accessorKey: "createdAt",
+      header: () => <HeadCell icon={CalendarPlus}>Created</HeadCell>,
+      // When the card was issued, which is not when it last moved — a job that
+      // was created in June and last moved in June has been sitting here since
+      // June, and it takes both columns side by side to see that.
+      cell: ({ row }) => <DateCell value={row.original.createdAt} />,
+      size: 190,
+      // Below "Last moved": in a queue the age of a job is context, where the
+      // date it last changed hands is the thing being worked from.
+      meta: { priority: 30, label: "Created" },
+    },
+    {
+      accessorKey: "updatedAt",
+      header: () => <HeadCell icon={CalendarClock}>Last moved</HeadCell>,
+      // `updatedAt`, not `createdAt`: in a queue the useful date is when the
+      // card last changed hands, which is how a stalled job is spotted.
+      cell: ({ row }) => <DateCell value={row.original.updatedAt} />,
+      size: 190,
+      meta: { priority: 40, label: "Last moved" },
+    },
+    {
+      id: "actions",
+      header: () => <span className="sr-only">Actions</span>,
+      cell: ({ row }) => (
+        <PrintActions
+          card={row.original}
+          onPreview={onPreview}
+          className="justify-end"
+        />
+      ),
+      size: 96,
+      meta: { priority: 99, label: "Actions" },
+    },
+  ]
+}

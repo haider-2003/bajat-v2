@@ -332,13 +332,13 @@ export type Member = {
 export type CreateMembersInput = {
   phone: string;
   name: string;
-  organizationId?: number;
+  organizationIds?: string[];       // plural array — `organization_ids` on the wire
 };
 
 export type UpdateMembersInput = {
   phone?: string;
   name: string;                     // required on update
-  organizationId?: number;
+  organizationIds?: string[];
 };
 
 export type UploadMembersInput = {
@@ -359,6 +359,8 @@ export type UploadMembersInput = {
 | `useGetMemberOrganizations(id, filter)` | GET | `/member/{id}/organization` | `GetResponse<Organization[]>` |
 
 > `Member.organizations` is an **array** (many-to-many). Most other entities carry a single `organization`.
+>
+> The write inputs match: `organizationIds` is a **plural array of strings**, decamelized to `organization_ids`. Sending a singular `organization_id` fails with *"The organization ids field is required."* — members-requests is the one that takes a singular `organizationId`.
 
 ---
 
@@ -418,7 +420,7 @@ export type UploadMembersInput = {
 | `useApproveMember()` | PUT | `/member_request/change_status/{memberId}` | `MemberRequest` |
 | `useRejectMember()` | PUT | `/member_request/change_status/{memberId}` | `MemberRequest` |
 
-> Two gotchas: `organizationId` is a **string** here but a **number** in `members`; and the input type names (`CreateMembersInput`) collide with the `members` feature — import them explicitly, don't rely on the name.
+> Two gotchas: `organizationId` is a **singular string** here but a plural `organizationIds: string[]` in `members`; and the input type names (`CreateMembersInput`) collide with the `members` feature — import them explicitly, don't rely on the name.
 
 ---
 
@@ -510,6 +512,35 @@ export type UpdateIdVars = Record<string, unknown>;
 3. **`request` keys are not converted on the way back either.** They are template variable names and are returned exactly as the template defined them.
 
 `CreateIDCardInput` has an index signature, so it accepts arbitrary template variables — at the cost of no type checking on those keys.
+
+### What live `GET /identity` rows actually carry
+
+The block above describes the entity; the list endpoint sends a thinner, wider version of it, and [features/ids/types.ts](../features/ids/types.ts) follows the rows rather than the doc:
+
+- **No top-level `name` or `phone`.** The cardholder is in `member` (when the card belongs to a registered member) and again inside `request`, under whichever variable the template's author named it. `identityName` / `identityPhone` in [features/ids/fields.ts](../features/ids/fields.ts) are how a screen reads them — a column that reads `card.name` renders dashes over rows that plainly have names.
+- **No `nodeHistory` and no `template_id`.** The embedded `template` object is there instead.
+- **Extra relations:** `organization`, `member`, and `creatable` — who issued it, `null` when it came in through the public link — plus `source` (`"INTERNAL"`) and `type`.
+- **`frontImage` / `backImage` are pre-signed S3 URLs with `X-Amz-Expires=300`.** They stop working **five minutes** after the request that returned them; a screen holding them has to refetch, not retry the image.
+
+### What `GET /identity` filters on
+
+Verified against [docs/identities-api.postman_collection.json](./identities-api.postman_collection.json), which is the authority for this endpoint's query surface. Field names are written camelCase in `buildFilter` and decamelized on the way out.
+
+| Sent as | Write it as | Notes |
+| --- | --- | --- |
+| `statuses[]` | `statuses` | **Numbers**, repeated. `4,5,6` is the printer queue. |
+| `search` | `search` | The free-text box. |
+| `member_name` | `memberName` | Per-column text filter. |
+| `member_phone` | `memberPhone` | Per-column text filter; the stored number is bare digits. |
+| `template_title` | `templateTitle` | Free text, not an id. |
+| `organization_id` | `organizationId` | **Singular** — one value. `/member` takes `organization_ids[]`; using a multi-select facet here sends a parameter the backend ignores. |
+| `price` | `price` | |
+| `created_at_range[]` | `createdAtRange` | Two ISO instants, from and to, sent together. |
+| `updated_at_range[]` | `updatedAtRange` | Same shape. |
+
+### The response skip config needs a list envelope
+
+`skipResponseKeyConversion: { request: true }` is what keeps the template variable names intact on the way back. It is applied per row by `transformResponseKeys` (utils/api/key-conversion.ts), which sees the *body* — so a list has to be matched as `{ data: [...] }`, not the doubly-nested `{ data: { data: [...] } }` that `GetResponse` describes. Matching only the latter is silent: rows render, and only the keys that were supposed to be left alone come back rewritten.
 
 ---
 
@@ -1269,7 +1300,7 @@ Collected here because each has caused a real bug or will:
 | --- | --- |
 | 1 | **Booleans in, numbers out.** Entities return `isEnabled: boolean`; inputs take `isEnabled?: number` (`0`/`1`). |
 | 2 | **`ids` sends snake_case.** Key conversion is disabled — write `template_id`, not `templateId`. |
-| 3 | **`IDCard.status` reads as a name, writes as a number.** Map through the exported `status` array. |
+| 3 | **`IDCard.status` reads as a name, writes as a number.** Map through `STATUS_NAMES` / `statusId` in [features/ids/types.ts](../features/ids/types.ts) — the index *is* the id, and `PENDING` is `0`, so a fallback of `0` is a real status. |
 | 4 | **`roleId` vs `roleIds`.** `users` uses singular `roleId` (still an array); org/branch users use `roleIds`. |
 | 5 | **`organizationId` type varies.** `number` in most features, `string` in `members-requests` and `application-form`. |
 | 6 | **Numbers as strings.** `Template.price`, `Payment.amount`, and all `lat`/`lng` are strings. |
