@@ -37,6 +37,7 @@ import * as React from "react"
 
 export type Accent =
   | "violet"
+  | "indigo"
   | "blue"
   | "cyan"
   | "green"
@@ -52,11 +53,11 @@ export type Accent =
  *
  * Violet and blue are §2.1's own two strategies. Green and orange reuse the
  * documented `success`/`warning` pairs, and cyan extends chart-6 (`#06B6D4`) to
- * the same two tiers. Clay and pink are brand hues carried in at their exact
- * shipped values — Claude's `#D97757` and n8n's `#EA4B71` — with only their
- * dark-mode partner and tint derived. **Red is deliberately absent**: an accent
- * sharing the danger hue would make destructive confirmations unreadable as
- * warnings.
+ * the same two tiers. Clay, pink and indigo are brand hues carried in at their
+ * exact shipped values — Claude's `#D97757`, n8n's `#EA4B71` and Stripe's
+ * `#635BFF` — with only their dark-mode partner and tint derived. **Red is
+ * deliberately absent**: an accent sharing the danger hue would make
+ * destructive confirmations unreadable as warnings.
  *
  * `tile` paints the picker's swatch with the hue's real §7.4 tone, so a swatch
  * previews the material a solid control will actually be made of rather than
@@ -81,6 +82,12 @@ export const ACCENTS: readonly {
     label: "Violet",
     tone: "text-[#7c3aed] dark:text-[#a78bfa]",
     tile: "[--sw-top:#6d28d9] [--sw-mid:#6524cb] [--sw-bot:#5d21bc] [--sw-rim:#381471]",
+  },
+  {
+    value: "indigo",
+    label: "Indigo",
+    tone: "text-[#635bff] dark:text-[#a5a0ff]",
+    tile: "[--sw-top:#4f46d9] [--sw-mid:#4a41cb] [--sw-bot:#453cbd] [--sw-rim:#29237a]",
   },
   {
     value: "blue",
@@ -127,11 +134,222 @@ export type PrimaryStyle = "neutral" | "accent"
 
 export const PRIMARY_STYLES: readonly PrimaryStyle[] = ["neutral", "accent"]
 
+/* ------------------------------------------------------------------ *
+ * Templates
+ * ------------------------------------------------------------------ */
+
+/**
+ * A template is the whole palette in one choice.
+ *
+ * The two controls above each move one thing — a hue, a strategy. Neither
+ * touches the *neutrals*, which is most of what a look actually is: the page,
+ * the surfaces, the text ramp, the borders, the sidebar. A template moves
+ * those, and picks an accent and a primary strategy to match.
+ *
+ * ### It is a preset, not a second system
+ *
+ * Selecting one writes `data-template` **and** the two preferences below, so
+ * the accent and primary blocks in globals.css keep being the only place those
+ * tokens are defined. `data-template` owns the neutral ramp and nothing else
+ * (see the template block in globals.css for the full list of what it may
+ * touch). Nothing overlaps, so nothing fights in the cascade.
+ *
+ * Because the knobs stay live, changing one by hand after picking a template
+ * is allowed — the UI just stops claiming a template is active. That state is
+ * derived, never stored: see `matchTemplate`.
+ *
+ * ### Colours only
+ *
+ * No template changes the font, the radius scale, spacing, status colours or
+ * chart series. A template can repaint the app; it cannot move a control by a
+ * pixel or make a danger badge stop looking dangerous.
+ */
+export type Template = "graphite" | "clay" | "ink" | "ledger"
+
+/** The six colours a picker card needs to show what a template looks like. */
+export type TemplatePreview = {
+  /** The page ground. */
+  page: string
+  /** The sidebar rail. */
+  rail: string
+  /** A card / panel on the page. */
+  surface: string
+  /** Hairline borders. */
+  line: string
+  /** Primary text. */
+  ink: string
+  /** The face of a primary button — the tone, so it reflects the strategy. */
+  button: string
+}
+
+export type TemplateDef = {
+  value: Template
+  label: string
+  /** One line, shown under the card's label. */
+  description: string
+  accent: Accent
+  primary: PrimaryStyle
+  preview: { light: TemplatePreview; dark: TemplatePreview }
+}
+
+/**
+ * `graphite` is the shipped design and deliberately has no CSS block —
+ * selecting it means falling back to the `:root` / `.dark` ramps, which is
+ * also what makes it a safe reset target.
+ *
+ * `clay` is claude.ai's warm palette, documented in
+ * docs/CLAUDE-CHAT-DESIGN-SYSTEM.md. It pairs the cream ramp with the `clay`
+ * accent at its shipped `#D97757` and Strategy B, because the orange button is
+ * the signature of that look — a warm page under a black button reads as an
+ * accident rather than a choice.
+ *
+ * `ink` is the opposite end: cool slate, borders at three times the usual
+ * contrast, a white rail on a tinted page. It keeps Strategy A, because the
+ * whole idea is that structure comes from outlines — a coloured button would
+ * be competing with borders that are already loud.
+ *
+ * `ledger` is the Stripe dashboard's palette: neutrals with a blue cast and a
+ * navy-black ink, under Strategy B so the indigo button — the reference's whole
+ * signature — is the loudest thing on screen. It is the closest of the four to
+ * what Bajat actually is, a quote and billing dashboard.
+ *
+ * The four are deliberately far apart — warm, neutral, hard, blue. Two
+ * templates that read as similar in the picker make the feature look like noise
+ * rather than choice, so a fifth has to earn its place (see docs/TEMPLATES.md
+ * §4).
+ */
+export const TEMPLATES: readonly TemplateDef[] = [
+  {
+    value: "graphite",
+    label: "Graphite",
+    description: "The default. Neutral greys, black buttons, violet accent.",
+    accent: "violet",
+    primary: "neutral",
+    preview: {
+      light: {
+        page: "#f4f4f5",
+        rail: "#f4f4f5",
+        surface: "#ffffff",
+        line: "#eaeaea",
+        ink: "#171717",
+        button: "#111111",
+      },
+      dark: {
+        page: "#0a0a0a",
+        rail: "#0d0d0d",
+        surface: "#161616",
+        line: "#262626",
+        ink: "#ededed",
+        button: "#ffffff",
+      },
+    },
+  },
+  {
+    value: "clay",
+    label: "Clay",
+    description: "Warm paper and clay — cream page, orange buttons.",
+    accent: "clay",
+    primary: "accent",
+    preview: {
+      light: {
+        page: "#faf9f5",
+        rail: "#f0eee6",
+        surface: "#ffffff",
+        line: "#e8e5db",
+        ink: "#141413",
+        button: "#b54c29",
+      },
+      dark: {
+        page: "#262624",
+        rail: "#1f1e1d",
+        surface: "#30302e",
+        line: "#3d3c39",
+        ink: "#f5f4ee",
+        button: "#eaa48e",
+      },
+    },
+  },
+  {
+    value: "ink",
+    label: "Ink",
+    description: "High contrast. Strong borders, white sidebar, slate text.",
+    accent: "blue",
+    primary: "neutral",
+    preview: {
+      light: {
+        page: "#eef2f6",
+        rail: "#ffffff",
+        surface: "#ffffff",
+        line: "#cbd5e1",
+        ink: "#0f172a",
+        // Strategy A leaves `--primary` at the :root neutral, so the button
+        // is #111 rather than the template's slate ink.
+        button: "#111111",
+      },
+      dark: {
+        page: "#0d1117",
+        rail: "#161d27",
+        surface: "#161d27",
+        line: "#30363d",
+        ink: "#e6edf3",
+        button: "#ffffff",
+      },
+    },
+  },
+  {
+    value: "ledger",
+    label: "Ledger",
+    description: "Finance blue. Tinted neutrals, navy ink, indigo buttons.",
+    accent: "indigo",
+    primary: "accent",
+    preview: {
+      light: {
+        page: "#f6f8fa",
+        rail: "#ffffff",
+        surface: "#ffffff",
+        line: "#e3e8ee",
+        ink: "#1a1f36",
+        button: "#4f46d9",
+      },
+      dark: {
+        page: "#0f1116",
+        rail: "#161922",
+        surface: "#1c1f2a",
+        line: "#2a2f3d",
+        ink: "#e6e9f0",
+        button: "#a5a0ff",
+      },
+    },
+  },
+]
+
+const TEMPLATE_VALUES = TEMPLATES.map((t) => t.value)
+
+/**
+ * Which template the current settings actually add up to, or `null` for a
+ * hand-mixed combination.
+ *
+ * Derived rather than stored, so the UI can never claim a template is active
+ * after the accent has been changed out from under it.
+ */
+export function matchTemplate(
+  template: Template,
+  accent: Accent,
+  primary: PrimaryStyle
+): Template | null {
+  const def = TEMPLATES.find((t) => t.value === template)
+  return def && def.accent === accent && def.primary === primary
+    ? def.value
+    : null
+}
+
 const DEFAULT_ACCENT: Accent = "violet"
 const DEFAULT_PRIMARY: PrimaryStyle = "neutral"
+export const DEFAULT_TEMPLATE: Template = "graphite"
 
 const ACCENT_KEY = "bajat-accent"
 const PRIMARY_KEY = "bajat-primary"
+const TEMPLATE_KEY = "bajat-template"
 
 /* ------------------------------------------------------------------ *
  * Pre-paint application
@@ -155,6 +373,9 @@ export const brandInitScript = `
     el.dataset.accent = accents.indexOf(a) === -1 ? ${JSON.stringify(DEFAULT_ACCENT)} : a;
     var p = localStorage.getItem(${JSON.stringify(PRIMARY_KEY)});
     el.dataset.primary = p === "accent" ? "accent" : ${JSON.stringify(DEFAULT_PRIMARY)};
+    var templates = ${JSON.stringify(TEMPLATE_VALUES)};
+    var t = localStorage.getItem(${JSON.stringify(TEMPLATE_KEY)});
+    el.dataset.template = templates.indexOf(t) === -1 ? ${JSON.stringify(DEFAULT_TEMPLATE)} : t;
   } catch (e) {}
 })();
 `
@@ -168,9 +389,9 @@ export const brandInitScript = `
  * mirroring one source of truth into another.
  * ------------------------------------------------------------------ */
 
-type Brand = { accent: Accent; primary: PrimaryStyle }
+type Brand = { accent: Accent; primary: PrimaryStyle; template: Template }
 
-const SERVER_SNAPSHOT = `${DEFAULT_ACCENT}:${DEFAULT_PRIMARY}`
+const SERVER_SNAPSHOT = `${DEFAULT_ACCENT}:${DEFAULT_PRIMARY}:${DEFAULT_TEMPLATE}`
 
 let snapshot: string | null = null
 const listeners = new Set<() => void>()
@@ -185,14 +406,17 @@ function read(key: string, fallback: string, allowed: readonly string[]): string
   }
 }
 
-/** `${accent}:${primary}` — a primitive, so getSnapshot stays referentially stable. */
+/**
+ * `${accent}:${primary}:${template}` — a primitive, so getSnapshot stays
+ * referentially stable.
+ */
 function getSnapshot(): string {
   if (snapshot === null) {
-    snapshot = `${read(ACCENT_KEY, DEFAULT_ACCENT, ACCENT_VALUES)}:${read(
-      PRIMARY_KEY,
-      DEFAULT_PRIMARY,
-      PRIMARY_STYLES
-    )}`
+    snapshot = [
+      read(ACCENT_KEY, DEFAULT_ACCENT, ACCENT_VALUES),
+      read(PRIMARY_KEY, DEFAULT_PRIMARY, PRIMARY_STYLES),
+      read(TEMPLATE_KEY, DEFAULT_TEMPLATE, TEMPLATE_VALUES),
+    ].join(":")
   }
   return snapshot
 }
@@ -215,30 +439,59 @@ function write(key: string, value: string) {
   }
 }
 
+/** Persist one preference and stamp it on `<html>`, without notifying. */
+function put(key: string, attr: "accent" | "primary" | "template", value: string) {
+  write(key, value)
+  document.documentElement.dataset[attr] = value
+}
+
+function notify() {
+  snapshot = null
+  for (const l of listeners) l()
+}
+
 export function useBrand(): Brand & {
   setAccent: (accent: Accent) => void
   setPrimary: (primary: PrimaryStyle) => void
+  /**
+   * Applies a template — its neutral ramp plus the accent and strategy that
+   * belong to it — as one change.
+   *
+   * All three attributes are written before a single notify, so the app
+   * repaints once. Setting them through the individual setters would paint an
+   * intermediate frame with the new ramp under the old accent.
+   */
+  applyTemplate: (template: Template) => void
 } {
   const value = React.useSyncExternalStore(
     subscribe,
     getSnapshot,
     () => SERVER_SNAPSHOT
   )
-  const [accent, primary] = value.split(":") as [Accent, PrimaryStyle]
+  const [accent, primary, template] = value.split(":") as [
+    Accent,
+    PrimaryStyle,
+    Template,
+  ]
 
   const setAccent = React.useCallback((next: Accent) => {
-    write(ACCENT_KEY, next)
-    document.documentElement.dataset.accent = next
-    snapshot = null
-    for (const l of listeners) l()
+    put(ACCENT_KEY, "accent", next)
+    notify()
   }, [])
 
   const setPrimary = React.useCallback((next: PrimaryStyle) => {
-    write(PRIMARY_KEY, next)
-    document.documentElement.dataset.primary = next
-    snapshot = null
-    for (const l of listeners) l()
+    put(PRIMARY_KEY, "primary", next)
+    notify()
   }, [])
 
-  return { accent, primary, setAccent, setPrimary }
+  const applyTemplate = React.useCallback((next: Template) => {
+    const def = TEMPLATES.find((t) => t.value === next)
+    if (!def) return
+    put(TEMPLATE_KEY, "template", def.value)
+    put(ACCENT_KEY, "accent", def.accent)
+    put(PRIMARY_KEY, "primary", def.primary)
+    notify()
+  }, [])
+
+  return { accent, primary, template, setAccent, setPrimary, applyTemplate }
 }

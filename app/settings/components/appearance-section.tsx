@@ -1,17 +1,21 @@
 "use client"
 
 import * as React from "react"
-import { Monitor, Moon, Palette, SunMedium } from "lucide-react"
+import { Monitor, Moon, Palette, RotateCcw, SunMedium } from "lucide-react"
 
 import {
   SettingsBlock,
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/settings-section"
+import { Button } from "@/components/ui/button"
 import { Segmented, type SegmentedItem } from "@/components/ui/segmented"
 import { SwatchPicker } from "@/components/ui/swatch-picker"
+import { TemplatePicker } from "@/components/ui/template-picker"
 import {
   CONTROL_STYLES,
+  DEFAULT_FLAT,
+  DEFAULT_STYLE,
   FLAT_VARIANTS,
   useControlStyle,
   useControlSurface,
@@ -20,7 +24,15 @@ import {
   type ControlSurface,
   type FlatVariant,
 } from "@/components/ui/control-style"
-import { ACCENTS, useBrand, type PrimaryStyle } from "@/components/layout/brand"
+import {
+  ACCENTS,
+  DEFAULT_TEMPLATE,
+  TEMPLATES,
+  matchTemplate,
+  useBrand,
+  type PrimaryStyle,
+  type Template,
+} from "@/components/layout/brand"
 import { useTheme, type Theme } from "@/components/layout/theme-provider"
 import { cn } from "@/lib/utils"
 
@@ -86,12 +98,32 @@ const FLAT_ITEMS: readonly SegmentedItem<FlatVariant>[] = FLAT_VARIANTS.map(
 
 export function AppearanceSection() {
   const { theme, resolved, setTheme } = useTheme()
-  const { accent, primary, setAccent, setPrimary } = useBrand()
+  const { accent, primary, template, setAccent, setPrimary, applyTemplate } =
+    useBrand()
   const { style, setStyle } = useControlStyle()
   const { variant, setVariant } = useFlatVariant()
   const surface = useControlSurface()
 
   const accentLabel = ACCENTS.find((a) => a.value === accent)?.label ?? "Violet"
+
+  /**
+   * Derived, never stored: a template stops being "active" the moment one of
+   * the rows below is changed by hand, so no card can claim a look the app is
+   * no longer wearing.
+   */
+  const activeTemplate = matchTemplate(template, accent, primary)
+
+  /** Everything the reset touches, already at its shipped value. */
+  const isDefault =
+    activeTemplate === DEFAULT_TEMPLATE &&
+    style === DEFAULT_STYLE &&
+    variant === DEFAULT_FLAT
+
+  const reset = React.useCallback(() => {
+    applyTemplate(DEFAULT_TEMPLATE)
+    setStyle(DEFAULT_STYLE)
+    setVariant(DEFAULT_FLAT)
+  }, [applyTemplate, setStyle, setVariant])
 
   return (
     <SettingsSection
@@ -100,6 +132,28 @@ export function AppearanceSection() {
       title="Appearance"
       description="How Bajat looks on this device. These preferences are stored in this browser only — they do not follow your account."
     >
+      {/* A full-width block rather than a row: the cards are the control, and
+          they need the whole width to read as screens rather than chips. */}
+      <SettingsBlock>
+        <div className="mb-3">
+          <span className="block text-[13px] font-medium text-text">
+            Template
+          </span>
+          <p className="mt-1.5 text-xs leading-relaxed text-text-muted">
+            {activeTemplate
+              ? "A whole palette in one pick — page, sidebar, text, borders and buttons. The rows below stay editable; changing one leaves the template as Custom."
+              : "Custom — these settings don't match a template. Pick one to replace them, or reset below."}
+          </p>
+        </div>
+        <TemplatePicker
+          label="Template"
+          value={activeTemplate}
+          onValueChange={(next: Template) => applyTemplate(next)}
+          items={TEMPLATES}
+          theme={resolved}
+        />
+      </SettingsBlock>
+
       <SettingsRow
         label="Theme"
         description={
@@ -180,6 +234,33 @@ export function AppearanceSection() {
       <SettingsBlock>
         <AppearancePreview surface={surface} />
       </SettingsBlock>
+
+      {/* Last row, and the only destructive one — an escape hatch after a
+          template has been tried, not something to reach for first.
+
+          It deliberately leaves the theme alone. Light/dark is a comfort
+          choice rather than a styling one, and flipping someone into light
+          mode because they wanted their colours back is the kind of surprise a
+          reset should not contain. */}
+      <SettingsRow
+        label="Reset appearance"
+        description={
+          isDefault
+            ? "Already on the default look. Light/dark is never changed by this."
+            : "Puts the template, accent, buttons and control style back to the shipped design. Light/dark is left as you set it."
+        }
+        control={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={reset}
+            disabled={isDefault}
+          >
+            <RotateCcw data-icon="inline-start" aria-hidden />
+            Reset to default
+          </Button>
+        }
+      />
     </SettingsSection>
   )
 }

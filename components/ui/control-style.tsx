@@ -60,7 +60,7 @@ export type ControlStyle = "flat" | "raised" | "ink"
 
 export const CONTROL_STYLES: ControlStyle[] = ["flat", "raised", "ink"]
 
-const DEFAULT_STYLE: ControlStyle = "raised"
+export const DEFAULT_STYLE: ControlStyle = "raised"
 
 /**
  * The §7.4 tone face — three gradient stops and a rim, every one of them a
@@ -109,7 +109,7 @@ const TONE_SURFACE = `${TONE_FACE} ${TONE_DEPTH}`
  * from*, so it takes surface tokens rather than the tone properties.
  */
 const SOFT_SURFACE = [
-  "bg-[linear-gradient(180deg,#ffffff_0%,#fbfbfc_55%,#f4f4f5_100%)] text-text",
+  "bg-[linear-gradient(180deg,var(--soft-top)_0%,var(--soft-mid)_55%,var(--soft-bot)_100%)] text-text",
   "shadow-[inset_0_0_0_1px_var(--border),inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(12,12,16,0.07),0_3px_8px_-3px_rgba(12,12,16,0.10)]",
   "hover:shadow-[inset_0_0_0_1px_var(--border-strong),inset_0_1px_0_rgba(255,255,255,0.9),0_2px_6px_-1px_rgba(12,12,16,0.10)]",
   "dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.10)_0%,rgba(255,255,255,0.055)_100%)]",
@@ -139,7 +139,7 @@ export type FlatVariant = "tinted" | "solid" | "outline"
 
 export const FLAT_VARIANTS: FlatVariant[] = ["tinted", "solid", "outline"]
 
-const DEFAULT_FLAT: FlatVariant = "tinted"
+export const DEFAULT_FLAT: FlatVariant = "tinted"
 
 const FLAT_FACES: Record<FlatVariant, { face: string; muted: string }> = {
   tinted: {

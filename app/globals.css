@@ -118,6 +118,15 @@
   --secondary: #ffffff;
   --secondary-foreground: #171717;
 
+  /* §7.4's `soft` face — the three stops the `raised` secondary is made of.
+     Tokens rather than literals in control-style.tsx so a template can warm
+     them; these are the exact values that file used to hardcode, so the
+     default face is unchanged. Dark mode needs no pair: there the face is
+     built from additive white overlays, which sit on any ground. */
+  --soft-top: #ffffff;
+  --soft-mid: #fbfbfc;
+  --soft-bot: #f4f4f5;
+
   /* Muted = the ~3.5% neutral hover shift (§2.2) */
   --muted: #f5f5f5;
   --muted-foreground: #737373;
@@ -257,6 +266,343 @@
 }
 
 /* ============================================================
+   Templates — a whole palette in one choice
+
+   The accent picker below moves one hue. A template moves the
+   *neutrals*: page, surfaces, text ramp, borders and the sidebar.
+   Selecting one also writes `data-accent` and `data-primary` (see
+   components/layout/brand.tsx), so a template is a preset of controls
+   that already exist rather than a second styling system.
+
+   ### What a template is allowed to touch
+
+   Surfaces, the text ramp, borders, the sidebar, the neutral hover
+   tints, the `raised` face's three stops (`--soft-*`) and the overlay.
+   That is the whole list.
+
+   It never sets `--primary`, the accent tokens, `--pb-*` or
+   `--ctl-face-*` — those belong to `data-primary` / `data-accent`,
+   whose blocks share this specificity and would fight it. It never
+   sets status or chart colours (§2.2 — a warm page must not turn a
+   danger badge warm), and never radius or spacing, so no template can
+   move a control by a pixel.
+
+   ### Specificity
+
+   `:root[data-template]` and `.dark[data-template]` both score (0,2,0)
+   on the same <html> element, so — exactly as in the accent blocks
+   below — the dark half must follow its light half in source order to
+   win. Both outrank the bare `:root` / `.dark` ramps above.
+
+   `graphite` is the default and deliberately has no block: selecting it
+   means falling back to what this file already declares.
+   ============================================================ */
+
+/* ---- Clay — warm paper, after claude.ai. See
+   docs/CLAUDE-CHAT-DESIGN-SYSTEM.md §2 for where the values come from.
+   Light mode is cream with white raised surfaces; the sidebar is one
+   step warmer than the page (§5.3 Variant B) rather than matching it. */
+:root[data-template="clay"] {
+  --background: #faf9f5;
+  --background-subtle: #fdfcfa;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-sunken: #f5f3ec;
+  --foreground: #141413;
+
+  --text: #141413;
+  --text-secondary: #5c5b57;
+  --text-muted: #8a8880;
+  --text-placeholder: #a8a69e;
+
+  --card: #ffffff;
+  --card-foreground: #141413;
+  --popover: #ffffff;
+  --popover-foreground: #141413;
+
+  --secondary: #ffffff;
+  --secondary-foreground: #141413;
+
+  /* The `raised` face, warmed — otherwise a cool-white chip sits on a cream
+     page and reads as a leftover from another palette. */
+  --soft-top: #ffffff;
+  --soft-mid: #fdfcfa;
+  --soft-bot: #f5f3ec;
+
+  /* The neutral hover wash, warmed to match the ground (§2.2). */
+  --muted: #f0eee6;
+  --muted-foreground: #8a8880;
+  --accent: #f0eee6;
+  --accent-foreground: #141413;
+
+  --border: #e8e5db;
+  --border-strong: #d6d3c9;
+  --border-subtle: #f0ede4;
+  --input: #e8e5db;
+
+  --sidebar: #f0eee6;
+  --sidebar-foreground: #5c5b57;
+  --sidebar-accent: rgba(20, 20, 19, 0.05);
+  --sidebar-accent-foreground: #141413;
+  --sidebar-border: #e3e0d5;
+
+  --overlay: rgba(30, 28, 24, 0.32);
+}
+
+/* Warm charcoal, not blue-black — and no pure black anywhere. Surfaces
+   still step *lighter* as they elevate (§16.2) and the sidebar stays the
+   darkest of them (§5.3). */
+.dark[data-template="clay"] {
+  --background: #262624;
+  --background-subtle: #2b2b28;
+  --surface: #30302e;
+  --surface-elevated: #3a3a37;
+  --surface-sunken: #222220;
+  --foreground: #f5f4ee;
+
+  --text: #f5f4ee;
+  --text-secondary: #c2c0b6;
+  --text-muted: #8f8d86;
+  --text-placeholder: #6f6d66;
+
+  --card: #30302e;
+  --card-foreground: #f5f4ee;
+  --popover: #3a3a37;
+  --popover-foreground: #f5f4ee;
+
+  --secondary: rgba(255, 255, 255, 0.05);
+  --secondary-foreground: #f5f4ee;
+
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: #8f8d86;
+  --accent: rgba(255, 255, 255, 0.05);
+  --accent-foreground: #f5f4ee;
+
+  --border: #3d3c39;
+  --border-strong: #4f4e4a;
+  --border-subtle: #333230;
+  --input: #444340;
+
+  --sidebar: #1f1e1d;
+  --sidebar-foreground: #c2c0b6;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #f5f4ee;
+  --sidebar-border: #333230;
+
+  --overlay: rgba(0, 0, 0, 0.6);
+}
+
+/* ---- Ink — high contrast, for reading tables all day.
+
+   The other two templates separate surfaces with a hairline at ~7%
+   ink. This one does the opposite on purpose: `--border` is slate-300,
+   roughly three times the contrast, and the page is tinted enough that
+   a white card reads as raised without a shadow. Structure comes from
+   outlines rather than from fills.
+
+   ### The rail is the light one
+
+   §5.3's variants put the sidebar at the page's own value (Graphite) or
+   one step darker (Clay). Ink inverts that — a *white* rail against a
+   tinted page — and carries the same relationship into dark mode, where
+   the rail sits one step lighter than the ground.
+
+   That is a deliberate departure from §5.3's "the sidebar is the
+   darkest surface" in dark mode. Consistency inside the template wins
+   here: the rail is the raised element in both themes, and flipping
+   that relationship between light and dark would read as two different
+   designs rather than one. */
+:root[data-template="ink"] {
+  --background: #eef2f6;
+  --background-subtle: #f4f7fa;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-sunken: #e2e8f0;
+  --foreground: #0f172a;
+
+  --text: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-placeholder: #94a3b8;
+
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  --secondary: #ffffff;
+  --secondary-foreground: #0f172a;
+
+  /* The `soft` face bottoms out at the *page* rather than at
+     `--surface-sunken` (§5's rule), because Ink's sunken is a full
+     slate-200 — deep enough that a control made of it would read as
+     pressed at rest. The page value keeps the same white→ground step
+     the other templates have. */
+  --soft-top: #ffffff;
+  --soft-mid: #f8fafc;
+  --soft-bot: #eef2f6;
+
+  /* Hover is a 4% shift off white, not the sunken value, for the same
+     reason. */
+  --muted: #eef2f6;
+  --muted-foreground: #64748b;
+  --accent: #eef2f6;
+  --accent-foreground: #0f172a;
+
+  /* The point of the template — slate-300 where the others use ~7%. */
+  --border: #cbd5e1;
+  --border-strong: #94a3b8;
+  --border-subtle: #dfe6ee;
+  --input: #cbd5e1;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #334155;
+  --sidebar-accent: rgba(15, 23, 42, 0.06);
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #cbd5e1;
+
+  --overlay: rgba(15, 23, 42, 0.4);
+}
+
+.dark[data-template="ink"] {
+  --background: #0d1117;
+  --background-subtle: #121a24;
+  --surface: #161d27;
+  --surface-elevated: #1c2530;
+  --surface-sunken: #0a0f16;
+  --foreground: #e6edf3;
+
+  --text: #e6edf3;
+  --text-secondary: #b4c0cc;
+  --text-muted: #8b98a5;
+  --text-placeholder: #6b7681;
+
+  --card: #161d27;
+  --card-foreground: #e6edf3;
+  --popover: #1c2530;
+  --popover-foreground: #e6edf3;
+
+  --secondary: rgba(255, 255, 255, 0.05);
+  --secondary-foreground: #e6edf3;
+
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: #8b98a5;
+  --accent: rgba(255, 255, 255, 0.05);
+  --accent-foreground: #e6edf3;
+
+  --border: #30363d;
+  --border-strong: #4a525c;
+  --border-subtle: #232a33;
+  --input: #3d444d;
+
+  /* Lighter than the page — see the note above. */
+  --sidebar: #161d27;
+  --sidebar-foreground: #b4c0cc;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #e6edf3;
+  --sidebar-border: #262d36;
+
+  --overlay: rgba(1, 4, 9, 0.7);
+}
+
+/* ---- Ledger — after the Stripe dashboard.
+
+   The neutrals carry a blue cast rather than being true greys: the page
+   is `#F6F8FA` and the ink is `#1A1F36`, a navy-black. That tint is the
+   whole trick — it is what makes a finance dashboard read as money
+   rather than as a generic admin panel, and it costs nothing but a few
+   degrees of hue on values that were going to be grey anyway.
+
+   Borders sit between Graphite's hairline and Ink's outline. The rail is
+   white against the tinted page (§5.3 Variant C), and dark mode keeps
+   that relationship — see the note on Ink above, which does the same.
+
+   Strategy B, because the indigo button *is* the reference. */
+:root[data-template="ledger"] {
+  --background: #f6f8fa;
+  --background-subtle: #fafbfc;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-sunken: #eef2f7;
+  --foreground: #1a1f36;
+
+  --text: #1a1f36;
+  --text-secondary: #4f566b;
+  --text-muted: #8792a2;
+  --text-placeholder: #a3adbd;
+
+  --card: #ffffff;
+  --card-foreground: #1a1f36;
+  --popover: #ffffff;
+  --popover-foreground: #1a1f36;
+
+  --secondary: #ffffff;
+  --secondary-foreground: #1a1f36;
+
+  --soft-top: #ffffff;
+  --soft-mid: #fafbfc;
+  --soft-bot: #f0f3f7;
+
+  --muted: #f6f8fa;
+  --muted-foreground: #8792a2;
+  --accent: #f6f8fa;
+  --accent-foreground: #1a1f36;
+
+  --border: #e3e8ee;
+  --border-strong: #cdd5df;
+  --border-subtle: #eef1f5;
+  --input: #e3e8ee;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #4f566b;
+  --sidebar-accent: rgba(26, 31, 54, 0.05);
+  --sidebar-accent-foreground: #1a1f36;
+  --sidebar-border: #e3e8ee;
+
+  --overlay: rgba(26, 31, 54, 0.4);
+}
+
+.dark[data-template="ledger"] {
+  --background: #0f1116;
+  --background-subtle: #161922;
+  --surface: #1c1f2a;
+  --surface-elevated: #252936;
+  --surface-sunken: #0b0d11;
+  --foreground: #e6e9f0;
+
+  --text: #e6e9f0;
+  --text-secondary: #a9b1c6;
+  --text-muted: #7c869c;
+  --text-placeholder: #626b80;
+
+  --card: #1c1f2a;
+  --card-foreground: #e6e9f0;
+  --popover: #252936;
+  --popover-foreground: #e6e9f0;
+
+  --secondary: rgba(255, 255, 255, 0.05);
+  --secondary-foreground: #e6e9f0;
+
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: #7c869c;
+  --accent: rgba(255, 255, 255, 0.05);
+  --accent-foreground: #e6e9f0;
+
+  --border: #2a2f3d;
+  --border-strong: #3c4353;
+  --border-subtle: #21252f;
+  --input: #353b4a;
+
+  --sidebar: #161922;
+  --sidebar-foreground: #a9b1c6;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #e6e9f0;
+  --sidebar-border: #262b36;
+
+  --overlay: rgba(5, 7, 11, 0.7);
+}
+
+/* ============================================================
    Brand colour — DESIGN.md §2.1
 
    §2.1 documents two primary strategies (neutral-black actions with a
@@ -277,6 +623,29 @@
    score (0,2,0) on the same <html> element, so the dark block must follow
    its light counterpart in source order to win.
    ============================================================ */
+
+/* ---- Indigo — Stripe's #635BFF, kept exactly.
+
+   `--accent-strong` steps down two stops rather than one. The hue itself
+   clears 4.5:1 against white (4.7), so a button would have been fine —
+   but the same property is the label on `--accent-soft`, and there
+   #635BFF lands at 4.07. #4F46D9 clears both (6.4 and 5.7). ---- */
+:root[data-accent="indigo"] {
+  --accent-violet: #635bff;
+  --accent-soft: #eeedff;
+  --accent-border: #dcd9ff;
+  --accent-strong: #4f46d9;
+  --ring: rgba(99, 91, 255, 0.35);
+  --sidebar-ring: rgba(99, 91, 255, 0.35);
+}
+.dark[data-accent="indigo"] {
+  --accent-violet: #a5a0ff;
+  --accent-soft: rgba(165, 160, 255, 0.14);
+  --accent-border: rgba(165, 160, 255, 0.32);
+  --accent-strong: #a5a0ff;
+  --ring: rgba(165, 160, 255, 0.45);
+  --sidebar-ring: rgba(165, 160, 255, 0.45);
+}
 
 /* ---- Blue — §2.1 Strategy B alternative, §19.1 `info` ---- */
 :root[data-accent="blue"] {
@@ -527,6 +896,12 @@
   --pb-mid: #6524cb;
   --pb-bot: #5d21bc;
   --pb-rim: #381471;
+}
+:root[data-primary="accent"][data-accent="indigo"] {
+  --pb-top: #4f46d9;
+  --pb-mid: #4a41cb;
+  --pb-bot: #453cbd;
+  --pb-rim: #29237a;
 }
 :root[data-primary="accent"][data-accent="blue"] {
   --pb-top: #1d4ed8;
