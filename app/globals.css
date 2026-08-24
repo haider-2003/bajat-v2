@@ -128,6 +128,9 @@
   --accent-violet: #7c3aed;
   --accent-soft: #f3eeff;
   --accent-border: #e3d8ff;
+  /* The hue darkened enough to carry white text at AA — see the
+     "Primary strategy" block below. §2.1's `--color-accent-hover`. */
+  --accent-strong: #6d28d9;
 
   /* Borders — hairlines at ~7% black (§1.6) */
   --border: #eaeaea;
@@ -212,6 +215,8 @@
   --accent-violet: #a78bfa;
   --accent-soft: rgba(167, 139, 250, 0.14);
   --accent-border: rgba(167, 139, 250, 0.32);
+  /* Dark mode puts near-black text on the hue, so no darkening is needed. */
+  --accent-strong: #a78bfa;
 
   /* Borders LIGHTEN the ground (§16.1) */
   --border: #262626;
@@ -249,6 +254,325 @@
   --sidebar-ring: rgba(167, 139, 250, 0.45);
 
   --overlay: rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================================
+   Brand colour — DESIGN.md §2.1
+
+   §2.1 documents two primary strategies (neutral-black actions with a
+   reserved accent hue, or hue-coloured actions) and a palette of hues.
+   Both are user choices here, applied as `data-` attributes on <html> by
+   components/layout/brand.tsx.
+
+   Only the *accent slot* moves. Status, chart and surface tokens are
+   untouched, so a green accent never turns a danger badge green.
+
+   `data-accent="violet"` and `data-primary="neutral"` have no block: they
+   are the :root defaults declared above, so selecting them means falling
+   back rather than overriding. Every other hue is a light/dark **pair**
+   (§2.2/§2.3) — a tone dark enough for white text in light mode is
+   unreadable on #0A0A0A.
+
+   Specificity note: `:root[data-accent]` and `.dark[data-accent]` both
+   score (0,2,0) on the same <html> element, so the dark block must follow
+   its light counterpart in source order to win.
+   ============================================================ */
+
+/* ---- Blue — §2.1 Strategy B alternative, §19.1 `info` ---- */
+:root[data-accent="blue"] {
+  --accent-violet: #2563eb;
+  --accent-soft: #eaf1fe;
+  --accent-border: #cfe0fd;
+  --ring: rgba(37, 99, 235, 0.35);
+  --sidebar-ring: rgba(37, 99, 235, 0.35);
+  --accent-strong: #1d4ed8;
+}
+.dark[data-accent="blue"] {
+  --accent-violet: #60a5fa;
+  --accent-soft: rgba(96, 165, 250, 0.14);
+  --accent-border: rgba(96, 165, 250, 0.32);
+  --ring: rgba(96, 165, 250, 0.45);
+  --sidebar-ring: rgba(96, 165, 250, 0.45);
+  --accent-strong: #60a5fa;
+}
+
+/* ---- Cyan — chart-6 (#06B6D4) taken to the same two tiers ---- */
+:root[data-accent="cyan"] {
+  --accent-violet: #0891b2;
+  --accent-soft: #e6f6fa;
+  --accent-border: #c2e8f1;
+  --ring: rgba(8, 145, 178, 0.35);
+  --sidebar-ring: rgba(8, 145, 178, 0.35);
+  --accent-strong: #0e7490;
+}
+.dark[data-accent="cyan"] {
+  --accent-violet: #22d3ee;
+  --accent-soft: rgba(34, 211, 238, 0.14);
+  --accent-border: rgba(34, 211, 238, 0.32);
+  --ring: rgba(34, 211, 238, 0.45);
+  --sidebar-ring: rgba(34, 211, 238, 0.45);
+  --accent-strong: #22d3ee;
+}
+
+/* ---- Green — §19.1 `success` pair ---- */
+:root[data-accent="green"] {
+  --accent-violet: #16a34a;
+  --accent-soft: #e8f8ee;
+  --accent-border: #c6efd6;
+  --ring: rgba(22, 163, 74, 0.35);
+  --sidebar-ring: rgba(22, 163, 74, 0.35);
+  --accent-strong: #15803d;
+}
+.dark[data-accent="green"] {
+  --accent-violet: #4ade80;
+  --accent-soft: rgba(74, 222, 128, 0.14);
+  --accent-border: rgba(74, 222, 128, 0.32);
+  --ring: rgba(74, 222, 128, 0.45);
+  --sidebar-ring: rgba(74, 222, 128, 0.45);
+  --accent-strong: #4ade80;
+}
+
+/* ---- Orange — §19.1 `warning` pair ---- */
+:root[data-accent="orange"] {
+  --accent-violet: #ea580c;
+  --accent-soft: #fff1e7;
+  --accent-border: #ffd9bf;
+  --ring: rgba(234, 88, 12, 0.35);
+  --sidebar-ring: rgba(234, 88, 12, 0.35);
+  --accent-strong: #c2410c;
+}
+.dark[data-accent="orange"] {
+  --accent-violet: #fb923c;
+  --accent-soft: rgba(251, 146, 60, 0.14);
+  --accent-border: rgba(251, 146, 60, 0.32);
+  --ring: rgba(251, 146, 60, 0.45);
+  --sidebar-ring: rgba(251, 146, 60, 0.45);
+  --accent-strong: #fb923c;
+}
+
+/* ---- Clay — Claude's #D97757, kept exactly ---- */
+:root[data-accent="clay"] {
+  --accent-violet: #d97757;
+  --accent-soft: #faefeb;
+  --accent-border: #f5dcd3;
+  --accent-strong: #b54c29;
+  --ring: rgba(217, 119, 87, 0.35);
+  --sidebar-ring: rgba(217, 119, 87, 0.35);
+}
+.dark[data-accent="clay"] {
+  --accent-violet: #eaa48e;
+  --accent-soft: rgba(234, 164, 142, 0.14);
+  --accent-border: rgba(234, 164, 142, 0.32);
+  --accent-strong: #eaa48e;
+  --ring: rgba(234, 164, 142, 0.45);
+  --sidebar-ring: rgba(234, 164, 142, 0.45);
+}
+
+/* ---- Pink — n8n's #EA4B71, kept exactly ---- */
+:root[data-accent="pink"] {
+  --accent-violet: #ea4b71;
+  --accent-soft: #fdedf1;
+  --accent-border: #fad0da;
+  --accent-strong: #d51946;
+  --ring: rgba(234, 75, 113, 0.35);
+  --sidebar-ring: rgba(234, 75, 113, 0.35);
+}
+.dark[data-accent="pink"] {
+  --accent-violet: #f588a2;
+  --accent-soft: rgba(245, 136, 162, 0.14);
+  --accent-border: rgba(245, 136, 162, 0.32);
+  --accent-strong: #f588a2;
+  --ring: rgba(245, 136, 162, 0.45);
+  --sidebar-ring: rgba(245, 136, 162, 0.45);
+}
+
+/* ============================================================
+   Primary strategy — DESIGN.md §2.1 Strategy B
+
+   Solid actions take the accent hue instead of neutral black/white.
+   `var(--accent-violet)` is read as a computed value, so it already
+   reflects whichever accent block above won the cascade.
+
+   It reads `--accent-strong`, not `--accent-violet`. A hue tuned for
+   1px borders and focus rings only has to clear 3:1 as a non-text UI
+   element; the moment it becomes a button *behind a label* it owes the
+   label 4.5:1, and cyan/green/orange at their accent tone land near 3.4.
+   `--accent-strong` is each hue darkened until white text passes.
+
+   The foreground flips with the theme because the hue does: light mode
+   uses a darkened tone that carries white text, dark mode a 400-level
+   tone that needs near-black (§19.1 `--color-accent-foreground`).
+   ============================================================ */
+
+:root[data-primary="accent"] {
+  --primary: var(--accent-strong);
+  --primary-foreground: #ffffff;
+  --sidebar-primary: var(--accent-strong);
+  --sidebar-primary-foreground: #ffffff;
+}
+.dark[data-primary="accent"] {
+  --primary: var(--accent-strong);
+  --primary-foreground: #0a0a0a;
+  --sidebar-primary: var(--accent-strong);
+  --sidebar-primary-foreground: #0a0a0a;
+}
+
+/* ============================================================
+   Flat control face — DESIGN.md §5.4 / §14.2
+
+   The `flat` control style has no gradient and no shadow to carry a hue,
+   so it needs its colour in the fill itself. These four properties are
+   what components/ui/control-style.tsx paints a flat secondary control
+   with — the toolbar buttons, the date picker, the active nav chip.
+
+   Neutral keeps §5.4's white chip. `accent` switches to the tinted
+   treatment the doc already defines for a chosen thing: §2.2's
+   `--color-selected: #F5F3FF (accent-tinted)`, and §14.2's accent badge
+   (hue / soft fill / soft border). It stays flat — a tint is a fill, not
+   an elevation — so `flat` gains colour without becoming `ink`.
+
+   The label uses `--accent-strong`, not the accent tone: on a pale tint
+   the accent itself sits around 3.5:1, while the darkened tone clears
+   4.5:1 on every hue.
+   ============================================================ */
+
+:root {
+  --ctl-face-bg: var(--surface);
+  --ctl-face-fg: var(--text);
+  --ctl-face-rim: var(--border);
+  /* The muted half of a two-tone label (§6.6). Derived from the two above
+     rather than restated per block, so it stays correct for every
+     neutral/accent × light/dark combination on its own. In the neutral
+     light case it resolves to #545454 — within a step of
+     `--text-secondary`, which is what it replaced. */
+  --ctl-face-muted: color-mix(in srgb, var(--ctl-face-fg) 72%, var(--ctl-face-bg));
+}
+.dark {
+  /* Additive white rather than a lighter grey (§16.4); the fill alone
+     carries the edge, so there is no rim to draw. */
+  --ctl-face-bg: rgba(255, 255, 255, 0.08);
+  --ctl-face-fg: var(--text);
+  --ctl-face-rim: transparent;
+}
+
+:root[data-primary="accent"] {
+  --ctl-face-bg: var(--accent-soft);
+  --ctl-face-fg: var(--accent-strong);
+  --ctl-face-rim: var(--accent-border);
+}
+.dark[data-primary="accent"] {
+  /* Dark `--accent-soft` is already a low-alpha overlay (§2.3), and the
+     400-level hue reads as the label against it. */
+  --ctl-face-bg: var(--accent-soft);
+  --ctl-face-fg: var(--accent-violet);
+  --ctl-face-rim: var(--accent-border);
+}
+
+/* ============================================================
+   Solid-control tone — DESIGN.md §7.4
+
+   §7.4's rule, verbatim: "Colour lives in **four custom properties**,
+   never in the shadow stack. A tone restates only these four values, so
+   every tone inherits an identical highlight, rim, lift, and press feel."
+
+   That rule is the whole reason a control style can survive a colour
+   change. components/ui/control-style.tsx builds its raised/ink faces out
+   of these and nothing else, so picking a new accent *recolours* every
+   solid control instead of dropping it out of the treatment.
+
+   ### Why these are darker than the accent
+
+   §7.4 says "label is #F7F7F8 on every tone", and a white label is what a
+   solid button gets here. That is a constraint on the tone, not on the
+   label: white needs 4.5:1, so every stop of the gradient has to be at
+   least as dark as `--accent-strong`.
+
+   So a tone anchors its **lightest** stop at `--accent-strong` and steps
+   down from there — top = strong, mid = 93%, bot = 86% of its lightness,
+   rim at 60% of the bottom's, hue held constant per §7.4. White then
+   clears AA on all three stops, not just the one under the glyphs
+   (4.68–6.64 at the worst stop of each tone).
+
+   The consequence is that a tone reads darker than its accent. The accent
+   hue itself is never touched — Claude's #D97757 and n8n's #EA4B71 are
+   exact wherever the hue appears as a ring, a tint or a selected state.
+   It is only the *solid button face* that darkens, because that is the
+   only place a white label has to sit on top of it.
+
+   §7.4's own tabulated rows are not usable here: its blue, emerald, amber
+   and rose put #F7F7F8 on mid stops measuring 4.28, 3.04, 2.43 and 3.79.
+
+   app/login/premium-button.tsx sets these locally through its own `tone`
+   variant, which shadows these values on that button alone. The login
+   route keeps its explicit ink regardless of app settings.
+   ============================================================ */
+
+:root {
+  --pb-top: #2a2a2f;
+  --pb-mid: #1a1a1d;
+  --pb-bot: #131316;
+  --pb-rim: #0c0c0e;
+  --pb-label: #f7f7f8;
+}
+.dark {
+  --pb-top: #2e2e34;
+  --pb-mid: #202024;
+  --pb-bot: #1a1a1e;
+  /* On a near-black page the rim has to lighten, not darken (§16.1). */
+  --pb-rim: rgba(255, 255, 255, 0.1);
+}
+
+:root[data-primary="accent"][data-accent="violet"] {
+  --pb-top: #6d28d9;
+  --pb-mid: #6524cb;
+  --pb-bot: #5d21bc;
+  --pb-rim: #381471;
+}
+:root[data-primary="accent"][data-accent="blue"] {
+  --pb-top: #1d4ed8;
+  --pb-mid: #1b49c9;
+  --pb-bot: #1943ba;
+  --pb-rim: #0f2870;
+}
+:root[data-primary="accent"][data-accent="cyan"] {
+  --pb-top: #0e7490;
+  --pb-mid: #0d6c86;
+  --pb-bot: #0c647c;
+  --pb-rim: #073c4a;
+}
+:root[data-primary="accent"][data-accent="green"] {
+  --pb-top: #15803d;
+  --pb-mid: #147739;
+  --pb-bot: #126e34;
+  --pb-rim: #0b421f;
+}
+:root[data-primary="accent"][data-accent="orange"] {
+  --pb-top: #c2410c;
+  --pb-mid: #b43c0b;
+  --pb-bot: #a7380a;
+  --pb-rim: #642206;
+}
+  /* Claude's hue, kept exactly — the mid stop is the accent itself. */
+:root[data-primary="accent"][data-accent="clay"] {
+  --pb-top: #b54c29;
+  --pb-mid: #a84726;
+  --pb-bot: #9c4123;
+  --pb-rim: #5e2715;
+}
+  /* n8n's hue, kept exactly — the mid stop is the accent itself. */
+:root[data-primary="accent"][data-accent="pink"] {
+  --pb-top: #d51946;
+  --pb-mid: #c61741;
+  --pb-bot: #b7153c;
+  --pb-rim: #6e0d24;
+}
+
+/* A tone keeps its hue in dark mode (§7.4: the premium surface stays dark
+   in both themes), but its rim still has to lighten instead of darken.
+   Three attribute selectors so this matches the tone rules above on
+   specificity and wins on source order. */
+.dark[data-primary="accent"][data-accent] {
+  --pb-rim: rgba(255, 255, 255, 0.12);
 }
 
 /* ============================================================
@@ -421,6 +745,40 @@ html[data-intro="playing"] [data-await-intro] {
     -webkit-text-fill-color: var(--text);
     caret-color: var(--text);
     transition: background-color 5000s ease-in-out 0s;
+  }
+
+  /**
+   * Pointer cursors.
+   *
+   * Tailwind v4's preflight sets `cursor: default` on `button`, reversing
+   * v3. Every interactive control in this app is affected, so the fix
+   * belongs here once rather than as a `cursor-pointer` on each of them.
+   *
+   * Keyed on ARIA roles as well as tags because Base UI renders its
+   * radios, tabs and menu items as `<span>`/`<div>` with a role — a
+   * segmented control and a swatch are buttons in everything but tag name.
+   *
+   * `not-allowed` on the disabled side is DESIGN.md §7.3's stated rule.
+   */
+  button:not(:disabled),
+  summary,
+  label[for],
+  a[href],
+  [role="button"],
+  [role="radio"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"],
+  [role="option"],
+  [role="switch"] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"],
+  [data-disabled] {
+    cursor: not-allowed;
   }
 
   /* §18.0 rule 10 — collapse motion to instant state changes. */

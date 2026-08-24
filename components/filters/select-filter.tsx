@@ -2,7 +2,6 @@
 
 import * as React from "react"
 
-import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+
+import { FilterButton } from "./filter-button"
 
 export type SelectOption = {
   /** The value sent to the server. */
@@ -59,17 +60,7 @@ export function SelectFilter({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="outline" size="default">
-            <Icon className="size-4" strokeWidth={1.5} />
-            <span className="hidden sm:inline">
-              <span className="text-text-secondary">{label}</span>
-              {selected && (
-                <span className="ml-1 max-w-[140px] truncate align-bottom text-text">
-                  {selected.label}
-                </span>
-              )}
-            </span>
-          </Button>
+          <FilterButton icon={Icon} label={label} value={selected?.label} />
         }
       />
       <DropdownMenuContent align="end" className="max-h-72 w-56 overflow-y-auto">

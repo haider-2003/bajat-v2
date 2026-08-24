@@ -4,6 +4,7 @@ import * as React from "react"
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react"
 
+import { useControlSurface } from "@/components/ui/control-style"
 import { cn } from "@/lib/utils"
 
 /**
@@ -104,6 +105,8 @@ export function DatePicker({
   className?: string
 }) {
   const [open, setOpen] = React.useState(false)
+  // The same face the filter buttons and the active nav chip wear.
+  const surface = useControlSurface()
 
   const selected = React.useMemo(() => parseISO(value), [value])
   const minDate = React.useMemo(() => (min ? parseISO(min) : null), [min])
@@ -140,19 +143,24 @@ export function DatePicker({
     <PopoverPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Trigger
         className={cn(
-          "inline-flex h-8 items-center gap-1.5 rounded-md bg-surface-sunken px-2.5 text-[13px]",
-          "transition-colors hover:bg-[rgba(0,0,0,0.05)] dark:hover:bg-[rgba(255,255,255,0.06)]",
+          "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5",
+          "text-sm font-medium whitespace-nowrap",
+          "transition-[box-shadow,background-color,color] duration-120",
           "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "active:translate-y-px",
+          surface.face,
           className
         )}
         aria-label={label ? `${label} date` : "Pick a date"}
       >
         <CalendarDays
-          className="size-4 shrink-0 text-text-placeholder"
+          className={cn("size-4 shrink-0", surface.muted)}
           strokeWidth={1.5}
         />
-        {label && <span className="text-text-secondary">{label}</span>}
-        <span className={selected ? "text-text" : "text-text-placeholder"}>
+        {label && <span className={surface.muted}>{label}</span>}
+        {/* Unset reads as muted, a chosen date at full contrast — both taken
+            from the surface, so the ink face stays legible. */}
+        <span className={selected ? undefined : surface.muted}>
           {selected ? triggerFmt.format(selected) : placeholder}
         </span>
         {/* Clearing is the usual follow-up, so it sits on the trigger rather
@@ -173,7 +181,12 @@ export function DatePicker({
               e.stopPropagation()
               onChange("")
             }}
-            className="ml-0.5 inline-flex size-4 items-center justify-center rounded-xs text-text-placeholder transition-colors hover:text-text outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn(
+              "ml-0.5 inline-flex size-4 items-center justify-center rounded-xs",
+              "transition-opacity hover:opacity-100 opacity-60",
+              "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              surface.muted
+            )}
           >
             <X className="size-3" strokeWidth={2} />
           </span>

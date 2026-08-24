@@ -7,14 +7,11 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   ChevronDown,
   ChevronsUpDown,
-  FlaskConical,
   Menu,
-  Moon,
   MoreHorizontal,
   PanelLeft,
   Plus,
   Search,
-  SunMedium,
   X,
 } from "lucide-react"
 
@@ -29,7 +26,11 @@ import {
   type NavItem,
   type NavSection,
 } from "./sidebar-nav-data"
-import { useTheme } from "./theme-provider"
+import {
+  useControlSurface,
+  type ControlSurface,
+} from "@/components/ui/control-style"
+
 import { useShell } from "./shell-context"
 
 /**
@@ -47,58 +48,19 @@ import { useShell } from "./shell-context"
 const COUNT_CAP = 99
 
 /* ------------------------------------------------------------------ *
- * TEMPORARY — active nav chip A/B
- *
- * Three candidate treatments for the current-page chip, switchable at
- * runtime from the footer control so they can be compared in place.
- * Every rim is an inset box-shadow rather than a border, so switching
- * never shifts the 34px row height or nudges the label by a pixel.
- *
- * Delete this map, the `chipStyle` prop threaded through NavLeaf/NavGroup,
- * and the <ChipStyleToggle /> in the footer once a winner is picked.
- * ------------------------------------------------------------------ */
-
-type NavChipStyle = "flat" | "raised" | "ink"
-
-const ACTIVE_CHIP: Record<NavChipStyle, { row: string; icon: string }> = {
-  // Today's shipped state — DESIGN.md §5.4.
-  flat: {
-    row: "bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.05)] ring-1 ring-border dark:bg-sidebar-accent dark:shadow-none dark:ring-0",
-    icon: "text-text",
-  },
-  // §7.4's recipe at nav scale, kept light: gradient face, hairline rim,
-  // top highlight, contact shadow + short lift. Same depth, no new colour.
-  raised: {
-    row: [
-      "bg-[linear-gradient(180deg,#ffffff_0%,#fbfbfc_55%,#f4f4f5_100%)] text-text",
-      "shadow-[inset_0_0_0_1px_var(--border),inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(12,12,16,0.07),0_3px_8px_-3px_rgba(12,12,16,0.10)]",
-      "dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.10)_0%,rgba(255,255,255,0.055)_100%)]",
-      "dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08),inset_0_1px_0_rgba(255,255,255,0.10)]",
-    ].join(" "),
-    icon: "text-text",
-  },
-  // The full §7.4 ink surface, dropped straight into the rail.
-  ink: {
-    row: [
-      "bg-[linear-gradient(180deg,#2a2a2f_0%,#1a1a1d_52%,#131316_100%)] text-white",
-      "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05),inset_0_1px_0_rgba(255,255,255,0.16),0_1px_2px_rgba(12,12,16,0.32),0_4px_10px_-3px_rgba(12,12,16,0.26)]",
-      "dark:bg-[linear-gradient(180deg,#2e2e34_0%,#202024_52%,#1a1a1e_100%)]",
-      "dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10),inset_0_1px_0_rgba(255,255,255,0.10),0_1px_2px_rgba(0,0,0,0.5)]",
-    ].join(" "),
-    icon: "text-white",
-  },
-}
-
-/* ------------------------------------------------------------------ *
  * Count — plain right-aligned muted numeral, not a pill badge (§5.5)
  * ------------------------------------------------------------------ */
 
-function NavCount({ value, onDark }: { value: number; onDark?: boolean }) {
+function NavCount({ value, muted }: { value: number; muted?: string }) {
   return (
     <span
       className={cn(
         "ml-auto shrink-0 text-[11px] font-normal tabular-nums",
-        onDark ? "text-white/55" : "text-text-muted"
+        // An active chip hands down its own muted tone; a resting row has no
+        // face, so it falls back to the sidebar's. Previously this asked
+        // whether the style was `ink`, which stopped being the only dark face
+        // the moment flat gained a solid form.
+        muted ?? "text-text-muted"
       )}
     >
       {Math.min(value, COUNT_CAP)}
@@ -172,12 +134,12 @@ function NavLeaf({
   item,
   active,
   collapsed,
-  chipStyle = "flat",
+  chip,
 }: {
   item: NavItem
   active: boolean
   collapsed: boolean
-  chipStyle?: NavChipStyle
+  chip: ControlSurface
 }) {
   const Icon = item.icon
   const ref = React.useRef<HTMLAnchorElement>(null)
@@ -193,7 +155,7 @@ function NavLeaf({
         "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
         collapsed && "justify-center px-0",
         active
-          ? ACTIVE_CHIP[chipStyle].row
+          ? chip.face
           : "text-text-secondary hover:bg-[rgba(0,0,0,0.04)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.045)]"
       )}
     >
@@ -202,7 +164,7 @@ function NavLeaf({
           "size-4 shrink-0 transition-colors",
           // Icons sit one contrast step lighter than their label (§15.3).
           active
-            ? ACTIVE_CHIP[chipStyle].icon
+            ? "text-current"
             : "text-text-muted group-hover/item:text-text"
         )}
         strokeWidth={1.5}
@@ -213,7 +175,7 @@ function NavLeaf({
           {item.count !== undefined && (
             <NavCount
               value={item.count}
-              onDark={active && chipStyle === "ink"}
+              muted={active ? chip.muted : undefined}
             />
           )}
         </>
@@ -231,12 +193,12 @@ function NavGroup({
   item,
   pathname,
   collapsed,
-  chipStyle = "flat",
+  chip,
 }: {
   item: NavItem
   pathname: string
   collapsed: boolean
-  chipStyle?: NavChipStyle
+  chip: ControlSurface
 }) {
   const childActive = item.children?.some((c) => c.href === pathname) ?? false
   const Icon = item.icon
@@ -248,7 +210,7 @@ function NavGroup({
 
   if (collapsed) {
     return (
-      <NavLeaf item={item} active={childActive} collapsed chipStyle={chipStyle} />
+      <NavLeaf item={item} active={childActive} collapsed chip={chip} />
     )
   }
 
@@ -570,12 +532,13 @@ function SidebarBody({
   onToggleCollapse: () => void
 }) {
   const pathname = usePathname()
-  const { resolved, toggle } = useTheme()
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>(
     () => Object.fromEntries(navSections.map((s) => [s.label ?? "", true]))
   )
-  // TEMPORARY — see ACTIVE_CHIP above.
-  const [chipStyle, setChipStyle] = React.useState<NavChipStyle>("flat")
+  // TEMPORARY — the active-chip treatment, shared with the toolbar's filter
+  // buttons so both switch together. Chosen from Settings → Appearance.
+  // See components/ui/control-style.tsx.
+  const chip = useControlSurface()
 
   const toggleSection = (key: string) =>
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }))
@@ -587,7 +550,7 @@ function SidebarBody({
         item={item}
         pathname={pathname}
         collapsed={collapsed}
-        chipStyle={chipStyle}
+        chip={chip}
       />
     ) : (
       <NavLeaf
@@ -595,7 +558,7 @@ function SidebarBody({
         item={item}
         active={pathname === item.href}
         collapsed={collapsed}
-        chipStyle={chipStyle}
+        chip={chip}
       />
     )
 
@@ -673,102 +636,10 @@ function SidebarBody({
         <div className="flex flex-col gap-0.5">
           {footerNav.map(renderItem)}
 
-          {/* TEMPORARY — cycles the active-chip treatment. See ACTIVE_CHIP. */}
-          <ChipStyleToggle
-            value={chipStyle}
-            onChange={setChipStyle}
-            collapsed={collapsed}
-          />
-
-          {/* Appearance carries the theme toggle as a trailing glyph (§5.9) */}
-          <button
-            type="button"
-            onClick={toggle}
-            className={cn(
-              "group/item flex h-nav-item items-center gap-2.5 rounded-md px-2.5",
-              "text-sm font-medium text-text-secondary transition-colors duration-120",
-              "hover:bg-[rgba(0,0,0,0.04)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.045)]",
-              "outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              collapsed && "justify-center px-0"
-            )}
-            aria-label={`Switch to ${resolved === "dark" ? "light" : "dark"} mode`}
-            title={collapsed ? "Toggle theme" : undefined}
-          >
-            {resolved === "dark" ? (
-              <Moon
-                className="size-4 shrink-0 text-text-muted transition-colors group-hover/item:text-text"
-                strokeWidth={1.5}
-              />
-            ) : (
-              <SunMedium
-                className="size-4 shrink-0 text-text-muted transition-colors group-hover/item:text-text"
-                strokeWidth={1.5}
-              />
-            )}
-            {!collapsed && (
-              <>
-                <span className="truncate">Appearance</span>
-                <span className="ml-auto shrink-0 text-[11px] capitalize text-text-muted">
-                  {resolved}
-                </span>
-              </>
-            )}
-          </button>
-
           <ProfileRow collapsed={collapsed} />
         </div>
       </div>
     </div>
-  )
-}
-
-/* ------------------------------------------------------------------ *
- * TEMPORARY — active-chip switcher
- *
- * Sits in the footer next to Appearance and cycles flat → raised → ink so
- * the three treatments can be compared against the real nav, in both
- * themes, without a rebuild. Delete along with ACTIVE_CHIP.
- * ------------------------------------------------------------------ */
-
-const CHIP_ORDER: NavChipStyle[] = ["flat", "raised", "ink"]
-
-function ChipStyleToggle({
-  value,
-  onChange,
-  collapsed,
-}: {
-  value: NavChipStyle
-  onChange: (next: NavChipStyle) => void
-  collapsed: boolean
-}) {
-  const next = CHIP_ORDER[(CHIP_ORDER.indexOf(value) + 1) % CHIP_ORDER.length]
-
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(next)}
-      title={`Active chip: ${value} — click for ${next}`}
-      className={cn(
-        "group/item flex h-nav-item items-center gap-2.5 rounded-md px-2.5",
-        "text-sm font-medium text-text-secondary transition-colors duration-120",
-        "hover:bg-[rgba(0,0,0,0.04)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.045)]",
-        "outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        collapsed && "justify-center px-0"
-      )}
-    >
-      <FlaskConical
-        className="size-4 shrink-0 text-text-muted transition-colors group-hover/item:text-text"
-        strokeWidth={1.5}
-      />
-      {!collapsed && (
-        <>
-          <span className="truncate">Active chip</span>
-          <span className="ml-auto shrink-0 text-[11px] capitalize text-text-muted">
-            {value}
-          </span>
-        </>
-      )}
-    </button>
   )
 }
 

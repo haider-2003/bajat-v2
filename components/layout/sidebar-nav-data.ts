@@ -11,10 +11,10 @@ import {
   LayoutTemplate,
   Network,
   Printer,
+  Settings,
   ShieldBan,
   ShieldCheck,
   Truck,
-  UserCog,
   Users,
   Workflow,
   type LucideIcon,
@@ -146,5 +146,5 @@ export const navSections: NavSection[] = [
 
 /** Zone 5 — footer utility items above the profile row (§5.9). */
 export const footerNav: NavItem[] = [
-  { label: "Settings", href: "/settings", icon: UserCog },
+  { label: "Settings", href: "/settings", icon: Settings },
 ]

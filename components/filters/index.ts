@@ -6,6 +6,7 @@
  * docs/filtering-sorting-pagination.md.
  */
 export { TextFilter } from "./text-filter"
+export { FilterButton } from "./filter-button"
 export { FacetFilter, toggleKey, type FacetOption } from "./facet-filter"
 export { SelectFilter, type SelectOption } from "./select-filter"
 export { FilterChips, FilterChip, type ActiveFilter } from "./filter-chips"

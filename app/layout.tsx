@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider, themeInitScript } from "@/components/layout/theme-provider";
+import { brandInitScript } from "@/components/layout/brand";
 import { IntroSplash, introInitScript } from "@/components/layout/intro-splash";
 import { ReactQueryProvider } from "@/providers/react-query-provider";
 
@@ -47,6 +48,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Applies the stored theme before first paint so the page never
             flashes the wrong one. */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* Same, for the accent hue and primary-button strategy (§2.1).
+            No provider — the brand store reads straight from the attributes
+            this stamps on <html>. */}
+        <script dangerouslySetInnerHTML={{ __html: brandInitScript }} />
         {/* Paints the intro cover before first paint so the app never flashes
             underneath, and keeps SSR/client markup identical. */}
         <script dangerouslySetInnerHTML={{ __html: introInitScript }} />

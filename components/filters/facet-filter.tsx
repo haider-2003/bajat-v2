@@ -2,7 +2,6 @@
 
 import * as React from "react"
 
-import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -12,6 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+
+import { FilterButton } from "./filter-button"
 
 export type FacetOption = {
   /** The value sent to the server. */
@@ -45,16 +46,11 @@ export function FacetFilter({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="outline" size="default">
-            <Icon className="size-4" strokeWidth={1.5} />
-            {/* Two-tone label: muted attribute, full-contrast value (§6.6) */}
-            <span className="hidden sm:inline">
-              <span className="text-text-secondary">{label}</span>
-              {selected.length > 0 && (
-                <span className="ml-1 text-text">({selected.length})</span>
-              )}
-            </span>
-          </Button>
+          <FilterButton
+            icon={Icon}
+            label={label}
+            value={selected.length > 0 ? `(${selected.length})` : undefined}
+          />
         }
       />
       <DropdownMenuContent align="end" className="w-44">
