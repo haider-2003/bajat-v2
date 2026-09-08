@@ -4,6 +4,7 @@ import * as React from "react"
 
 import { BajatMark } from "@/components/brand/bajat-mark"
 import { IdCardStack } from "@/components/brand/id-card-stack"
+import { useLocale, useT } from "@/i18n/context"
 import { cn } from "@/lib/utils"
 
 /**
@@ -118,6 +119,8 @@ const introStore = {
 }
 
 export function IntroSplash() {
+  const t = useT()
+  const locale = useLocale()
   const playing = React.useSyncExternalStore(
     introStore.subscribe,
     introStore.get,
@@ -290,7 +293,7 @@ export function IntroSplash() {
         <div className="flex items-center gap-2.5 animate-[intro-rise_480ms_cubic-bezier(0.2,0.8,0.2,1)_both] [animation-delay:560ms]">
           <BajatMark className="size-7 text-text dark:text-white" />
           <span className="text-lg font-semibold tracking-[-0.01em] text-text dark:text-white">
-            Bajat
+            {t("app.name")}
           </span>
         </div>
 
@@ -298,24 +301,25 @@ export function IntroSplash() {
             panel already carries the longer positioning line, and repeating
             it here would say the same thing twice in six seconds.
 
-            Three things this line needs that the Latin one did not:
-              - `lang`/`dir`, so the text is shaped and ordered as Arabic
-              - `font-arabic`, since Geist has no Arabic glyphs
-              - NO letter-spacing. Tracking pulls Arabic's joined letterforms
-                apart and breaks the connections between them; the Latin
-                version's `tracking-[0.01em]` had to go, not be inherited. */}
+            This line used to be hardcoded Arabic in both languages, with
+            `lang`/`dir`/`font-arabic` set locally so it would shape correctly
+            inside an otherwise English document. Now that the whole document
+            has a language, all three come from the root: `html[lang="ar"]` in
+            globals.css supplies the face, `dir` supplies the order, and the
+            same rule strips the tracking that would otherwise pull Arabic's
+            joined letterforms apart. The one thing left to say here is that
+            Arabic wants a brighter tone — it sits at a smaller optical size
+            than Latin for the same pixel height. */}
         <span
-          lang="ar"
-          dir="rtl"
           className={cn(
-            "mt-3 font-arabic text-[15px] leading-relaxed",
-            // A step brighter than the Latin line was: Arabic sits at a
-            // smaller optical size for the same px, so it needs the contrast.
-            "text-text-secondary dark:text-white/70",
+            "mt-3 text-[15px] leading-relaxed",
+            locale === "ar"
+              ? "text-text-secondary dark:text-white/70"
+              : "tracking-[0.01em] text-text-muted dark:text-white/55",
             "animate-[intro-rise_480ms_cubic-bezier(0.2,0.8,0.2,1)_both] [animation-delay:700ms]"
           )}
         >
-          نظام الهوية الذكية
+          {t("app.tagline")}
         </span>
       </div>
 
@@ -323,7 +327,7 @@ export function IntroSplash() {
         type="button"
         onClick={dismiss}
         className={cn(
-          "absolute bottom-6 left-6 rounded-md px-3 py-1.5",
+          "absolute bottom-6 start-6 rounded-md px-3 py-1.5",
           "transition-opacity duration-200",
           leaving && "opacity-0",
           "text-xs font-medium text-text-muted transition-colors",
@@ -332,7 +336,7 @@ export function IntroSplash() {
           "outline-none focus-visible:ring-2 focus-visible:ring-ring"
         )}
       >
-        Skip
+        {t("common.skip")}
       </button>
     </div>
   )

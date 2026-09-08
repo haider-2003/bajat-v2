@@ -20,131 +20,137 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+import type { TranslationKey } from "@/i18n/translate"
+
 /**
  * Bajat dashboard navigation.
  *
  * Sections mirror the top-level structure in docs/dashboard-overview.md,
  * grouped into the sectioned-nav zones described in DESIGN.md §5.1.
  *
- * Presentation only — hrefs are placeholders and `count` values are sample
- * data. Permission gating (see the overview doc) is not wired up yet.
+ * Presentation only — hrefs are placeholders. Permission gating (see the
+ * overview doc) is not wired up yet.
+ *
+ * ### Keys, not words
+ *
+ * Items carry a `labelKey` into the dictionary rather than the label itself.
+ * This module is imported by the sidebar on both the server and the client, and
+ * a literal here could only ever be one language — the rail would stay English
+ * under `/ar` while every screen beside it turned over. `TranslationKey` makes
+ * a key that no longer exists a build error.
  */
 
 export type NavItem = {
-  label: string
+  labelKey: TranslationKey
   href: string
   icon: LucideIcon
-  /** Trailing muted numeral, capped at 99 per DESIGN.md §5.5. */
-  count?: number
   /** Nested children. Depth is capped at 2 levels (§5.7). */
   children?: NavChild[]
 }
 
 export type NavChild = {
-  label: string
+  labelKey: TranslationKey
   href: string
-  count?: number
 }
 
 export type NavSection = {
   /** Uppercase overline label; omit for the ungrouped primary zone (§5.6). */
-  label?: string
+  labelKey?: TranslationKey
   items: NavItem[]
 }
 
 /** Zone 3 — primary nav, sits above the divider (§5.1). */
 export const primaryNav: NavItem[] = [
-  { label: "Home", href: "/", icon: Home },
-  { label: "Members Requests", href: "/members-requests", icon: Inbox, count: 23 },
+  { labelKey: "nav.home", href: "/", icon: Home },
+  { labelKey: "nav.membersRequests", href: "/members-requests", icon: Inbox },
 ]
 
 /** Zone 4 — sectioned nav, scrollable (§5.1). */
 export const navSections: NavSection[] = [
   {
-    label: "ID Issuance",
+    labelKey: "nav.sections.idIssuance",
     items: [
       {
-        label: "Templates",
+        labelKey: "nav.templates",
         href: "/id-issuance/templates",
         icon: LayoutTemplate,
       },
       {
-        label: "Requests",
+        labelKey: "nav.requests",
         href: "/id-issuance/requests",
         icon: IdCard,
-        count: 48,
       },
-      { label: "ID Flow", href: "/id-issuance/flow", icon: Workflow },
+      { labelKey: "nav.idFlow", href: "/id-issuance/flow", icon: Workflow },
       {
-        label: "Export History",
+        labelKey: "nav.exportHistory",
         href: "/id-issuance/exports",
         icon: FileStack,
       },
     ],
   },
   {
-    label: "Operations",
+    labelKey: "nav.sections.operations",
     items: [
-      { label: "App Users", href: "/members", icon: Users, count: 99 },
-      { label: "Payments", href: "/payments", icon: CreditCard },
-      { label: "Printer", href: "/printer", icon: Printer, count: 12 },
-      { label: "Delivery", href: "/delivery", icon: Truck },
-      { label: "Nodes", href: "/nodes", icon: Network },
+      { labelKey: "nav.appUsers", href: "/members", icon: Users },
+      { labelKey: "nav.payments", href: "/payments", icon: CreditCard },
+      { labelKey: "nav.printer", href: "/printer", icon: Printer },
+      { labelKey: "nav.delivery", href: "/delivery", icon: Truck },
+      { labelKey: "nav.nodes", href: "/nodes", icon: Network },
     ],
   },
   {
-    label: "Administration",
+    labelKey: "nav.sections.administration",
     items: [
       {
-        label: "Organization",
+        labelKey: "nav.organization",
         href: "/organizations",
         icon: Building2,
         children: [
-          { label: "Organizations", href: "/organizations" },
-          { label: "Organization Users", href: "/organizations/users", count: 34 },
-          { label: "Organization Roles", href: "/organizations/roles" },
+          { labelKey: "nav.organizations", href: "/organizations" },
+          { labelKey: "nav.organizationUsers", href: "/organizations/users" },
+          { labelKey: "nav.organizationRoles", href: "/organizations/roles" },
         ],
       },
       {
-        label: "Branches",
+        labelKey: "nav.branches",
         href: "/branches",
         icon: GitBranch,
         children: [
-          { label: "Branches", href: "/branches" },
-          { label: "Branch Users", href: "/branches/users" },
-          { label: "Branch Roles", href: "/branches/roles" },
+          { labelKey: "nav.branches", href: "/branches" },
+          { labelKey: "nav.branchUsers", href: "/branches/users" },
+          { labelKey: "nav.branchRoles", href: "/branches/roles" },
         ],
       },
       {
-        label: "API Integration",
+        labelKey: "nav.apiIntegration",
         href: "/api-integration",
         icon: KeyRound,
         children: [
-          { label: "API Keys", href: "/api-integration/keys" },
-          { label: "Webhooks", href: "/api-integration/webhooks" },
+          { labelKey: "nav.apiKeys", href: "/api-integration/keys" },
+          { labelKey: "nav.webhooks", href: "/api-integration/webhooks" },
         ],
       },
-      { label: "Black List", href: "/black-list", icon: ShieldBan },
+      { labelKey: "nav.blackList", href: "/black-list", icon: ShieldBan },
     ],
   },
   {
-    label: "Management",
+    labelKey: "nav.sections.management",
     items: [
       {
-        label: "Platform",
+        labelKey: "nav.platform",
         href: "/management",
         icon: ShieldCheck,
         children: [
-          { label: "Admins", href: "/management/admins" },
-          { label: "Admin Roles", href: "/management/roles" },
+          { labelKey: "nav.admins", href: "/management/admins" },
+          { labelKey: "nav.adminRoles", href: "/management/roles" },
         ],
       },
-      { label: "Audit Log", href: "/management/audit", icon: Activity },
+      { labelKey: "nav.auditLog", href: "/management/audit", icon: Activity },
     ],
   },
 ]
 
 /** Zone 5 — footer utility items above the profile row (§5.9). */
 export const footerNav: NavItem[] = [
-  { label: "Settings", href: "/settings", icon: Settings },
+  { labelKey: "nav.settings", href: "/settings", icon: Settings },
 ]

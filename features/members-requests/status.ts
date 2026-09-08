@@ -1,3 +1,4 @@
+import type { TranslationKey, Translator } from "@/i18n/translate"
 import { formatText } from "@/utils/format"
 
 import type { MemberStatus } from "./types"
@@ -15,11 +16,15 @@ import type { MemberStatus } from "./types"
  */
 export const STATUS_META: Record<
   MemberStatus,
-  { label: string; tone: "info" | "success" | "danger" }
+  {
+    /** A dictionary key — see the note in features/ids/status.ts. */
+    labelKey: TranslationKey
+    tone: "info" | "success" | "danger"
+  }
 > = {
-  pending: { label: "Pending", tone: "info" },
-  approved: { label: "Approved", tone: "success" },
-  rejected: { label: "Rejected", tone: "danger" },
+  pending: { labelKey: "status.requests.pending", tone: "info" },
+  approved: { labelKey: "status.requests.approved", tone: "success" },
+  rejected: { labelKey: "status.requests.rejected", tone: "danger" },
 }
 
 /** Order used when grouping by status (DESIGN.md §8.4). */
@@ -31,9 +36,13 @@ export const STATUS_ORDER: MemberStatus[] = ["pending", "approved", "rejected"]
  * An unrecognised status still gets a readable label rather than crashing on
  * `meta.tone` — the backend can add one before the frontend knows about it.
  */
-export function statusMeta(status: MemberStatus | string | null | undefined) {
+export function statusMeta(
+  t: Translator,
+  status: MemberStatus | string | null | undefined
+) {
   if (status && status in STATUS_META) {
-    return STATUS_META[status as MemberStatus]
+    const meta = STATUS_META[status as MemberStatus]
+    return { label: t(meta.labelKey), tone: meta.tone }
   }
   return {
     label: formatText(typeof status === "string" ? status : null),

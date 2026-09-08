@@ -3,6 +3,8 @@
 import * as React from "react"
 import { X } from "lucide-react"
 
+import { useT } from "@/i18n/context"
+
 export type ActiveFilter = {
   /** React key, and the field this chip stands for. */
   key: string
@@ -27,6 +29,8 @@ export function FilterChips({
   filters: ActiveFilter[]
   onClear: () => void
 }) {
+  const t = useT()
+
   if (filters.length === 0) return null
 
   return (
@@ -44,7 +48,7 @@ export function FilterChips({
         onClick={onClear}
         className="h-7 rounded-sm px-2 text-[13px] font-medium text-text-secondary transition-colors hover:text-text outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        Clear
+        {t("common.clear")}
       </button>
     </div>
   )
@@ -60,14 +64,16 @@ export function FilterChip({
   value: string
   onRemove: () => void
 }) {
+  const t = useT()
+
   return (
-    <span className="inline-flex h-7 items-center gap-1.5 rounded-sm border border-border bg-surface-sunken pl-2.5 pr-1.5 text-xs">
+    <span className="inline-flex h-7 items-center gap-1.5 rounded-sm border border-border bg-surface-sunken ps-2.5 pe-1.5 text-xs">
       <span className="text-text-muted">{attribute}:</span>
       <span className="font-medium text-text">{value}</span>
       <button
         type="button"
         onClick={onRemove}
-        aria-label={`Remove ${attribute} filter`}
+        aria-label={t("filters.removeFilter", { attribute })}
         className="inline-flex size-4 items-center justify-center rounded-xs text-text-placeholder transition-colors hover:text-text outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="size-3" strokeWidth={2} />

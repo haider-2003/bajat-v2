@@ -19,21 +19,47 @@ export function formatText(value: string | null | undefined) {
   return trimmed ? trimmed : EMPTY_VALUE
 }
 
-const dateFmt = new Intl.DateTimeFormat("en-GB", {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-})
+/**
+ * One formatter per locale, built on first use.
+ *
+ * `Intl.DateTimeFormat` is expensive to construct and a table asks for a few
+ * hundred dates per render, so the instances are kept rather than rebuilt. The
+ * cache is keyed by tag because the app now formats in two languages.
+ */
+const dateFormatters = new Map<string, Intl.DateTimeFormat>()
 
-/** An ISO timestamp as `Mon, 13 Aug 2026`. */
-export function formatDate(iso: string | null | undefined) {
+function dateFormatter(locale: string): Intl.DateTimeFormat {
+  let fmt = dateFormatters.get(locale)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(locale, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })
+    dateFormatters.set(locale, fmt)
+  }
+  return fmt
+}
+
+/**
+ * An ISO timestamp as `Mon, 13 Aug 2026` — or its Arabic equivalent.
+ *
+ * `locale` is a BCP 47 tag, not one of the app's two-letter codes: components
+ * pass it through `useFormatDate()` (i18n/format.ts), which maps `ar` to
+ * `ar-IQ-u-nu-latn` so months are named in Arabic while the digits stay Latin.
+ * The default keeps every non-React caller working unchanged.
+ */
+export function formatDate(
+  iso: string | null | undefined,
+  locale: string = "en-GB"
+) {
   if (!iso) return EMPTY_VALUE
   const date = new Date(iso)
   // `new Date(null)` is the epoch and `new Date("nonsense")` is Invalid Date,
   // which makes Intl throw — neither should reach a cell.
   if (Number.isNaN(date.getTime())) return EMPTY_VALUE
-  return dateFmt.format(date)
+  return dateFormatter(locale).format(date)
 }
 
 /**

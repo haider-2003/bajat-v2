@@ -1,6 +1,9 @@
+"use client"
+
 import { AlertCircle, RefreshCw } from "lucide-react"
 
 import { Skeleton } from "@/components/ui/skeleton"
+import { useT } from "@/i18n/context"
 import { cn } from "@/lib/utils"
 
 /**
@@ -25,7 +28,7 @@ export function LoadingRows({ rows = 8 }: { rows?: number }) {
         >
           <Skeleton className="size-5 rounded-full" />
           <Skeleton className="h-3.5 w-40" />
-          <Skeleton className="ml-auto h-3.5 w-24" />
+          <Skeleton className="ms-auto h-3.5 w-24" />
           <Skeleton className="h-3.5 w-32" />
         </div>
       ))}
@@ -50,6 +53,8 @@ export function LoadFailed({
   onRetry: () => void
   retrying: boolean
 }) {
+  const t = useT()
+
   return (
     <div className="rounded-lg border border-border bg-surface py-16 text-center">
       <AlertCircle
@@ -59,7 +64,7 @@ export function LoadFailed({
       />
       <p className="mt-3 text-base font-semibold text-text">{title}</p>
       <p className="mx-auto mt-2 max-w-[320px] text-[13px] text-text-muted">
-        The server didn&apos;t answer. Check your connection and try again.
+        {t("table.loadFailedHint")}
       </p>
       <button
         type="button"
@@ -77,7 +82,7 @@ export function LoadFailed({
           className={cn("size-3.5", retrying && "animate-spin")}
           strokeWidth={1.5}
         />
-        Try again
+        {t("common.tryAgain")}
       </button>
     </div>
   )

@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+import { useT } from "@/i18n/context"
+
 import { FilterButton } from "./filter-button"
 
 export type FacetOption = {
@@ -41,7 +43,7 @@ export function FacetFilter({
   options,
   selected,
   onToggle,
-  emptyLabel = "Nothing to choose from",
+  emptyLabel,
   loading = false,
   className,
 }: {
@@ -57,6 +59,8 @@ export function FacetFilter({
   /** Passed to the trigger — the filter sheet uses it to go full-width. */
   className?: string
 }) {
+  const t = useT()
+
   /**
    * The full-contrast half of the trigger (§6.6).
    *
@@ -104,7 +108,7 @@ export function FacetFilter({
         </DropdownMenuGroup>
         {options.length === 0 && (
           <p className="px-1.5 py-1.5 text-[13px] text-text-muted">
-            {loading ? "Loading…" : emptyLabel}
+            {loading ? t("common.loading") : emptyLabel ?? t("filters.nothingToChoose")}
           </p>
         )}
       </DropdownMenuContent>

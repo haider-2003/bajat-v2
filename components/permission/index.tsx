@@ -4,6 +4,7 @@ import * as React from "react"
 
 import { useAuthStore } from "@/features/auth/store"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useT } from "@/i18n/context"
 
 /**
  * Declarative permission gate. See docs/authentication.md §6.
@@ -34,9 +35,10 @@ export function Permission({
   requireAll = true,
   prefixed = false,
   showWithTooltip = false,
-  tooltipLabel = "You don't have permission for this",
+  tooltipLabel,
   children,
 }: PermissionProps) {
+  const t = useT()
   const check = useAuthStore((s) => s.can)
 
   const names = Array.isArray(can) ? can : [can]
@@ -62,7 +64,7 @@ export function Permission({
       >
         {disabledChild}
       </TooltipTrigger>
-      <TooltipContent>{tooltipLabel}</TooltipContent>
+      <TooltipContent>{tooltipLabel ?? t("common.noPermission")}</TooltipContent>
     </Tooltip>
   )
 }

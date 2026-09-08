@@ -5,6 +5,8 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react"
 
 import { useControlSurface } from "@/components/ui/control-style"
+import { localeTag, type Locale } from "@/i18n/config"
+import { useLocale, useT } from "@/i18n/context"
 import { cn } from "@/lib/utils"
 
 /**
@@ -24,7 +26,29 @@ import { cn } from "@/lib/utils"
  * `toISOString` is never called.
  */
 
-const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+/**
+ * Monday-first weekday initials, in the active language.
+ *
+ * Derived from real dates rather than a hardcoded list: a fixed
+ * `["Mo", "Tu", …]` is English spelled into the calendar's frame, and there is
+ * no Arabic set to swap it for that `Intl` does not already know. 2024-01-01
+ * was a Monday, which is only used as an anchor to walk seven days from.
+ *
+ * Cached per locale for the same reason the date formatters are.
+ */
+const weekdayCache = new Map<string, string[]>()
+
+function weekdayNames(locale: string): string[] {
+  let names = weekdayCache.get(locale)
+  if (!names) {
+    const fmt = new Intl.DateTimeFormat(locale, { weekday: "short" })
+    names = Array.from({ length: 7 }, (_, i) =>
+      fmt.format(new Date(2024, 0, 1 + i))
+    )
+    weekdayCache.set(locale, names)
+  }
+  return names
+}
 
 /** `yyyy-mm-dd` to a local `Date`, or null when it is not a real date. */
 function parseISO(value: string): Date | null {
@@ -43,17 +67,43 @@ function toISO(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
-const monthFmt = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" })
-const triggerFmt = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-})
+const monthCache = new Map<string, Intl.DateTimeFormat>()
+const triggerCache = new Map<string, Intl.DateTimeFormat>()
 
-/** `yyyy-mm-dd` rendered the way the trigger renders it; `""` gives `""`. */
-export function formatDateValue(value: string): string {
+function cachedFormat(
+  cache: Map<string, Intl.DateTimeFormat>,
+  locale: string,
+  options: Intl.DateTimeFormatOptions
+): Intl.DateTimeFormat {
+  let fmt = cache.get(locale)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(locale, options)
+    cache.set(locale, fmt)
+  }
+  return fmt
+}
+
+const monthFmt = (locale: string) =>
+  cachedFormat(monthCache, locale, { month: "long", year: "numeric" })
+
+const triggerFmt = (locale: string) =>
+  cachedFormat(triggerCache, locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })
+
+/**
+ * `yyyy-mm-dd` rendered the way the trigger renders it; `""` gives `""`.
+ *
+ * `locale` is optional so the many call sites that build filter-chip text can
+ * pass what they have; without it the value reads as English, which is the
+ * same behaviour this had before there was a second language.
+ */
+export function formatDateValue(value: string, locale?: Locale): string {
   const date = parseISO(value)
-  return date ? triggerFmt.format(date) : ""
+  if (!date) return ""
+  return triggerFmt(locale ? localeTag[locale] : "en-GB").format(date)
 }
 
 /**
@@ -89,7 +139,7 @@ export function DatePicker({
   label,
   min,
   max,
-  placeholder = "Any date",
+  placeholder,
   className,
 }: {
   /** `yyyy-mm-dd`, or `""` for no date. */
@@ -104,6 +154,9 @@ export function DatePicker({
   placeholder?: string
   className?: string
 }) {
+  const t = useT()
+  const locale = useLocale()
+  const tag = localeTag[locale]
   const [open, setOpen] = React.useState(false)
   // The same face the filter buttons and the active nav chip wear.
   const surface = useControlSurface()
@@ -152,7 +205,9 @@ export function DatePicker({
           surface.face,
           className
         )}
-        aria-label={label ? `${label} date` : "Pick a date"}
+        aria-label={
+          label ? t("datePicker.fieldDate", { field: label }) : t("datePicker.pick")
+        }
       >
         <CalendarDays
           className={cn("size-4 shrink-0", surface.muted)}
@@ -162,7 +217,9 @@ export function DatePicker({
         {/* Unset reads as muted, a chosen date at full contrast — both taken
             from the surface, so the ink face stays legible. */}
         <span className={selected ? undefined : surface.muted}>
-          {selected ? triggerFmt.format(selected) : placeholder}
+          {selected
+            ? triggerFmt(tag).format(selected)
+            : placeholder ?? t("datePicker.anyDate")}
         </span>
         {/* Clearing is the usual follow-up, so it sits on the trigger rather
             than only inside the popover. A nested <button> is invalid HTML,
@@ -171,7 +228,11 @@ export function DatePicker({
           <span
             role="button"
             tabIndex={0}
-            aria-label={label ? `Clear ${label} date` : "Clear date"}
+            aria-label={
+              label
+                ? t("datePicker.clearFieldDate", { field: label })
+                : t("datePicker.clearDate")
+            }
             onClick={(e) => {
               e.stopPropagation()
               onChange("")
@@ -183,7 +244,7 @@ export function DatePicker({
               onChange("")
             }}
             className={cn(
-              "ml-0.5 inline-flex size-4 items-center justify-center rounded-xs",
+              "ms-0.5 inline-flex size-4 items-center justify-center rounded-xs",
               "transition-opacity hover:opacity-100 opacity-60",
               "outline-none focus-visible:ring-2 focus-visible:ring-ring",
               surface.muted
@@ -210,22 +271,22 @@ export function DatePicker({
           >
             <div className="flex items-center justify-between">
               <MonthButton
-                label="Previous month"
+                label={t("datePicker.previousMonth")}
                 icon={ChevronLeft}
                 onClick={() => shiftMonth(-1)}
               />
               <span aria-live="polite" className="text-[13px] font-medium text-text">
-                {monthFmt.format(month)}
+                {monthFmt(tag).format(month)}
               </span>
               <MonthButton
-                label="Next month"
+                label={t("datePicker.nextMonth")}
                 icon={ChevronRight}
                 onClick={() => shiftMonth(1)}
               />
             </div>
 
             <div className="mt-2 grid grid-cols-7 gap-0.5">
-              {WEEKDAYS.map((d) => (
+              {weekdayNames(tag).map((d) => (
                 <span
                   key={d}
                   aria-hidden
@@ -272,7 +333,7 @@ export function DatePicker({
 
             <div className="mt-2 flex items-center justify-between border-t border-border pt-2">
               <FooterAction onClick={() => pick(today)} disabled={todayDisabled}>
-                Today
+                {t("datePicker.today")}
               </FooterAction>
               <FooterAction
                 onClick={() => {
@@ -281,7 +342,7 @@ export function DatePicker({
                 }}
                 disabled={!selected}
               >
-                Clear
+                {t("common.clear")}
               </FooterAction>
             </div>
           </PopoverPrimitive.Popup>
@@ -312,7 +373,8 @@ function MonthButton({
         "focus-visible:ring-2 focus-visible:ring-ring"
       )}
     >
-      <Icon className="size-4" strokeWidth={1.5} />
+      {/* Previous / next months run along the reading direction. */}
+      <Icon data-flip-rtl className="size-4" strokeWidth={1.5} />
     </button>
   )
 }

@@ -9,7 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-arabic: var(--font-noto-arabic);
+  --font-arabic: var(--font-arabic-sans);
   --font-heading: var(--font-geist-sans);
 
   /* DESIGN.md semantic surfaces (§2, §19.1) */
@@ -1078,6 +1078,86 @@ html[data-intro="playing"] [data-await-intro] {
   animation-play-state: paused !important;
 }
 
+/* ============================================================
+   Card-template editor — the floating-chrome surface.
+
+   A canvas tool is not dashboard chrome, and this is the one place
+   in the app that deliberately departs from DESIGN.md §1.5/§1.6:
+   there, structure comes from hairlines on a flat page; here the
+   artwork owns the viewport and every control floats above it on a
+   ring plus a real shadow. The departure is scoped to these tokens
+   and the `components/photo-editor` tree — nothing else reads them.
+
+   Type, neutrals and the violet accent are still the app's.
+   ============================================================ */
+:root {
+  /* The work sits in a well *below* the page grey — without the step
+     down, a white card floats on near-white and stops reading as a
+     physical object.
+
+     The step was 0xe9 and it was not enough: a white card, white floating
+     chrome and a near-white ground put three surfaces within 9% of each
+     other, and the artwork — the one thing in the window that matters —
+     had the weakest edge of the three. Deeper ground, and the dots that
+     travel with the artwork are carried with it. */
+  --editor-ground: #dededf;
+  --editor-dot: rgba(0, 0, 0, 0.085);
+  --editor-float: #ffffff;
+  --editor-well: #f1f1f3;
+  --editor-hover: rgba(0, 0, 0, 0.05);
+  --editor-press: rgba(0, 0, 0, 0.08);
+  --editor-line: #e6e6e9;
+
+  /* The ring is what keeps a white slab legible on a light ground.
+     Shadow alone reads as fog; the hairline is the crisp edge. */
+  --editor-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.055),
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 10px 28px -8px rgba(0, 0, 0, 0.18);
+  --editor-shadow-pop:
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 18px 44px -12px rgba(0, 0, 0, 0.3);
+  /* A white chip on a white bar — legible only because of this ring. */
+  --editor-shadow-chip:
+    0 0 0 1px rgba(0, 0, 0, 0.07),
+    0 1px 2px rgba(0, 0, 0, 0.09);
+  --editor-shadow-card:
+    0 0 0 1px rgba(0, 0, 0, 0.05),
+    0 2px 5px rgba(0, 0, 0, 0.06),
+    0 18px 40px -14px rgba(0, 0, 0, 0.26);
+}
+
+.dark {
+  --editor-ground: #0b0b0d;
+  --editor-dot: rgba(255, 255, 255, 0.06);
+  --editor-float: #1b1b1f;
+  --editor-well: #111114;
+  --editor-hover: rgba(255, 255, 255, 0.06);
+  --editor-press: rgba(255, 255, 255, 0.1);
+  --editor-line: rgba(255, 255, 255, 0.09);
+
+  --editor-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.075),
+    0 12px 32px -8px rgba(0, 0, 0, 0.7);
+  --editor-shadow-pop:
+    0 0 0 1px rgba(255, 255, 255, 0.09),
+    0 20px 48px -12px rgba(0, 0, 0, 0.85);
+  --editor-shadow-chip:
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+  --editor-shadow-card:
+    0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 20px 46px -14px rgba(0, 0, 0, 0.85);
+}
+
+@theme inline {
+  --color-editor-ground: var(--editor-ground);
+  --color-editor-float: var(--editor-float);
+  --color-editor-well: var(--editor-well);
+  --color-editor-line: var(--editor-line);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -1170,6 +1250,46 @@ html[data-intro="playing"] [data-await-intro] {
 }
 
 @layer components {
+  /**
+   * A workflow node's colour, corrected for the ground it lands on.
+   *
+   * A node's colour is free-form hex typed in by whoever created it, and in
+   * practice most of them are `#000000` — the value you get by not choosing.
+   * Painted literally, that is a dead black dot in light mode and an invisible
+   * one in dark mode, with the one node somebody did colour sitting among them
+   * looking like an error.
+   *
+   * The element carries the raw value as `--node`; everything drawn from it is
+   * mixed against `--surface` and `--text` first, so it lands somewhere
+   * legible whatever the value happens to be. `color-mix` rather than a
+   * computed colour because the correction depends on the theme, and the theme
+   * is a class applied to `<html>` before hydration — reading it during render
+   * is a mismatch, and threading it down is a prop on every swatch in the app.
+   * CSS already has `--surface` and `--text` flipping on their own.
+   *
+   * Light mode barely corrects: a hue on white is legible already, and the 12%
+   * only stops a pale yellow from vanishing. Dark mode is the case that
+   * matters — 42% toward `--text` lifts `#000000` to a grey that reads against
+   * `#161616` while leaving a saturated hue recognisably itself.
+   */
+  .node-tone {
+    --node-fill: color-mix(in oklab, var(--node), var(--text) 8%);
+    --node-ink: color-mix(in oklab, var(--node), var(--text) 12%);
+    --node-wash: color-mix(in oklab, var(--node) 10%, var(--surface));
+    --node-halo: color-mix(in oklab, var(--node) 22%, var(--surface));
+  }
+
+  /* The wash is mixed from the *ink* here, not from the raw hue. §2.3 makes a
+     dark-mode status background a low-alpha overlay that lightens the surface,
+     and mixing `#000000` into `#161616` does the opposite — it would sink the
+     badge into the table instead of lifting it off. The ink has already been
+     lifted toward `--text`, so mixing from it lightens whatever the hue was. */
+  .dark .node-tone {
+    --node-ink: color-mix(in oklab, var(--node), var(--text) 42%);
+    --node-wash: color-mix(in oklab, var(--node-ink) 18%, var(--surface));
+    --node-halo: color-mix(in oklab, var(--node) 30%, var(--surface));
+  }
+
   /**
    * Quiet overlay scrollbar.
    *
@@ -1281,4 +1401,87 @@ html[data-intro="playing"] [data-await-intro] {
   @page {
     margin: 10mm;
   }
+}
+
+/* ============================================================
+   Arabic — DESIGN.md §1 read in a second script
+   ============================================================
+
+   Two things change when `<html lang="ar" dir="rtl">` is served, and neither
+   is a mirrored copy of the stylesheet above. Direction is already handled:
+   the spacing in this codebase is written almost entirely in logical
+   properties (`ms-`, `pe-`, `start-`, `border-s`), and those resolve against
+   `dir` on their own.
+
+   What CSS logical properties cannot do is pick a typeface or undo tracking,
+   so that is all this block is.
+
+   Deliberately **unlayered**. Tailwind's utilities live in `@layer utilities`,
+   and an unlayered rule outranks every layer regardless of specificity — which
+   is how `tracking-[-0.015em]` on a heading gets neutralised without an
+   `!important` on each one.
+   ============================================================ */
+
+/* Geist has no Arabic glyphs. Without this the browser falls back per-machine
+   — Tahoma on Windows, Geeza Pro on macOS — and the same screen renders in a
+   different face for every user. Geist stays in the stack behind it so Latin
+   fragments (a phone number, "Bajat", an ID) keep their shapes.
+
+   The face is IBM Plex Sans Arabic. Noto, which this replaced, is a coverage
+   font: its job is that a glyph exists in every script, and that brief is why
+   it reads as plain rather than as chosen. Plex Arabic is drawn as an
+   interface text face — even colour down a 13px column, open counters at small
+   sizes, and joins squared just enough to sit level beside Geist's Latin. */
+html[lang="ar"] {
+  font-family:
+    var(--font-arabic-sans), var(--font-geist-sans), ui-sans-serif, system-ui,
+    sans-serif;
+}
+
+/* Arabic sets a little tighter than Latin at the same nominal size, because
+   the script hangs its weight below the baseline and stacks marks above it.
+   Two corrections, both scoped to running text so no fixed-height control
+   (a 34px nav row, a 48px table row) can be pushed out of shape by them:
+
+   `text-wrap: pretty` stops a two-word heading breaking to a single orphan,
+   which is far more visible in Arabic because the orphan carries the joins of
+   the word it was cut from. `font-synthesis` is the important one: Plex Arabic
+   is a *static* family, and where a weight is missing the browser will happily
+   fake it by smearing the outline. Turning synthesis off means a missing
+   weight falls back to a real one instead — visible as slightly wrong, rather
+   than invisible as slightly muddy. */
+html[lang="ar"] {
+  font-synthesis-weight: none;
+}
+
+html[lang="ar"] :is(h1, h2, h3, h4, p) {
+  text-wrap: pretty;
+}
+
+/* Arabic letters join. Tracking pulls those joins apart, so the type scale's
+   negative heading tracking and the +0.08em on uppercase overlines are both
+   actively wrong here — the second doubly so, since Arabic has no uppercase
+   for the overline treatment to be spacing out in the first place.
+
+   Monospace is exempt: IDs, keys and phone numbers stay Latin digits in both
+   languages, and they are column-aligned by that tracking. */
+html[lang="ar"] :not(.font-mono):not(code):not(kbd):not(pre) {
+  letter-spacing: normal;
+}
+
+/* Digits, dates and currency stay in Latin numerals under `ar-IQ` (Iraq uses
+   them, unlike the Gulf), so tabular alignment in tables still holds. This is
+   only a guard for any element that inherited an Eastern-Arabic numeral
+   preference from the OS. */
+html[lang="ar"] .tabular-nums,
+html[lang="ar"] .font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Icons that point *along* the reading direction rather than at a fixed side —
+   a "next page" chevron, a "back" arrow — have to turn around with the text.
+   Marked at the call site with `data-flip-rtl`, because most icons (a
+   calendar, a trash can, a dropdown's down-chevron) must **not** flip. */
+html[dir="rtl"] [data-flip-rtl] {
+  transform: scaleX(-1);
 }

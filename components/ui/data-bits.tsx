@@ -70,13 +70,18 @@ export function AvatarStack({
           key={i}
           aria-hidden
           className="size-5 shrink-0 rounded-full ring-2 ring-surface"
-          style={{ marginLeft: i === 0 ? 0 : -8, backgroundImage: gradientFor(seed) }}
+          // Logical, so the discs still overlap backwards along the reading
+          // direction when the document is RTL.
+          style={{
+            marginInlineStart: i === 0 ? 0 : -8,
+            backgroundImage: gradientFor(seed),
+          }}
         />
       ))}
       {extra > 0 && (
         <span
           className="flex size-5 shrink-0 items-center justify-center rounded-full bg-neutral-bg text-[10px] font-medium text-text-muted ring-2 ring-surface"
-          style={{ marginLeft: -8 }}
+          style={{ marginInlineStart: -8 }}
         >
           +{extra}
         </span>
@@ -185,7 +190,7 @@ export function SegmentedMeter({
 
   return (
     <span className="flex items-center gap-2">
-      <span className="w-8 shrink-0 text-right text-[13px] tabular-nums text-text-secondary">
+      <span className="w-8 shrink-0 text-end text-[13px] tabular-nums text-text-secondary">
         {value}%
       </span>
       <span aria-hidden className="flex items-center gap-px">

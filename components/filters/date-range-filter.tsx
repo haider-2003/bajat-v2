@@ -1,6 +1,8 @@
 "use client"
 
 import { DatePicker, formatDateValue } from "@/components/ui/date-picker"
+import { useT } from "@/i18n/context"
+import type { Translator } from "@/i18n/translate"
 import { cn } from "@/lib/utils"
 
 import { SHEET_CONTROL } from "./filter-sheet"
@@ -46,6 +48,8 @@ export function DateRangeFilter({
   /** Inside the filter sheet the pair stacks and goes full-width. */
   inSheet?: boolean
 }) {
+  const t = useT()
+
   return (
     <div
       className={cn(
@@ -54,14 +58,14 @@ export function DateRangeFilter({
       )}
     >
       <DatePicker
-        label={`${label} from`}
+        label={t("filters.rangeFrom", { field: label })}
         value={from}
         onChange={onFromChange}
         max={to || undefined}
         className={inSheet ? SHEET_CONTROL : undefined}
       />
       <DatePicker
-        label={`${label} to`}
+        label={t("filters.rangeTo", { field: label })}
         value={to}
         onChange={onToChange}
         min={from || undefined}
@@ -74,10 +78,22 @@ export function DateRangeFilter({
 /**
  * The window as one line of chip text — a full range, or whichever half of one
  * is set. `""` when neither is, which is the caller's cue to omit the chip.
+ *
+ * Takes `t` rather than calling `useT()` because it is a plain function, not a
+ * component: the screens that build chip rows call it inside `useMemo`, where a
+ * hook cannot go. They already hold a translator.
  */
-export function describeRange(from: string, to: string): string {
-  if (from && to) return `${formatDateValue(from)} – ${formatDateValue(to)}`
-  if (from) return `From ${formatDateValue(from)}`
-  if (to) return `Until ${formatDateValue(to)}`
+export function describeRange(
+  t: Translator,
+  from: string,
+  to: string
+): string {
+  if (from && to)
+    return t("filters.rangeBoth", {
+      from: formatDateValue(from),
+      to: formatDateValue(to),
+    })
+  if (from) return t("filters.rangeFromOnly", { from: formatDateValue(from) })
+  if (to) return t("filters.rangeToOnly", { to: formatDateValue(to) })
   return ""
 }

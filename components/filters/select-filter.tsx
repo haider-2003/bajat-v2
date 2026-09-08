@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+import { useT } from "@/i18n/context"
+
 import { FilterButton } from "./filter-button"
 
 export type SelectOption = {
@@ -40,8 +42,8 @@ export function SelectFilter({
   options,
   value,
   onChange,
-  allLabel = "All",
-  emptyLabel = "Nothing to choose from",
+  allLabel,
+  emptyLabel,
   loading = false,
   className,
 }: {
@@ -57,6 +59,7 @@ export function SelectFilter({
   /** Passed to the trigger — the filter sheet uses it to go full-width. */
   className?: string
 }) {
+  const t = useT()
   const selected = options.find((option) => option.value === value)
 
   return (
@@ -78,7 +81,9 @@ export function SelectFilter({
         >
           <DropdownMenuLabel>{label}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuRadioItem value="">{allLabel}</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="">
+            {allLabel ?? t("filters.all")}
+          </DropdownMenuRadioItem>
           {options.map((option) => (
             <DropdownMenuRadioItem key={option.value} value={option.value}>
               {option.label}
@@ -87,7 +92,7 @@ export function SelectFilter({
         </DropdownMenuRadioGroup>
         {options.length === 0 && (
           <p className="px-1.5 py-1.5 text-[13px] text-text-muted">
-            {loading ? "Loading…" : emptyLabel}
+            {loading ? t("common.loading") : emptyLabel ?? t("filters.nothingToChoose")}
           </p>
         )}
       </DropdownMenuContent>

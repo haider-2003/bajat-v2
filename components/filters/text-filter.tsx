@@ -52,7 +52,7 @@ export function TextFilter({
   return (
     <div className={cn("relative", className)}>
       <Icon
-        className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-text-placeholder"
+        className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-text-placeholder"
         strokeWidth={1.5}
       />
       <input
@@ -66,7 +66,7 @@ export function TextFilter({
           // §18.7 — 44px for touch, the §6.7 32px field at lg. 16px text below
           // that: iOS zooms the page when a smaller field takes focus, and on
           // a filter bar that throws the whole toolbar off-screen.
-          "h-11 w-full rounded-md bg-surface-sunken pl-8 pr-3 text-base",
+          "h-11 w-full rounded-md bg-surface-sunken ps-8 pe-3 text-base",
           "lg:h-8 lg:text-sm",
           "text-text placeholder:text-text-placeholder",
           "outline-none focus-visible:ring-2 focus-visible:ring-ring"

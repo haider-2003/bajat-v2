@@ -88,11 +88,25 @@ export const useLogout = () =>
  * Error bodies never pass through the camelizing response interceptor, so the
  * keys here are the backend's own snake_case.
  */
-export function getAuthErrorMessage(error: unknown, fallback: string): string {
+export function getAuthErrorMessage(
+  error: unknown,
+  fallback: string,
+  /**
+   * Shown when the request never left the building. Optional so the many
+   * non-UI callers keep working; the sign-in screen passes a translated one.
+   *
+   * Note that `body.message` — the branch below — is the **server's** wording
+   * and cannot be translated here. That is the backend's copy to localise; a
+   * client-side dictionary cannot second-guess an arbitrary error string.
+   */
+  offlineMessage?: string
+): string {
   if (!isAxiosError(error)) return fallback
 
   // The request never reached the server: DNS, CORS, offline.
-  if (!error.response) return "Can't reach the server. Check your connection."
+  if (!error.response) {
+    return offlineMessage ?? "Can't reach the server. Check your connection."
+  }
 
   const body = error.response.data as AuthErrorBody | undefined
 

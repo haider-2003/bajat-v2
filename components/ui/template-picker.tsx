@@ -6,6 +6,7 @@ import { RadioGroup } from "@base-ui/react/radio-group"
 import { Check } from "lucide-react"
 
 import type { TemplateDef, TemplatePreview } from "@/components/layout/brand"
+import { useT } from "@/i18n/context"
 import { cn } from "@/lib/utils"
 
 /**
@@ -48,6 +49,8 @@ export function TemplatePicker<T extends string>({
   label: string
   className?: string
 }) {
+  const t = useT()
+
   return (
     <RadioGroup
       // Base UI treats `null` as "nothing selected", which is exactly the
@@ -63,7 +66,7 @@ export function TemplatePicker<T extends string>({
           value={item.value}
           className={cn(
             // §9.1's card geometry at row scale — 12px radius, hairline.
-            "group/tpl cursor-pointer rounded-lg border border-border bg-surface p-2 text-left",
+            "group/tpl cursor-pointer rounded-lg border border-border bg-surface p-2 text-start",
             "transition-[border-color,box-shadow] duration-120",
             "hover:border-border-strong",
             "outline-none",
@@ -77,10 +80,10 @@ export function TemplatePicker<T extends string>({
           <div className="mt-2 flex items-start gap-1.5 px-0.5 pb-0.5">
             <div className="min-w-0 flex-1">
               <span className="block text-[13px] font-medium text-text">
-                {item.label}
+                {t(item.labelKey)}
               </span>
               <span className="mt-0.5 block text-xs leading-relaxed text-text-muted">
-                {item.description}
+                {t(item.descriptionKey)}
               </span>
             </div>
             {/* Reserves its own width, so checking a card never reflows the
@@ -118,10 +121,14 @@ function TemplateThumb({ preview }: { preview: TemplatePreview }) {
       className="flex h-[74px] overflow-hidden rounded-md"
       style={{ background: preview.page, boxShadow: `inset 0 0 0 1px ${preview.line}` }}
     >
-      {/* Sidebar rail */}
+      {/* Sidebar rail. The seam is on its inner edge, which swaps sides with
+          the reading direction — the rail itself is laid out by flex order. */}
       <div
         className="flex w-[26px] shrink-0 flex-col gap-1 p-1.5"
-        style={{ background: preview.rail, borderRight: `1px solid ${preview.line}` }}
+        style={{
+          background: preview.rail,
+          borderInlineEnd: `1px solid ${preview.line}`,
+        }}
       >
         <Bar ink={preview.ink} w="100%" o={0.5} />
         <Bar ink={preview.ink} w="72%" o={0.22} />

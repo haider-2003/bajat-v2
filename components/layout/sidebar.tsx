@@ -2,11 +2,10 @@
 
 import * as React from "react"
 import { createPortal } from "react-dom"
-import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
 import {
   ChevronDown,
-  ChevronsUpDown,
+  Loader2,
+  LogOut,
   Menu,
   MoreHorizontal,
   PanelLeft,
@@ -18,6 +17,13 @@ import {
 import { BajatMark } from "@/components/brand/bajat-mark"
 import { useLogout } from "@/features/auth/api"
 import { useAuthStore } from "@/features/auth/store"
+import { useDir, useT } from "@/i18n/context"
+import {
+  Link,
+  useLocalePathname,
+  useLocaleRouter,
+} from "@/i18n/navigation"
+import type { Translator } from "@/i18n/translate"
 import { cn } from "@/lib/utils"
 import {
   footerNav,
@@ -42,31 +48,20 @@ import { useShell } from "./shell-context"
  * in light mode, and a flat white-alpha fill in dark mode (§5.4) — the two
  * themes use different mechanisms for the same state.
  *
- * UI only. Counts are sample data and hrefs are placeholders.
+ * UI only — hrefs are placeholders.
  */
 
-const COUNT_CAP = 99
-
-/* ------------------------------------------------------------------ *
- * Count — plain right-aligned muted numeral, not a pill badge (§5.5)
- * ------------------------------------------------------------------ */
-
-function NavCount({ value, muted }: { value: number; muted?: string }) {
-  return (
-    <span
-      className={cn(
-        "ml-auto shrink-0 text-[11px] font-normal tabular-nums",
-        // An active chip hands down its own muted tone; a resting row has no
-        // face, so it falls back to the sidebar's. Previously this asked
-        // whether the style was `ink`, which stopped being the only dark face
-        // the moment flat gained a solid form.
-        muted ?? "text-text-muted"
-      )}
-    >
-      {Math.min(value, COUNT_CAP)}
-    </span>
-  )
-}
+/**
+ * Where zone 4 is scrolled to, kept outside the component tree.
+ *
+ * `AppShell` is rendered by each `page.tsx` rather than by a layout, so every
+ * navigation unmounts the whole rail and mounts a new one — and a fresh DOM
+ * node starts at `scrollTop: 0`. Parking the offset in module scope lets the
+ * next instance pick up exactly where the last one left off. A module variable
+ * rather than storage: this is a within-session convenience, and a reload
+ * legitimately starts the rail at the top.
+ */
+let railScrollTop = 0
 
 /* ------------------------------------------------------------------ *
  * Tooltip shown only while collapsed (§5.10)
@@ -86,6 +81,11 @@ function CollapsedLabel({
   label: string
   anchorRef: React.RefObject<HTMLElement | null>
 }) {
+  // The rail sits on the reading-start edge, so the tooltip has to open away
+  // from it — right of the rail in English, left of it in Arabic. This is the
+  // one piece of sidebar geometry a logical property cannot express, because
+  // the position is computed in JS rather than declared in CSS.
+  const rtl = useDir() === "rtl"
   const [pos, setPos] = React.useState<{ top: number; left: number } | null>(
     null
   )
@@ -96,7 +96,10 @@ function CollapsedLabel({
 
     const show = () => {
       const r = el.getBoundingClientRect()
-      setPos({ top: r.top + r.height / 2, left: r.right + 8 })
+      setPos({
+        top: r.top + r.height / 2,
+        left: rtl ? r.left - 8 : r.right + 8,
+      })
     }
     const hide = () => setPos(null)
 
@@ -110,7 +113,7 @@ function CollapsedLabel({
       el.removeEventListener("focusin", show)
       el.removeEventListener("focusout", hide)
     }
-  }, [anchorRef])
+  }, [anchorRef, rtl])
 
   if (!pos) return null
 
@@ -118,7 +121,12 @@ function CollapsedLabel({
     <span
       role="tooltip"
       style={{ top: pos.top, left: pos.left }}
-      className="pointer-events-none fixed z-[60] -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text shadow-[0_12px_32px_rgba(0,0,0,0.10),0_1px_3px_rgba(0,0,0,0.06)]"
+      className={cn(
+        "pointer-events-none fixed z-[60] -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-surface-elevated px-2 py-1 text-xs font-medium text-text shadow-[0_12px_32px_rgba(0,0,0,0.10),0_1px_3px_rgba(0,0,0,0.06)]",
+        // `left` is the anchor's *outer* edge in RTL, so the box has to hang
+        // back from it rather than forward.
+        rtl && "-translate-x-full"
+      )}
     >
       {label}
     </span>,
@@ -141,7 +149,9 @@ function NavLeaf({
   collapsed: boolean
   chip: ControlSurface
 }) {
+  const t = useT()
   const Icon = item.icon
+  const label = t(item.labelKey)
   const ref = React.useRef<HTMLAnchorElement>(null)
 
   return (
@@ -169,18 +179,8 @@ function NavLeaf({
         )}
         strokeWidth={1.5}
       />
-      {!collapsed && (
-        <>
-          <span className="truncate">{item.label}</span>
-          {item.count !== undefined && (
-            <NavCount
-              value={item.count}
-              muted={active ? chip.muted : undefined}
-            />
-          )}
-        </>
-      )}
-      {collapsed && <CollapsedLabel label={item.label} anchorRef={ref} />}
+      {!collapsed && <span className="truncate">{label}</span>}
+      {collapsed && <CollapsedLabel label={label} anchorRef={ref} />}
     </Link>
   )
 }
@@ -200,6 +200,7 @@ function NavGroup({
   collapsed: boolean
   chip: ControlSurface
 }) {
+  const t = useT()
   const childActive = item.children?.some((c) => c.href === pathname) ?? false
   const Icon = item.icon
 
@@ -233,10 +234,10 @@ function NavGroup({
           className="size-4 shrink-0 text-text-muted transition-colors group-hover/item:text-text"
           strokeWidth={1.5}
         />
-        <span className="truncate">{item.label}</span>
+        <span className="truncate">{t(item.labelKey)}</span>
         <ChevronDown
           className={cn(
-            "ml-auto size-3.5 shrink-0 text-text-muted transition-transform duration-150",
+            "ms-auto size-3.5 shrink-0 text-text-muted transition-transform duration-150",
             open && "rotate-180"
           )}
           strokeWidth={1.5}
@@ -254,15 +255,16 @@ function NavGroup({
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   // Child text aligns under the parent's text, not its icon (§5.7).
-                  "flex h-8 items-center rounded-md pl-[38px] pr-2.5 text-sm transition-colors duration-120",
+                  // Logical padding, so the indent moves to the right edge
+                  // under RTL instead of stranding the labels mid-rail.
+                  "flex h-8 items-center rounded-md ps-[38px] pe-2.5 text-sm transition-colors duration-120",
                   "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
                   active
                     ? "bg-[rgba(0,0,0,0.05)] font-medium text-text dark:bg-[rgba(255,255,255,0.06)]"
                     : "font-normal text-text-secondary hover:bg-[rgba(0,0,0,0.04)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.045)]"
                 )}
               >
-                <span className="truncate">{child.label}</span>
-                {child.count !== undefined && <NavCount value={child.count} />}
+                <span className="truncate">{t(child.labelKey)}</span>
               </Link>
             )
           })}
@@ -280,23 +282,28 @@ function SectionHeader({
   label,
   open,
   onToggle,
+  t,
 }: {
+  /** Already translated — the section list holds a key, not a word. */
   label: string
   open: boolean
   onToggle: () => void
+  t: Translator
 }) {
   return (
-    <div className="group/section flex h-7 items-center gap-1 pl-2.5 pr-1.5">
+    <div className="group/section flex h-7 items-center gap-1 ps-2.5 pe-1.5">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex min-w-0 flex-1 items-center gap-1 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-w-0 flex-1 items-center gap-1 rounded text-start outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ChevronDown
           className={cn(
             "size-3 shrink-0 text-text-muted transition-transform duration-150",
-            !open && "-rotate-90"
+            // Closed, it points *into* the section — which is rightwards in
+            // English and leftwards in Arabic.
+            !open && "-rotate-90 rtl:rotate-90"
           )}
           strokeWidth={2}
         />
@@ -306,10 +313,10 @@ function SectionHeader({
       </button>
 
       <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/section:opacity-100 focus-within:opacity-100">
-        <IconButton label={`${label} options`}>
+        <IconButton label={t("sidebar.sectionOptions", { section: label })}>
           <MoreHorizontal className="size-3.5" strokeWidth={1.5} />
         </IconButton>
-        <IconButton label={`Add to ${label}`}>
+        <IconButton label={t("sidebar.addToSection", { section: label })}>
           <Plus className="size-3.5" strokeWidth={1.5} />
         </IconButton>
       </div>
@@ -362,6 +369,8 @@ function WorkspaceSwitcher({
   collapsed: boolean
   onToggleCollapse: () => void
 }) {
+  const t = useT()
+
   // Collapsed: the 56px header holds the expand control alone, rendered as a
   // bordered chip so it reads as a control at rest. Hiding it behind a
   // hover-swap on the logo left no discoverable way back out of the rail, and
@@ -372,9 +381,9 @@ function WorkspaceSwitcher({
         <button
           type="button"
           onClick={onToggleCollapse}
-          aria-label="Expand sidebar"
+          aria-label={t("sidebar.expand")}
           aria-expanded={false}
-          title="Expand sidebar"
+          title={t("sidebar.expand")}
           className={cn(
             "flex size-nav-item items-center justify-center rounded-md",
             "bg-surface text-text-secondary shadow-[0_1px_2px_rgba(0,0,0,0.05)] ring-1 ring-border",
@@ -385,7 +394,7 @@ function WorkspaceSwitcher({
             "outline-none focus-visible:ring-2 focus-visible:ring-ring"
           )}
         >
-          <PanelLeft aria-hidden className="size-4" strokeWidth={1.5} />
+          <PanelLeft data-flip-rtl aria-hidden className="size-4" strokeWidth={1.5} />
         </button>
       </div>
     )
@@ -400,19 +409,21 @@ function WorkspaceSwitcher({
           "transition-colors duration-120 hover:bg-[rgba(0,0,0,0.04)] dark:hover:bg-[rgba(255,255,255,0.045)]",
           "outline-none focus-visible:ring-2 focus-visible:ring-ring"
         )}
-        aria-label="Switch organization"
+        aria-label={t("sidebar.switchOrganization")}
       >
         {/* 20px identity mark (§5.2) — inherits the theme via currentColor */}
         <BajatMark className="size-5 text-text" />
-        <span className="truncate text-sm font-semibold text-text">Bajat</span>
+        <span className="truncate text-sm font-semibold text-text">
+          {t("app.name")}
+        </span>
         <ChevronDown
           className="size-3.5 shrink-0 text-text-muted"
           strokeWidth={1.5}
         />
       </button>
 
-      <IconButton label="Collapse sidebar" onClick={onToggleCollapse}>
-        <PanelLeft className="size-4" strokeWidth={1.5} />
+      <IconButton label={t("sidebar.collapse")} onClick={onToggleCollapse}>
+        <PanelLeft data-flip-rtl className="size-4" strokeWidth={1.5} />
       </IconButton>
     </div>
   )
@@ -423,10 +434,12 @@ function WorkspaceSwitcher({
  * ------------------------------------------------------------------ */
 
 function SidebarSearch({ collapsed }: { collapsed: boolean }) {
+  const t = useT()
+
   if (collapsed) {
     return (
       <div className="flex justify-center px-2 pb-2">
-        <IconButton label="Search" className="size-nav-item">
+        <IconButton label={t("common.search")} className="size-nav-item">
           <Search className="size-4" strokeWidth={1.5} />
         </IconButton>
       </div>
@@ -439,7 +452,7 @@ function SidebarSearch({ collapsed }: { collapsed: boolean }) {
         type="button"
         className={cn(
           "flex h-8 w-full items-center gap-2 rounded-md bg-surface-sunken px-2.5",
-          "text-left transition-colors duration-120",
+          "text-start transition-colors duration-120",
           "hover:bg-[rgba(0,0,0,0.055)] dark:bg-surface-sunken dark:hover:bg-[rgba(255,255,255,0.06)]",
           "outline-none focus-visible:ring-2 focus-visible:ring-ring"
         )}
@@ -449,7 +462,7 @@ function SidebarSearch({ collapsed }: { collapsed: boolean }) {
           strokeWidth={1.5}
         />
         <span className="flex-1 truncate text-sm text-text-placeholder">
-          Search
+          {t("common.search")}
         </span>
         <kbd className="shrink-0 font-mono text-[11px] tracking-[0.02em] text-text-placeholder">
           ⌘K
@@ -463,33 +476,24 @@ function SidebarSearch({ collapsed }: { collapsed: boolean }) {
  * Zone 5 — footer profile row, 52px (§5.9)
  * ------------------------------------------------------------------ */
 
+/**
+ * Who is signed in. **Not a control.**
+ *
+ * It used to be the sign-out button — the whole 52px row, with nothing on it
+ * saying so. Two things were wrong with that: the only way to leave was to
+ * click something that looks like an account switcher, and every stray click
+ * near the bottom of the rail ended the session. Signing out now has its own
+ * button below (`SignOutButton`), so this is a plain label: no hover face, no
+ * chevron promising a menu that does not exist.
+ */
 function ProfileRow({ collapsed }: { collapsed: boolean }) {
-  const router = useRouter()
+  const t = useT()
   const user = useAuthStore((s) => s.user)
-  const logout = useAuthStore((s) => s.logout)
-  const logoutMutation = useLogout()
-
-  // No account menu yet, so the row doubles as sign-out. The local logout runs
-  // either way: a failed server call must never trap someone in a signed-in
-  // shell (docs/authentication.md §7).
-  const onClick = () => {
-    const finish = () => {
-      logout()
-      router.push("/login")
-    }
-    logoutMutation.mutate(undefined, { onSuccess: finish, onError: finish })
-  }
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title="Sign out"
-      aria-label="Account menu"
+    <div
       className={cn(
-        "group/profile flex h-[52px] w-full items-center gap-2.5 rounded-md px-2.5",
-        "transition-colors duration-120 hover:bg-[rgba(0,0,0,0.04)] dark:hover:bg-[rgba(255,255,255,0.045)]",
-        "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "flex h-[52px] w-full items-center gap-2.5 rounded-md px-2.5",
         collapsed && "justify-center px-0"
       )}
     >
@@ -501,21 +505,74 @@ function ProfileRow({ collapsed }: { collapsed: boolean }) {
         }}
       />
       {!collapsed && (
-        <>
-          <span className="flex min-w-0 flex-1 flex-col items-start">
-            <span className="w-full truncate text-[13px] font-medium leading-tight text-text">
-              {user?.name ?? "Signed in"}
-            </span>
-            <span className="w-full truncate text-[11px] leading-tight text-text-muted">
-              {user?.email ?? user?.phone ?? ""}
-            </span>
+        <span className="flex min-w-0 flex-1 flex-col items-start">
+          <span className="w-full truncate text-[13px] font-medium leading-tight text-text">
+            {user?.name ?? t("sidebar.signedIn")}
           </span>
-          <ChevronsUpDown
-            className="size-3.5 shrink-0 text-text-muted"
-            strokeWidth={1.5}
-          />
-        </>
+          <span className="w-full truncate text-[11px] leading-tight text-text-muted">
+            {user?.email ?? user?.phone ?? ""}
+          </span>
+        </span>
       )}
+    </div>
+  )
+}
+
+/**
+ * Sign out — the destructive outline button of §7.2, at nav-item height.
+ *
+ * Red and labelled, because leaving is the one action in the rail that cannot
+ * be undone by clicking somewhere else. It reads as danger without shouting:
+ * an outline, not a solid red fill, so a permanently visible control does not
+ * dominate a footer it is used from once a day.
+ *
+ * The local logout runs whether or not the server call succeeds — a failed
+ * request must never trap someone inside a signed-in shell
+ * (docs/authentication.md §7).
+ */
+function SignOutButton({ collapsed }: { collapsed: boolean }) {
+  const t = useT()
+  // The locale-aware router: `/login` is not a route, `/en/login` is.
+  const router = useLocaleRouter()
+  const logout = useAuthStore((s) => s.logout)
+  const logoutMutation = useLogout()
+  const pending = logoutMutation.isPending
+
+  const signOut = () => {
+    if (pending) return
+    const finish = () => {
+      logout()
+      router.push("/login")
+    }
+    logoutMutation.mutate(undefined, { onSuccess: finish, onError: finish })
+  }
+
+  const Icon = pending ? Loader2 : LogOut
+
+  return (
+    <button
+      type="button"
+      onClick={signOut}
+      disabled={pending}
+      title={t("auth.signOut")}
+      aria-label={t("auth.signOut")}
+      aria-busy={pending}
+      className={cn(
+        "inline-flex h-nav-item items-center justify-center gap-2 rounded-md",
+        "border border-danger/25 text-[13px] font-medium text-danger",
+        "transition-colors duration-120 hover:bg-danger-bg hover:border-danger/40",
+        "outline-none focus-visible:ring-2 focus-visible:ring-danger/40",
+        "disabled:cursor-not-allowed disabled:opacity-70",
+        // Collapsed the label goes, but the rim and the colour stay: a bare
+        // red glyph would be indistinguishable from a status dot.
+        collapsed ? "mx-auto w-nav-item" : "w-full"
+      )}
+    >
+      <Icon
+        className={cn("size-4 shrink-0", pending && "animate-spin")}
+        strokeWidth={1.5}
+      />
+      {!collapsed && (pending ? t("auth.signingOut") : t("auth.signOut"))}
     </button>
   )
 }
@@ -524,6 +581,20 @@ function ProfileRow({ collapsed }: { collapsed: boolean }) {
  * Sidebar body — shared by the fixed rail and the mobile drawer
  * ------------------------------------------------------------------ */
 
+/**
+ * ### The rail deliberately does not move on navigation
+ *
+ * An earlier pass scrolled zone 4 to bring the active item into view on every
+ * route change. That lurched the rail under the cursor on every click, moving
+ * the item you had just aimed at out from under you — so nothing here scrolls
+ * the rail *to* anywhere. Where it sits is the user's business.
+ *
+ * Holding still, though, takes work: the shell is mounted per page, so each
+ * navigation hands zone 4 a brand-new DOM node scrolled to the top. The ref
+ * callback below writes the remembered offset back during commit — before
+ * paint, so the restored position is the first one drawn, never a jump.
+ */
+
 function SidebarBody({
   collapsed,
   onToggleCollapse,
@@ -531,9 +602,14 @@ function SidebarBody({
   collapsed: boolean
   onToggleCollapse: () => void
 }) {
-  const pathname = usePathname()
+  const t = useT()
+  // Bare of the `/en` prefix, because that is what the nav hrefs are written
+  // as. Comparing against the raw pathname would leave every item inactive.
+  const pathname = useLocalePathname()
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>(
-    () => Object.fromEntries(navSections.map((s) => [s.label ?? "", true]))
+    // Keyed by the *key*, not the label: a translated label would re-key every
+    // section the moment the language changed, collapsing them all.
+    () => Object.fromEntries(navSections.map((s) => [s.labelKey ?? "", true]))
   )
   // TEMPORARY — the active-chip treatment, shared with the toolbar's filter
   // buttons so both switch together. Chosen from Settings → Appearance.
@@ -542,6 +618,13 @@ function SidebarBody({
 
   const toggleSection = (key: string) =>
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }))
+
+  // Stable, so it runs once per mount rather than on every render. Children
+  // are already attached by the time a parent's ref fires, so the element has
+  // its full scroll height and the offset lands rather than clamping to 0.
+  const restoreRailScroll = React.useCallback((el: HTMLElement | null) => {
+    if (el) el.scrollTop = railScrollTop
+  }, [])
 
   const renderItem = (item: NavItem) =>
     item.children?.length ? (
@@ -581,7 +664,7 @@ function SidebarBody({
             "flex flex-col gap-0.5",
             collapsed ? "px-2" : "px-3"
           )}
-          aria-label="Primary"
+          aria-label={t("sidebar.primaryNav")}
         >
           {primaryNav.map(renderItem)}
         </nav>
@@ -594,6 +677,10 @@ function SidebarBody({
 
       {/* Zone 4 — sectioned nav, scrollable */}
       <nav
+        ref={restoreRailScroll}
+        onScroll={(e) => {
+          railScrollTop = e.currentTarget.scrollTop
+        }}
         className={cn(
           "min-h-0 flex-1 overflow-y-auto pb-2 scrollbar-quiet",
           // A vertical scroll container cannot also be overflow-x:visible —
@@ -601,23 +688,24 @@ function SidebarBody({
           // exceed the rail width. Tooltips are portalled out instead.
           collapsed ? "overflow-x-hidden px-2" : "px-3"
         )}
-        aria-label="Sections"
+        aria-label={t("sidebar.sectionsNav")}
       >
         {navSections.map((section: NavSection) => {
-          const key = section.label ?? ""
+          const key = section.labelKey ?? ""
           const open = openSections[key] ?? true
 
           return (
             <div key={key} className="mb-3 last:mb-0">
-              {section.label && !collapsed && (
+              {section.labelKey && !collapsed && (
                 <SectionHeader
-                  label={section.label}
+                  label={t(section.labelKey)}
                   open={open}
                   onToggle={() => toggleSection(key)}
+                  t={t}
                 />
               )}
               {/* Collapsed rails drop section labels and show a divider (§5.10) */}
-              {section.label && collapsed && (
+              {section.labelKey && collapsed && (
                 <div className="mx-auto mb-2 h-px w-6 bg-border" />
               )}
               {(open || collapsed) && (
@@ -637,6 +725,7 @@ function SidebarBody({
           {footerNav.map(renderItem)}
 
           <ProfileRow collapsed={collapsed} />
+          <SignOutButton collapsed={collapsed} />
         </div>
       </div>
     </div>
@@ -648,8 +737,10 @@ function SidebarBody({
  * ------------------------------------------------------------------ */
 
 export function Sidebar() {
+  const t = useT()
+  const rtl = useDir() === "rtl"
   const { collapsed, setCollapsed, drawerOpen, setDrawerOpen } = useShell()
-  const pathname = usePathname()
+  const pathname = useLocalePathname()
 
   // Close the drawer on navigation (§18.2). Adjusting during render — rather
   // than in an effect — avoids a frame where the drawer lingers over the new
@@ -700,13 +791,20 @@ export function Sidebar() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Navigation"
-            className="absolute inset-y-0 left-0 w-[280px] shadow-[0_24px_64px_rgba(0,0,0,0.16)] animate-in slide-in-from-left duration-200"
+            aria-label={t("sidebar.navigation")}
+            className={cn(
+              "absolute inset-y-0 w-[280px] shadow-[0_24px_64px_rgba(0,0,0,0.16)] animate-in duration-200",
+              // The drawer belongs on the reading-start edge, and has to fly
+              // in from the edge it lives on. `start-0` handles the resting
+              // position; the slide has no logical form, so it is branched.
+              "start-0",
+              rtl ? "slide-in-from-right" : "slide-in-from-left"
+            )}
           >
             <IconButton
-              label="Close navigation"
+              label={t("sidebar.closeNavigation")}
               onClick={() => setDrawerOpen(false)}
-              className="absolute right-2 top-4 z-10"
+              className="absolute end-2 top-4 z-10"
             >
               <X className="size-4" strokeWidth={1.5} />
             </IconButton>
@@ -730,16 +828,17 @@ export function Sidebar() {
  * viewports.
  */
 export function SidebarTrigger({ className }: { className?: string }) {
+  const t = useT()
   const { setDrawerOpen } = useShell()
 
   return (
     <button
       type="button"
       onClick={() => setDrawerOpen(true)}
-      aria-label="Open navigation"
+      aria-label={t("sidebar.openNavigation")}
       className={cn(
         // 44px touch target below lg, per §18.7.
-        "-ml-2 inline-flex size-11 shrink-0 items-center justify-center rounded-md lg:hidden",
+        "-ms-2 inline-flex size-11 shrink-0 items-center justify-center rounded-md lg:hidden",
         "text-text-muted transition-colors duration-120",
         "hover:bg-[rgba(0,0,0,0.06)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.07)]",
         "outline-none focus-visible:ring-2 focus-visible:ring-ring",

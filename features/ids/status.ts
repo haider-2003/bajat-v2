@@ -1,3 +1,4 @@
+import type { TranslationKey, Translator } from "@/i18n/translate"
 import { formatText } from "@/utils/format"
 
 import { statusId, type StatusName } from "./types"
@@ -16,21 +17,31 @@ import { statusId, type StatusName } from "./types"
  */
 export const STATUS_META: Record<
   StatusName,
-  { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" | "accent" }
+  {
+    /**
+     * A dictionary key, not a label. A module constant is evaluated once per
+     * process, so a literal here would be fixed to whichever language happened
+     * to render first and then shown to everyone. Resolve it with `t()`, or
+     * use `statusMeta()` below, which does that and also survives a status the
+     * backend has invented since this list was written.
+     */
+    labelKey: TranslationKey
+    tone: "neutral" | "info" | "success" | "warning" | "danger" | "accent"
+  }
 > = {
-  PENDING: { label: "Pending", tone: "neutral" },
-  PAID: { label: "Paid", tone: "info" },
-  APPROVED: { label: "Approved", tone: "info" },
-  REJECTED: { label: "Rejected", tone: "danger" },
+  PENDING: { labelKey: "status.ids.pending", tone: "neutral" },
+  PAID: { labelKey: "status.ids.paid", tone: "info" },
+  APPROVED: { labelKey: "status.ids.approved", tone: "info" },
+  REJECTED: { labelKey: "status.ids.rejected", tone: "danger" },
   // Warning, not neutral: this is the queue's *inbox*. A card sitting here is
   // work nobody has started, which is the one state the printer screen exists
   // to make visible.
-  WAITING_TO_PRINT: { label: "Waiting to print", tone: "warning" },
-  PRINTING: { label: "Printing", tone: "accent" },
-  PRINTED: { label: "Printed", tone: "success" },
-  DELIVERY_IN_PROGRESS: { label: "Out for delivery", tone: "info" },
-  DELIVERED: { label: "Delivered", tone: "success" },
-  RETURNED: { label: "Returned", tone: "danger" },
+  WAITING_TO_PRINT: { labelKey: "status.ids.waitingToPrint", tone: "warning" },
+  PRINTING: { labelKey: "status.ids.printing", tone: "accent" },
+  PRINTED: { labelKey: "status.ids.printed", tone: "success" },
+  DELIVERY_IN_PROGRESS: { labelKey: "status.ids.outForDelivery", tone: "info" },
+  DELIVERED: { labelKey: "status.ids.delivered", tone: "success" },
+  RETURNED: { labelKey: "status.ids.returned", tone: "danger" },
 }
 
 /**
@@ -41,10 +52,16 @@ export const STATUS_META: Record<
  * `meta.tone`. `WAITING_TO_PRINT` becomes "Waiting to print" on the way
  * through, so even the fallback reads like a label.
  */
-export function statusMeta(status: StatusName | string | null | undefined) {
+export function statusMeta(
+  t: Translator,
+  status: StatusName | string | null | undefined
+) {
   if (status && status in STATUS_META) {
-    return STATUS_META[status as StatusName]
+    const meta = STATUS_META[status as StatusName]
+    return { label: t(meta.labelKey), tone: meta.tone }
   }
+  // An untranslated status is still better than a blank badge: the raw name,
+  // de-shouted, is at least the thing the backend called it.
   return {
     label: formatText(
       typeof status === "string" ? status.toLowerCase().replace(/_/g, " ") : null
@@ -80,12 +97,12 @@ export const PRINT_QUEUE_IDS = PRINT_QUEUE_STATUSES.map(statusId)
  */
 export function nextPrintStep(
   status: StatusName | string | null | undefined
-): { status: StatusName; label: string } | null {
+): { status: StatusName; labelKey: TranslationKey } | null {
   if (status === "WAITING_TO_PRINT") {
-    return { status: "PRINTING", label: "Mark as printing" }
+    return { status: "PRINTING", labelKey: "printer.markAsPrinting" }
   }
   if (status === "PRINTING") {
-    return { status: "PRINTED", label: "Mark as printed" }
+    return { status: "PRINTED", labelKey: "printer.markAsPrinted" }
   }
   return null
 }

@@ -3,6 +3,7 @@
 import * as React from "react"
 import QRCode from "qrcode"
 
+import { useT } from "@/i18n/context"
 import { cn } from "@/lib/utils"
 
 /**
@@ -52,6 +53,7 @@ export function QrCell({
    */
   className?: string
 }) {
+  const t = useT()
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
 
   React.useEffect(() => {
@@ -96,8 +98,8 @@ export function QrCell({
     <button
       type="button"
       onClick={download}
-      title="Click to download"
-      aria-label={`Download QR code for ${value}`}
+      title={t("table.qrDownloadHint")}
+      aria-label={t("table.qrDownloadLabel", { value })}
       className={cn(
         "block rounded-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
         className

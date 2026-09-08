@@ -1,7 +1,10 @@
+"use client"
+
 import { CalendarDays } from "lucide-react"
 
 import { EmptyCell } from "@/components/ui/data-bits"
-import { formatDate, formatPhone, formatText } from "@/utils/format"
+import { useFormatDate } from "@/i18n/format"
+import { formatPhone, formatText } from "@/utils/format"
 import { cn } from "@/lib/utils"
 
 /**
@@ -100,6 +103,8 @@ export function DateCell({
     label: string
   }
 }) {
+  const formatDate = useFormatDate()
+
   if (!value && empty) return <EmptyCell icon={empty.icon} label={empty.label} />
 
   return (

@@ -1,5 +1,8 @@
+"use client"
+
 import * as React from "react"
 
+import { useT } from "@/i18n/context"
 import { cn } from "@/lib/utils"
 
 /**
@@ -51,6 +54,7 @@ function Field({
   error?: React.ReactNode
   children: (control: FieldControlProps) => React.ReactNode
 }) {
+  const t = useT()
   const id = React.useId()
   const messageId = `${id}-message`
   const message = error ?? helper
@@ -64,7 +68,7 @@ function Field({
         {label}
         {optional && (
           <span className="ms-1.5 font-normal text-text-placeholder">
-            Optional
+            {t("common.optional")}
           </span>
         )}
       </label>

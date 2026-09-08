@@ -7,6 +7,7 @@ import type { Features } from "@/lib/table-features"
 import { Check, Eye, GripVertical, RotateCcw, Settings2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { useT } from "@/i18n/context"
 import { cn } from "@/lib/utils"
 
 /**
@@ -39,6 +40,7 @@ export function ViewMenu<TData extends RowData>({
   pinned = [],
   align = "end",
 }: ViewMenuProps<TData>) {
+  const t = useT()
   const [open, setOpen] = React.useState(false)
   const [dragId, setDragId] = React.useState<string | null>(null)
   const [overId, setOverId] = React.useState<string | null>(null)
@@ -91,7 +93,7 @@ export function ViewMenu<TData extends RowData>({
         onClick={() => setOpen((v) => !v)}
       >
         <Settings2 className="size-4" strokeWidth={1.5} />
-        <span className="hidden sm:inline">View</span>
+        <span className="hidden sm:inline">{t("table.view")}</span>
         {hiddenCount > 0 && (
           <span className="text-text-muted">({movable.length - hiddenCount})</span>
         )}
@@ -100,18 +102,18 @@ export function ViewMenu<TData extends RowData>({
       {open && (
         <div
           role="dialog"
-          aria-label="Column view options"
+          aria-label={t("table.columnOptions")}
           className={cn(
             "absolute z-50 mt-1.5 w-60 rounded-lg border border-border bg-surface-elevated p-1.5",
             "shadow-[0_12px_32px_rgba(0,0,0,0.10),0_1px_3px_rgba(0,0,0,0.06)]",
             "dark:shadow-[0_12px_32px_rgba(0,0,0,0.50)]",
-            align === "end" ? "right-0" : "left-0"
+            align === "end" ? "end-0" : "start-0"
           )}
         >
           {/* Group label — 11px/600 uppercase muted (§12.4) */}
           <div className="flex h-7 items-center justify-between px-2.5">
             <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted">
-              Columns
+              {t("table.columns")}
             </span>
             <button
               type="button"
@@ -126,7 +128,7 @@ export function ViewMenu<TData extends RowData>({
               )}
             >
               <RotateCcw className="size-3" strokeWidth={1.5} />
-              Reset
+              {t("common.reset")}
             </button>
           </div>
 
@@ -164,7 +166,7 @@ export function ViewMenu<TData extends RowData>({
                     setOverId(null)
                   }}
                   className={cn(
-                    "group/col flex h-8 items-center gap-1 rounded-md pl-1 pr-2.5",
+                    "group/col flex h-8 items-center gap-1 rounded-md ps-1 pe-2.5",
                     "transition-colors duration-120",
                     "hover:bg-[rgba(0,0,0,0.045)] dark:hover:bg-[rgba(255,255,255,0.07)]",
                     isDragging && "opacity-40",
@@ -185,7 +187,7 @@ export function ViewMenu<TData extends RowData>({
                     onClick={() => col.toggleVisibility(!visible)}
                     aria-pressed={visible}
                     className={cn(
-                      "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xs text-left",
+                      "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xs text-start",
                       "text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       visible ? "text-text" : "text-text-placeholder"
                     )}
@@ -210,7 +212,10 @@ export function ViewMenu<TData extends RowData>({
           {/* Footer row (§12.6) */}
           <div className="flex items-center justify-between px-2.5 py-1">
             <span className="text-[11px] text-text-muted">
-              {movable.length - hiddenCount} of {movable.length} shown
+              {t("table.columnsShown", {
+                shown: movable.length - hiddenCount,
+                total: movable.length,
+              })}
             </span>
             <button
               type="button"
@@ -224,7 +229,7 @@ export function ViewMenu<TData extends RowData>({
               )}
             >
               <Eye className="size-3" strokeWidth={1.5} />
-              {hiddenCount > 0 ? "Show all" : "Hide all"}
+              {hiddenCount > 0 ? t("table.showAll") : t("table.hideAll")}
             </button>
           </div>
         </div>

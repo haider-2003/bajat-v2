@@ -4,6 +4,7 @@ import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { X } from "lucide-react"
 
+import { useT } from "@/i18n/context"
 import { cn } from "@/lib/utils"
 
 /**
@@ -215,10 +216,12 @@ function DialogCloseButton({
   className,
   ...props
 }: DialogPrimitive.Close.Props) {
+  const t = useT()
+
   return (
     <DialogPrimitive.Close
       data-slot="dialog-close"
-      aria-label="Close"
+      aria-label={t("common.close")}
       className={cn(
         "absolute inline-flex items-center justify-center rounded-md",
         // §18.0.3 — a 44px touch target below lg, the §13.3 28px square above

@@ -40,10 +40,19 @@ export const useAuthStore = create<AuthState>()(
       },
 
       /**
-       * `can("members-list")` matches either `admin-members-list` or
-       * `organization-members-list`. Pass `prefixed: true` to match an exact
-       * name instead. Never throws; returns false for a signed-out or
-       * role-less user.
+       * `can("members-list")` matches `admin-members-list`,
+       * `organization-members-list` **or** `branch-members-list`. Pass
+       * `prefixed: true` to match an exact name instead. Never throws; returns
+       * false for a signed-out or role-less user.
+       *
+       * ### Why all three scopes, not two
+       *
+       * The unprefixed form used to try only `admin-` and `organization-`
+       * (docs/CRUD-MIGRATION-REFERENCE.md §4.6), which made every gate a
+       * branch user hit fail closed: their permissions are all named
+       * `branch-*`, so a branch clerk with `branch-create-branch-user` saw no
+       * Add button on the screen that grant exists for. `branch-` is included
+       * here so a role's own scope is what decides, not the caller's spelling.
        */
       can: (permission, prefixed = false) => {
         const state = get()
@@ -55,7 +64,8 @@ export const useAuthStore = create<AuthState>()(
             if (!prefixed) {
               return (
                 perm.name === `admin-${permission}` ||
-                perm.name === `organization-${permission}`
+                perm.name === `organization-${permission}` ||
+                perm.name === `branch-${permission}`
               )
             }
             return perm.name === permission

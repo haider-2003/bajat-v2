@@ -117,7 +117,7 @@ function InputGroupAddon({ className, ...props }: React.ComponentProps<"span">) 
     <span
       data-slot="input-group-addon"
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 border-r border-input px-3",
+        "inline-flex shrink-0 items-center gap-1.5 border-e border-input px-3",
         "bg-background-subtle text-sm text-text-secondary",
         "dark:bg-[#141414]",
         className

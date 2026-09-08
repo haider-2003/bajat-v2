@@ -15,6 +15,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
+import { useT } from "@/i18n/context"
+
 import { FilterButton } from "./filter-button"
 
 /**
@@ -53,6 +55,7 @@ export function FilterSheet({
   className?: string
   children: React.ReactNode
 }) {
+  const t = useT()
   const [open, setOpen] = React.useState(false)
 
   return (
@@ -61,7 +64,7 @@ export function FilterSheet({
         render={
           <FilterButton
             icon={SlidersHorizontal}
-            label="Filters"
+            label={t("filters.title")}
             // §6.6's two-tone label doing real work: the attribute stays muted
             // and the count reads at full contrast, so a glance at a collapsed
             // toolbar still says whether anything is filtering the list.
@@ -75,7 +78,7 @@ export function FilterSheet({
         <DialogCloseButton />
 
         <DialogHeader>
-          <DialogTitle>Filters</DialogTitle>
+          <DialogTitle>{t("filters.title")}</DialogTitle>
         </DialogHeader>
 
         <DialogBody>
@@ -94,7 +97,7 @@ export function FilterSheet({
               className="h-11 md:h-9"
               onClick={onClear}
             >
-              Clear all
+              {t("common.clearAll")}
             </Button>
           )}
           <DialogClose
@@ -104,7 +107,7 @@ export function FilterSheet({
                 type="button"
                 className="ms-auto h-11 md:h-9"
               >
-                Done
+                {t("common.done")}
               </Button>
             }
           />

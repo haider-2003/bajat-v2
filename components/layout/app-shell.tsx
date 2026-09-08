@@ -20,7 +20,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <ShellProvider>
         <div className="flex h-svh overflow-hidden bg-background">
           <Sidebar />
-          <main className="min-w-0 flex-1 overflow-y-auto border-border bg-surface lg:border-l">
+          {/* `border-s`, not `border-l`: the seam belongs to the content
+              panel's *inner* edge, which swaps sides with the rail under RTL. */}
+          <main className="min-w-0 flex-1 overflow-y-auto border-border bg-surface lg:border-s">
             {children}
           </main>
         </div>

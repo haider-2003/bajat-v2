@@ -2,6 +2,8 @@
 
 import * as React from "react"
 
+import type { TranslationKey } from "@/i18n/translate"
+
 /**
  * Brand colour — DESIGN.md §2.1.
  *
@@ -184,9 +186,16 @@ export type TemplatePreview = {
 
 export type TemplateDef = {
   value: Template
-  label: string
+  /**
+   * Dictionary keys rather than words.
+   *
+   * This is a module constant, evaluated once per process, so a literal string
+   * here would freeze to whichever language rendered first and then serve that
+   * to everyone. `TemplatePicker` resolves both against the active locale.
+   */
+  labelKey: TranslationKey
   /** One line, shown under the card's label. */
-  description: string
+  descriptionKey: TranslationKey
   accent: Accent
   primary: PrimaryStyle
   preview: { light: TemplatePreview; dark: TemplatePreview }
@@ -221,8 +230,8 @@ export type TemplateDef = {
 export const TEMPLATES: readonly TemplateDef[] = [
   {
     value: "graphite",
-    label: "Graphite",
-    description: "The default. Neutral greys, black buttons, violet accent.",
+    labelKey: "settings.appearance.templates.graphite",
+    descriptionKey: "settings.appearance.templates.graphiteHint",
     accent: "violet",
     primary: "neutral",
     preview: {
@@ -246,8 +255,8 @@ export const TEMPLATES: readonly TemplateDef[] = [
   },
   {
     value: "clay",
-    label: "Clay",
-    description: "Warm paper and clay — cream page, orange buttons.",
+    labelKey: "settings.appearance.templates.clay",
+    descriptionKey: "settings.appearance.templates.clayHint",
     accent: "clay",
     primary: "accent",
     preview: {
@@ -271,8 +280,8 @@ export const TEMPLATES: readonly TemplateDef[] = [
   },
   {
     value: "ink",
-    label: "Ink",
-    description: "High contrast. Strong borders, white sidebar, slate text.",
+    labelKey: "settings.appearance.templates.ink",
+    descriptionKey: "settings.appearance.templates.inkHint",
     accent: "blue",
     primary: "neutral",
     preview: {
@@ -298,8 +307,8 @@ export const TEMPLATES: readonly TemplateDef[] = [
   },
   {
     value: "ledger",
-    label: "Ledger",
-    description: "Finance blue. Tinted neutrals, navy ink, indigo buttons.",
+    labelKey: "settings.appearance.templates.ledger",
+    descriptionKey: "settings.appearance.templates.ledgerHint",
     accent: "indigo",
     primary: "accent",
     preview: {

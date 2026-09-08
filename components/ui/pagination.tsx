@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
+import { useT } from "@/i18n/context"
 import { PAGE_SIZE_OPTIONS } from "@/utils/constants"
 import { cn } from "@/lib/utils"
 
@@ -55,6 +56,7 @@ export function Pagination({
   busy?: boolean
   className?: string
 }) {
+  const t = useT()
   const knowsTotal = typeof total === "number"
 
   // What the server actually pages by. Offsets and the full-page test both
@@ -81,34 +83,32 @@ export function Pagination({
     >
       <p
         className={cn(
-          "text-[13px] text-text-muted transition-opacity",
+          // `tabular-nums` moved from the individual numerals to the whole
+          // line: the counts now sit inside a translated sentence, and Arabic
+          // does not put them where English does - so the string cannot be
+          // assembled from spans around fixed positions.
+          "text-[13px] tabular-nums text-text-muted transition-opacity",
           busy && "opacity-60"
         )}
       >
-        {rowCount === 0 ? (
-          "No requests"
-        ) : (
-          <>
-            Showing <span className="tabular-nums">{first}</span>–
-            <span className="tabular-nums">{last}</span>
-            {knowsTotal && (
-              <>
-                {" "}
-                of <span className="tabular-nums">{total}</span>
-              </>
-            )}
-          </>
-        )}
+        {rowCount === 0
+          ? // Deliberately not a noun this component cannot know. It sits
+            // under members, requests, print jobs and a template gallery, and
+            // "No requests" was wrong under three of the four.
+            t("table.noResults")
+          : knowsTotal
+            ? t("table.showingOf", { first, last, total: total as number })
+            : t("table.showing", { first, last })}
       </p>
 
       <div className="flex items-center gap-3">
         <label className="flex items-center gap-2 text-[13px] text-text-muted">
-          <span className="hidden sm:inline">Rows</span>
+          <span className="hidden sm:inline">{t("table.rows")}</span>
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
             className={cn(
-              "h-7 rounded-md border border-border bg-surface pl-2 pr-6 text-[13px] text-text",
+              "h-7 rounded-md border border-border bg-surface ps-2 pe-6 text-[13px] text-text",
               "outline-none transition-colors hover:border-border-strong",
               "focus-visible:ring-2 focus-visible:ring-ring"
             )}
@@ -123,16 +123,18 @@ export function Pagination({
 
         <div className="flex items-center gap-0.5">
           <PageButton
-            label="Previous page"
+            label={t("table.previousPage")}
             icon={ChevronLeft}
             disabled={!canPrev}
             onClick={() => onPageChange(page - 1)}
           />
           <span className="px-1 text-[13px] tabular-nums text-text-secondary">
-            {lastPage !== undefined ? `${page} / ${lastPage}` : `Page ${page}`}
+            {lastPage !== undefined
+              ? t("table.pageOf", { page, lastPage })
+              : t("table.page", { page })}
           </span>
           <PageButton
-            label="Next page"
+            label={t("table.nextPage")}
             icon={ChevronRight}
             disabled={!canNext}
             onClick={() => onPageChange(page + 1)}
@@ -169,7 +171,9 @@ function PageButton({
         "disabled:pointer-events-none disabled:text-text-placeholder"
       )}
     >
-      <Icon className="size-4" strokeWidth={1.5} />
+      {/* Back and forward point along the reading direction, so unlike most
+          glyphs these two have to turn around under RTL. */}
+      <Icon data-flip-rtl className="size-4" strokeWidth={1.5} />
     </button>
   )
 }

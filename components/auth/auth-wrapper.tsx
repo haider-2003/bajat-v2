@@ -1,9 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter } from "next/navigation"
 
 import { useAuthStore } from "@/features/auth/store"
+import { useLocalePathname, useLocaleRouter } from "@/i18n/navigation"
 
 /**
  * Client-side route guard. See docs/authentication.md §5.
@@ -13,7 +13,13 @@ import { useAuthStore } from "@/features/auth/store"
  * /login.
  */
 
-/** Public paths. `[id]` marks a dynamic segment and matches any single value. */
+/**
+ * Public paths. `[id]` marks a dynamic segment and matches any single value.
+ *
+ * Written **without** the locale prefix, and matched against a stripped
+ * pathname. Listing `/en/login` and `/ar/login` separately would mean every
+ * new language silently un-publishes the sign-in screen.
+ */
 const PUBLIC_ROUTES = ["/login", "/ids-templates-forms/[id]"]
 
 function isPublicRoute(pathname: string): boolean {
@@ -27,8 +33,8 @@ function isPublicRoute(pathname: string): boolean {
 export function AuthWrapper({ children }: { children: React.ReactNode }) {
   const isAuthed = useAuthStore((s) => s.isAuthed)
   const token = useAuthStore((s) => s.token)
-  const router = useRouter()
-  const pathname = usePathname()
+  const router = useLocaleRouter()
+  const pathname = useLocalePathname()
 
   // The persisted store is empty on the first paint, so an un-gated check
   // would bounce an authenticated user straight back to /login. Waiting on
