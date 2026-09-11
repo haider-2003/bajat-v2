@@ -1020,6 +1020,38 @@
   }
 }
 
+/* ============================================================
+   404 illustration motion — components/brand/id-card-flip.tsx
+
+   Same arrangement as the login keyframes above: top-level, consumed
+   through `animate-[...]` in one component, clamped to a single instant
+   iteration by the reduced-motion block in @layer base.
+   ============================================================ */
+
+/* The card turning over. Two holds and two turns: face up, over, face down,
+   back. Each turn is 9% of the cycle (0.45s at 5s) and eased on its own —
+   the timing function is declared on the frame a segment starts from, so
+   the holds' functions never matter. The whole rest pose is in every frame
+   rather than a bare `rotateY`, so the tilt is part of the turn: the card
+   spins about its own tilted axis rather than a screen-vertical one.
+   `0%` must equal the inline rest transform in the component so the loop
+   closes without a step; `100%` is the same pose one full turn on. */
+@keyframes card-flip {
+  0%,
+  41% {
+    transform: rotateX(10deg) rotateY(-14deg) rotate(-3deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  50%,
+  91% {
+    transform: rotateX(10deg) rotateY(166deg) rotate(-3deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  100% {
+    transform: rotateX(10deg) rotateY(346deg) rotate(-3deg);
+  }
+}
+
 /**
  * Entrances that must wait for the splash.
  *

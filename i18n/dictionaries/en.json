@@ -117,6 +117,13 @@
     "title": "Overview",
     "subtitle": "Sidebar scaffold is in place. Content panel is a placeholder."
   },
+  "notFound": {
+    "metaTitle": "Page not found · Bajat",
+    "code": "Error 404",
+    "title": "Checked both sides. Nothing here.",
+    "body": "This page doesn't exist, or it's moved somewhere we can't find. Let's get you back.",
+    "goHome": "Go to home"
+  },
   "auth": {
     "metaTitle": "Sign in · Bajat",
     "metaDescription": "Sign in to the Bajat identity management dashboard.",
