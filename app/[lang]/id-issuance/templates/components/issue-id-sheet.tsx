@@ -441,7 +441,7 @@ function IssueForm({
           rule under it is kept, unlike the dialog's — the body scrolls under
           it, and in the split layout it is what separates the title from the
           form on the same column. */}
-      <SheetHeader className={cn("border-b border-border py-4", AREA.header)}>
+      <SheetHeader className={cn("py-4", AREA.header)}>
         <div className="flex items-center gap-3">
           <span
             aria-hidden
@@ -481,7 +481,7 @@ function IssueForm({
           <FormSkeleton />
         ) : (
           <div className="flex flex-col gap-5">
-            <div className="divide-y divide-border">
+            <div>
               {/* The member block — the only part of this form that is not
                   derived from the template (§6). */}
               <Group title={t("issue.groups.cardholder")}>
@@ -679,7 +679,7 @@ function IssueForm({
         )}
       </SheetBody>
 
-      <SheetFooter className={AREA.footer}>
+      <SheetFooter className={cn("border-t-0", AREA.footer)}>
         <SheetClose
           render={
             <Button
@@ -724,10 +724,9 @@ const WIDE = "@md:col-span-2"
  * narrow. The photo, signature and attachment tiles opt out with `WIDE`:
  * a thumbnail, a name and three actions do not fit in half a row.
  *
- * The groups are separated by a hairline from the parent's `divide-y` and
- * 24px of padding either side of it, rather than by a label with a rule
- * drawn through it: the rule then bounds the group, which is what a section
- * break is, instead of underlining its name.
+ * The groups are separated by 24px of padding either side of the break,
+ * rather than by a label with a rule drawn through it: the gap bounds the
+ * group, which is what a section break is, instead of underlining its name.
  */
 function Group({
   title,
@@ -825,12 +824,12 @@ function CardStage({
   return (
     <aside
       className={cn(
-        "flex shrink-0 flex-col border-b border-border bg-surface-sunken px-5 py-4",
+        "flex shrink-0 flex-col px-5 py-4",
         // How tall the card may be. Stacked it shares the height with the
         // form; split, the column is its own.
         "[--stage-h:32vh] @min-[860px]/sheet:[--stage-h:60vh]",
-        // Split: a full-height column with its own seam on the form side.
-        "@min-[860px]/sheet:min-h-0 @min-[860px]/sheet:overflow-y-auto @min-[860px]/sheet:border-b-0 @min-[860px]/sheet:border-e @min-[860px]/sheet:px-8 @min-[860px]/sheet:py-8",
+        // Split: a full-height column beside the form.
+        "@min-[860px]/sheet:min-h-0 @min-[860px]/sheet:overflow-y-auto @min-[860px]/sheet:px-8 @min-[860px]/sheet:py-8",
         className
       )}
     >
