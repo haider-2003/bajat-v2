@@ -55,6 +55,8 @@ import { readPageInfo } from "@/utils/api/pagination"
 import { DEFAULT_PAGE_SIZE } from "@/utils/constants"
 
 import { createColumns } from "./columns"
+import { DebugWipeTemplates } from "./debug-wipe"
+import { ExportTemplateDialog } from "./export-template-dialog"
 import { IssueIdSheet } from "./issue-id-sheet"
 import {
   CloneTemplateDialog,
@@ -418,6 +420,7 @@ export function TemplatesClient() {
   const [issuing, setIssuing] = React.useState<Template | null>(null)
   const [cloning, setCloning] = React.useState<Template | null>(null)
   const [resetting, setResetting] = React.useState<Template | null>(null)
+  const [exporting, setExporting] = React.useState<Template | null>(null)
   const [deleting, setDeleting] = React.useState<Template | null>(null)
 
   // Track the lg breakpoint so the table can fall back to the gallery (§8.12).
@@ -541,6 +544,7 @@ export function TemplatesClient() {
       onIssue: setIssuing,
       onDuplicate: setCloning,
       onResetSequences: setResetting,
+      onExport: setExporting,
       onDelete: setDeleting,
     }),
     []
@@ -724,6 +728,13 @@ export function TemplatesClient() {
             {/* View — column visibility + reordering (table only) */}
             {effectiveView === "table" && <ViewMenu table={table} />}
           </div>
+
+          {/* Debug only. `NODE_ENV` is inlined at build time, so this branch
+              is gone from a production build and the control cannot appear
+              there — see the note on the component. */}
+          {process.env.NODE_ENV !== "production" && (
+            <DebugWipeTemplates scope={scope} />
+          )}
         </div>
       </div>
 
@@ -834,6 +845,13 @@ export function TemplatesClient() {
         template={liveRow(resetting)}
         open={resetting !== null}
         onOpenChange={(open) => !open && setResetting(null)}
+      />
+      {/* The producer side of Export History — queues a job, hands back
+          nothing; the file lands on that screen. */}
+      <ExportTemplateDialog
+        template={liveRow(exporting)}
+        open={exporting !== null}
+        onOpenChange={(open) => !open && setExporting(null)}
       />
       <DeleteTemplateDialog
         template={liveRow(deleting)}

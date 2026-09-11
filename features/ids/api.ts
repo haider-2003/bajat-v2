@@ -1,15 +1,26 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryOptions,
+} from "@tanstack/react-query"
 
 import api from "@/api/client"
-import { createApiFactory } from "@/utils/api/api-factory"
+import { createApiFactory, type ApiError } from "@/utils/api/api-factory"
+import { serializeQuery } from "@/utils/api/api"
+import { objectToFormData } from "@/utils/objects"
+import type { BaseQuery, GetResponse, PaginationMeta } from "@/types/api"
 import type { RequestOptions } from "@/types/axios"
 
 import {
   statusId,
+  type ApproveIdInput,
   type ChangeStatusInput,
   type CreateIDCardInput,
   type IDCard,
+  type RejectIdInput,
   type StatusName,
+  type UpdateIdVarsInput,
 } from "./types"
 
 /**
@@ -68,21 +79,148 @@ export const useGetId = idsApi.useGetById
 export const useCreateId = idsApi.useCreate
 
 /**
+ * `DELETE /identity/{id}` — remove a card outright.
+ *
+ * Offered from the two ledger screens (Requests and ID Flow), never from the
+ * printer or delivery queues: a card that has reached a press is stock, and
+ * "delete" there would mean something no endpoint does. The factory's
+ * invalidation covers both lists and any open detail at once.
+ */
+export const useDeleteId = idsApi.useDelete
+
+/**
  * ### Documented but not built
  *
- * The factory generates update / delete for this resource too, and they are
- * not exported: an exported hook reads as a supported one. Deleting a card is
- * not something a queue screen should offer, and updating one is the
- * `useUpdateIdVars` / `useUpdateIdDates` pair below, which take different
- * paths from the factory's `POST /identity/{id}`.
+ * The factory's `useUpdate` is not exported: `POST /identity/{id}` is the
+ * *variable* edit below, which takes a different body from the factory's.
  *
- * Hand-written and still missing, for the same reason — no screen calls them:
- *
- *  - `useGetIdsNode` (`GET /identity/node`) — the approval-node inbox.
- *  - `useApproveId` / `useRejectId` — the approval workflow, which needs
- *    attachments and a node history view to be worth anything.
- *  - `useUpdateIdVars` / `useUpdateIdDates` — editing an issued card.
+ *  - `useUpdateIdDates` (`PUT /identity/date/{id}`) — rewriting a card's
+ *    issue / expiration dates. The reference client declared it and never
+ *    called it from a live screen (docs/IDS-FLOW-EXPORTS-ROUTES.md §7), so it
+ *    is named here rather than shipped as a hook nothing exercises.
  */
+
+/**
+ * `GET /identity/node` — the approval inbox: cards parked at a node the
+ * caller is assigned to (docs/IDS-FLOW-EXPORTS-ROUTES.md §3).
+ *
+ * ### Scoping comes from the token, not a parameter
+ *
+ * There is no `node_id` to send. The server reads the caller's
+ * `node_ids` off the bearer token and returns whatever is sitting at any of
+ * them, across every template whose flow contains those nodes. A user with no
+ * nodes gets an empty list whatever they filter on.
+ *
+ * ### Keyed under `["identity", "node", …]`, deliberately
+ *
+ * Its own key so it never collides with `GET /identity` for the same filter,
+ * *and* under the resource's prefix so every write that invalidates
+ * `["identity"]` — approve, reject, delete, a status change — refetches this
+ * list too. A card that was just approved leaves the inbox on that refetch.
+ *
+ * Same envelope as the factory's list: the whole Axios response, rows at
+ * `data.data.data`.
+ */
+export function useGetIdsNode(
+  filter: BaseQuery,
+  options?: Omit<
+    UseQueryOptions<GetResponse<IDCard[]>, ApiError, GetResponse<IDCard[]>>,
+    "queryKey" | "queryFn"
+  >
+) {
+  return useQuery({
+    queryKey: [...IdQueryKeys.all(), "node", filter] as const,
+    queryFn: async (): Promise<GetResponse<IDCard[]>> =>
+      await api.get<{ data: IDCard[]; meta: PaginationMeta }>("/identity/node", {
+        params: serializeQuery(filter),
+        options: REQUEST_OPTIONS,
+      }),
+    ...options,
+  })
+}
+
+/**
+ * `POST /identity/approve` + `_method=PUT` — advance a card to the next node.
+ *
+ * Multipart, for the attachments; the PHP method override is what lets a
+ * browser send one on an update, since a real `PUT` cannot carry a body of
+ * files. `objectToFormData` writes `attachments[0]`, `fields[0][key]` and so
+ * on, and `null`/`undefined` members are omitted rather than sent as the
+ * strings "null" / "undefined" — so an approval with no files and no fields
+ * is exactly `identity_id`, `notes`, `_method`.
+ */
+export function useApproveId() {
+  const queryClient = useQueryClient()
+
+  return useMutation<IDCard, ApiError, ApproveIdInput>({
+    mutationFn: async (input) => {
+      const body = objectToFormData(input)
+      body.append("_method", "PUT")
+      const response = await api.post<IDCard>("/identity/approve", body, {
+        headers: { "Content-Type": "multipart/form-data" },
+        options: REQUEST_OPTIONS,
+      })
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: IdQueryKeys.all() })
+    },
+  })
+}
+
+/**
+ * `PUT /identity/reject` — stop the flow at the current node.
+ *
+ * Plain JSON: the endpoint takes an id and a note, and nothing else about the
+ * request survives the trip (see `RejectIdInput`). What the rejection does to
+ * `status` is the server's decision; the client never touches `status` from
+ * the flow screens.
+ */
+export function useRejectId() {
+  const queryClient = useQueryClient()
+
+  return useMutation<IDCard, ApiError, RejectIdInput>({
+    mutationFn: async (input) => {
+      const response = await api.put<IDCard>("/identity/reject", input, {
+        options: REQUEST_OPTIONS,
+      })
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: IdQueryKeys.all() })
+    },
+  })
+}
+
+/**
+ * `POST /identity/{id}` + `_method=PUT` — rewrite one template variable on an
+ * issued card (docs/IDS-FLOW-EXPORTS-ROUTES.md §2.4c).
+ *
+ * The factory's update is not used because the body is not the entity: it is
+ * the one variable being changed, verbatim under the template's own key, plus
+ * `template_id`, `organization_id` and `identity` (the card's numeric id).
+ * Keys go out untouched — `disableRequestKeyConversion` on this resource is
+ * what keeps a variable called `exp_date` from arriving as something no
+ * template knows.
+ */
+export function useUpdateIdVars() {
+  const queryClient = useQueryClient()
+
+  return useMutation<IDCard, ApiError, { id: number | string; data: UpdateIdVarsInput }>({
+    mutationFn: async ({ id, data }) => {
+      const body = objectToFormData(data)
+      body.append("_method", "PUT")
+      const response = await api.post<IDCard>(`/identity/${id}`, body, {
+        headers: { "Content-Type": "multipart/form-data" },
+        options: REQUEST_OPTIONS,
+      })
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: IdQueryKeys.all() })
+    },
+  })
+}
 
 /**
  * `PUT /identity/change_status/{id}` — move a card along the workflow.

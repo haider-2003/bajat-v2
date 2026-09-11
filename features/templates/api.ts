@@ -5,6 +5,7 @@ import { createApiFactory, type ApiError } from "@/utils/api/api-factory"
 import type {
   CloneTemplateInput,
   CreateTemplateInput,
+  ExportTemplateInput,
   Template,
   TemplateExport,
   UpdateTemplateInput,
@@ -37,11 +38,6 @@ import type {
  *
  * ### Documented but not built
  *
- *  - `useExportTemplateAsCSV` (`GET /template/export/{id}`) and
- *    `useGetTemplatesExports` (`GET /export`) — the export half of the
- *    resource. It is asynchronous: requesting an export queues a
- *    `TemplateExport` whose `file` appears when it finishes, which is a screen
- *    (Export History) rather than a button, and that screen does not exist yet.
  *  - `usePublicTemplate` (`shareKey`) — a *different host*
  *    (`api.bajat.net/api/public/v1`), so it cannot come from this client at
  *    all. It belongs to the public self-service flow, not the dashboard.
@@ -133,3 +129,40 @@ const templateExportsApi = createApiFactory<TemplateExport>({
 export const TemplateExportQueryKeys = templateExportsApi.QueryKeys
 
 export const useGetTemplateExports = templateExportsApi.useGetList
+
+/**
+ * `GET /template/export/{templateId}` — queue an export job
+ * (docs/IDS-FLOW-EXPORTS-ROUTES.md §5.3).
+ *
+ * ### A mutation wrapping a GET, on purpose
+ *
+ * The verb is GET but the request is a *trigger*: it enqueues a job on the
+ * server and returns at once. Modelling it as a query would let React Query
+ * cache it, dedupe it and refetch it on window focus — three more spreadsheets
+ * nobody asked for. `useMutation` gives it the semantics it has: fires once,
+ * on a click, with a pending state for the button.
+ *
+ * ### Nothing is downloaded here
+ *
+ * No `responseType: "blob"`, no `Content-Disposition`. The body is ignored;
+ * the output surfaces later as a `TemplateExport` row whose `file` fills in.
+ * Which is why this invalidates `["templateExport"]` — the reference client
+ * did not, and a fresh job stayed invisible on Export History for up to a
+ * minute (spec §9.8). `["template"]` is left alone: nothing on the template
+ * row changed.
+ */
+export const useExportTemplate = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation<void, ApiError, ExportTemplateInput>({
+    mutationFn: async ({ templateId, statuses }) => {
+      await api.get(`/template/export/${templateId}`, {
+        // Empty means "all", and the way to say that is no parameter at all.
+        params: statuses && statuses.length > 0 ? { statuses } : undefined,
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: TemplateExportQueryKeys.all() })
+    },
+  })
+}

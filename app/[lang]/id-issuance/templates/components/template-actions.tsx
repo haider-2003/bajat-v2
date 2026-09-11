@@ -3,6 +3,7 @@
 import {
   Building2,
   Copy,
+  FileSpreadsheet,
   IdCard,
   Pencil,
   RotateCcw,
@@ -36,7 +37,7 @@ import { useLocaleRouter } from "@/i18n/navigation"
  *
  * docs/CARD-CREATE-ASSIGN-GALLERY.md §5.6. A row on the **organization** tab
  * is a card an identity is issued from, so its verbs are the issuing ones:
- * Edit, Issue, Manage flow, Duplicate, Reset sequences, Delete. A row on the
+ * Edit, Issue, Manage flow, Export, Duplicate, Reset sequences, Delete. A row on the
  * **public** tab is a blueprint owned by nobody — it cannot be issued from,
  * has no flow and no sequences to reset — so it has exactly one verb for an
  * organization user, *adopt it*, and for an admin, who authors the catalogue,
@@ -77,11 +78,12 @@ import { useLocaleRouter } from "@/i18n/navigation"
  *
  * ### Gates: disabled where the verb is the point, hidden where it is not
  *
- * docs/CARD-CREATE-ASSIGN-GALLERY.md §7 is the matrix. Edit, Issue and
- * Manage flow go *disabled* without their grants rather than vanishing: they
- * are what a template is for, and a clerk who cannot do them needs to know the
- * button is real and the grant is missing, not wonder whether the feature
- * shipped. Delete is *hidden* without `delete-template`, the way every other
+ * docs/CARD-CREATE-ASSIGN-GALLERY.md §7 is the matrix. Edit, Issue, Manage
+ * flow and Export go *disabled* without their grants rather than vanishing:
+ * they are what a template is for, and a clerk who cannot do them needs to
+ * know the button is real and the grant is missing, not wonder whether the
+ * feature shipped (Export's gate is `export-identities-template`, spec
+ * IDS-FLOW-EXPORTS-ROUTES §5.1). Delete is *hidden* without `delete-template`, the way every other
  * screen hides its destructive verb — nobody needs to be told they cannot
  * remove something. On the public tab, Edit and Delete are hidden for anyone
  * who is not an admin: the catalogue is not theirs to change, and their copy
@@ -102,6 +104,8 @@ export type TemplateActionHandlers = {
   /** Clone — into the same organization from the org tab, into one from the public tab. */
   onDuplicate: (template: Template) => void
   onResetSequences: (template: Template) => void
+  /** Queue an export of the cards cut from this template — see Export History. */
+  onExport: (template: Template) => void
   onDelete: (template: Template) => void
 }
 
@@ -197,6 +201,13 @@ export function TemplateActions({
       icon: Workflow,
       disabled: !(can("update-flow") && can("show-flow")),
       onSelect: () => router.push(`/id-issuance/templates/${template.id}/flow`),
+    },
+    {
+      key: "export",
+      label: t("templates.export.action"),
+      icon: FileSpreadsheet,
+      disabled: !can("export-identities-template"),
+      onSelect: () => handlers.onExport(template),
     },
     {
       key: "duplicate",

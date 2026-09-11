@@ -1,11 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { createPortal } from "react-dom"
-import { AlertCircle, ImageOff, Loader2, Printer, RefreshCw } from "lucide-react"
+import { AlertCircle, Loader2, Printer } from "lucide-react"
 
+import { CardStage, PrintSheet } from "@/components/id-card/card-stage"
 import { Button } from "@/components/ui/button"
-import { SoftBadge } from "@/components/ui/data-bits"
 import {
   Dialog,
   DialogBody,
@@ -33,18 +32,14 @@ import { EMPTY_VALUE, formatPhone, formatText } from "@/utils/format"
  * says what will come out of the printer, which is the only way to catch a
  * blank photo or the wrong template before the stock is spent.
  *
- * ### Printing goes through a separate sheet, not this dialog
+ * ### The card, the flip and the print sheet live in `components/id-card`
  *
- * `window.print()` prints the document, and this dialog is a scrolling popup
- * inside a fixed viewport — printed directly it comes out clipped, at whatever
- * size the popup happened to be, with the app's chrome around it.
- *
- * So the faces are rendered *twice*: once here at CR80 proportions for the eye,
- * and once into `PrintSheet` — a portal straight onto `<body>`, hidden on
- * screen, that is the only thing the print stylesheet leaves visible (the print
- * block at the end of app/globals.css). That one sizes each face to a real
- * 85.6 x 54 mm and gives each its own page, which is what a duplex card printer
- * expects.
+ * `CardStage` (the one-object flip, shaped by the artwork) and `PrintSheet`
+ * (the hidden, millimetre-sized portal `window.print()` actually prints) are
+ * shared with the Requests and ID Flow detail screens, which show the same
+ * card for different reasons. What is left here is what is specific to a
+ * print queue: the fields an operator checks before spending stock, and the
+ * step that moves the card along.
  *
  * ### The image links expire
  *
@@ -114,45 +109,26 @@ function CardPreview({
         </DialogDescription>
       </DialogHeader>
 
-      <DialogBody className="flex flex-col gap-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <SoftBadge tone={meta.tone}>{meta.label}</SoftBadge>
-          <span className="font-mono text-xs text-text-placeholder">
-            #{card.id}
-          </span>
-          {/* The QR key is what a verifier scans, so it is worth showing —
-              truncated, because it is 36 characters of UUID. */}
-          {card.uniqueKey && (
-            <span
-              title={card.uniqueKey}
-              className="truncate font-mono text-xs text-text-placeholder"
-            >
-              {card.uniqueKey.slice(0, 8)}…
-            </span>
-          )}
-        </div>
+      <DialogBody>
+        {/* Full-bleed against DialogBody's 20px gutter, flush under the
+            header, and bordered top and bottom so the artwork reads as its
+            own region rather than as the first row of a form — §13.6's
+            "inner rows sunken relative to the dialog surface". */}
+        <CardStage
+          card={card}
+          meta={meta}
+          onRefresh={onRefresh}
+          refreshing={refreshing}
+          className="-mx-5 border-y border-border-subtle"
+        />
 
-        {/* The artwork. Two faces side by side once there is room; stacked
-            below `sm`, where a card at half width is unreadable. */}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <CardFace
-            label={t("printer.front")}
-            src={card.frontImage}
-            onRefresh={onRefresh}
-            refreshing={refreshing}
-          />
-          <CardFace
-            label={t("printer.back")}
-            src={card.backImage}
-            emptyLabel={t("printer.singleSided")}
-            onRefresh={onRefresh}
-            refreshing={refreshing}
-          />
-        </div>
-
-        <dl className="flex flex-col gap-2 border-t border-border-subtle pt-4">
+        <Section title={t("printer.details")}>
           <Detail label={t("printer.columns.cardholder")} value={formatText(name)} />
-          <Detail label={t("members.columns.phone")} value={formatPhone(phone)} />
+          <Detail
+            label={t("members.columns.phone")}
+            value={formatPhone(phone)}
+            mono
+          />
           <Detail
             label={t("filters.attributes.organization")}
             value={formatText(card.organization?.name)}
@@ -161,10 +137,7 @@ function CardPreview({
             label={t("templates.singular")}
             value={formatText(card.template?.title)}
           />
-          <Detail
-            label={t("printer.issued")}
-            value={formatDate(card.createdAt)}
-          />
+          <Detail label={t("printer.issued")} value={formatDate(card.createdAt)} />
           <Detail
             label={t("printer.columns.lastMoved")}
             value={formatDate(card.updatedAt)}
@@ -173,67 +146,60 @@ function CardPreview({
             label={t("printer.createdBy")}
             value={formatText(card.creatable?.name)}
           />
-        </dl>
+        </Section>
 
         {/* The template's own variables — whatever this design happens to
             collect. Shown because a wrong value here is the other half of what
             a preview is for. The labels are best-effort: some keys are
             transliterated Arabic, so each one carries its raw key on hover
             (features/ids/fields.ts). */}
-        {textFields.length > 0 && (
-          <div className="border-t border-border-subtle pt-4">
-            <p className="mb-2 text-xs font-medium text-text-muted">
-              {t("printer.templateFields")}
-            </p>
-            <dl className="flex flex-col gap-2">
-              {textFields.map((field) => (
-                <Detail
-                  key={field.key}
-                  label={field.label}
-                  title={field.key}
-                  value={field.value}
-                />
-              ))}
-            </dl>
-          </div>
-        )}
-
-        {imageFields.length > 0 && (
-          <div className="flex flex-wrap gap-3 border-t border-border-subtle pt-4">
-            {imageFields.map((field) => (
-              <figure key={field.key} className="w-20">
-                {/* eslint-disable-next-line @next/next/no-img-element -- a
-                    pre-signed URL on a host the image optimizer is not
-                    configured for, and one that expires in five minutes:
-                    caching it through /_next/image would cache a 403. */}
-                <img
-                  src={field.value}
-                  alt={field.label}
-                  className="size-20 rounded-md border border-border object-cover"
-                />
-                <figcaption
-                  title={field.key}
-                  className="mt-1 truncate text-[11px] text-text-muted"
-                >
-                  {field.label}
-                </figcaption>
-              </figure>
+        {(textFields.length > 0 || imageFields.length > 0) && (
+          <Section title={t("printer.templateFields")}>
+            {textFields.map((field) => (
+              <Detail
+                key={field.key}
+                label={field.label}
+                title={field.key}
+                value={field.value}
+              />
             ))}
-          </div>
+
+            {imageFields.length > 0 && (
+              <div className="col-span-full flex flex-wrap gap-3">
+                {imageFields.map((field) => (
+                  <figure key={field.key} className="w-20">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- a
+                        pre-signed URL on a host the image optimizer is not
+                        configured for, and one that expires in five minutes:
+                        caching it through /_next/image would cache a 403. */}
+                    <img
+                      src={field.value}
+                      alt={field.label}
+                      className="size-20 rounded-lg border border-border object-cover"
+                    />
+                    <figcaption
+                      title={field.key}
+                      className="mt-1.5 truncate text-[11px] text-text-muted"
+                    >
+                      {field.label}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            )}
+          </Section>
         )}
 
         {change.isError && (
           <div
             role="alert"
-            className="flex items-start gap-2.5 rounded-lg border border-border bg-danger-bg px-3 py-2.5"
+            className="mt-5 flex items-start gap-2.5 rounded-lg border border-border bg-danger-bg px-3 py-2.5"
           >
             <AlertCircle
               className="mt-px size-4 shrink-0 text-danger"
               strokeWidth={1.5}
             />
-            <p className="text-[13px] text-danger">
-              {t("printer.moveFailed")}
-            </p>
+            <p className="text-[13px] text-danger">{t("printer.moveFailed")}</p>
           </div>
         )}
       </DialogBody>
@@ -288,156 +254,72 @@ function CardPreview({
   )
 }
 
-/** One `label / value` pair. Renders nothing when there is no value. */
+/* ------------------------------------------------------------------ *
+ * The fields
+ * ------------------------------------------------------------------ */
+
+/**
+ * §13.4's section: a 14/600 heading with 20px above it and 10px below, over a
+ * two-column grid of pairs.
+ *
+ * Two columns rather than one long ladder: the dialog is 640px wide, and seven
+ * label/value rows down the middle of it leave a stripe of dead space on each
+ * side while truncating an Arabic organisation name that had the room to fit.
+ */
+function Section({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="pt-5">
+      <h3 className="mb-2.5 text-sm font-semibold text-text">{title}</h3>
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-3.5 min-[480px]:grid-cols-2">
+        {children}
+      </dl>
+    </section>
+  )
+}
+
+/**
+ * One `label / value` pair, label over value. Renders nothing when there is no
+ * value (§9.3 — an absent field is dropped, not printed as a dash).
+ *
+ * Stacked rather than the inline `label … value` the table cards use: half the
+ * values here are Arabic names and timestamps, which at half of a half-width
+ * row spend more of their life truncated than read.
+ */
 function Detail({
   label,
   value,
   title,
+  mono,
 }: {
   label: string
   value: string
   /** The raw template key, for a label that came out unreadable. */
   title?: string
+  /** Digits that read left-to-right whatever the locale does — phone numbers. */
+  mono?: boolean
 }) {
   if (value === EMPTY_VALUE) return null
   return (
-    <div className="flex items-baseline justify-between gap-4">
-      <dt title={title} className="shrink-0 text-xs text-text-muted">
+    <div className="min-w-0">
+      <dt title={title} className="truncate text-xs text-text-muted">
         {label}
       </dt>
-      <dd title={value} className="truncate text-[13px] text-text-secondary">
+      <dd
+        title={value}
+        dir={mono ? "ltr" : undefined}
+        className={cn(
+          "mt-1 truncate text-[13px] text-text-secondary",
+          mono && "font-mono tabular-nums rtl:text-end"
+        )}
+      >
         {value}
       </dd>
     </div>
-  )
-}
-
-/**
- * One face of the card, at CR80 proportions.
- *
- * A missing `src` and a *broken* `src` are different states and read
- * differently: the first is a template with no back side, the second is an
- * expired link — and only the second is worth offering a button for.
- */
-function CardFace({
-  label,
-  src,
-  emptyLabel,
-  onRefresh,
-  refreshing,
-}: {
-  label: string
-  src: string | null | undefined
-  /** Defaults to "not generated yet"; resolved in the body, not the signature,
-      because a parameter default cannot call a hook. */
-  emptyLabel?: string
-  onRefresh: () => void
-  refreshing: boolean
-}) {
-  const t = useT()
-  /**
-   * Which URL failed, rather than a bare "it failed".
-   *
-   * A refetch hands back a new URL for the same face, and the old failure is
-   * not evidence about the new link — so the flag has to clear itself when
-   * `src` changes. Storing the URL is what makes that fall out of a render
-   * instead of needing an effect to reset it.
-   */
-  const [brokenSrc, setBrokenSrc] = React.useState<string | null>(null)
-  const broken = src != null && brokenSrc === src
-
-  return (
-    <figure className="min-w-0">
-      <figcaption className="mb-1.5 text-xs font-medium text-text-muted">
-        {label}
-      </figcaption>
-      <div
-        className={cn(
-          "flex aspect-[85.6/54] items-center justify-center overflow-hidden",
-          "rounded-lg border border-border bg-surface-sunken"
-        )}
-      >
-        {!src ? (
-          <span className="inline-flex items-center gap-2 px-3 text-center text-[13px] text-text-placeholder">
-            <ImageOff className="size-4 shrink-0" strokeWidth={1.5} />
-            {emptyLabel ?? t("printer.notGenerated")}
-          </span>
-        ) : broken ? (
-          <div className="px-3 text-center">
-            <p className="text-[13px] text-text-muted">
-              {t("printer.linkExpired")}
-            </p>
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={refreshing}
-              className={cn(
-                "mt-2 inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5",
-                "text-xs font-medium text-text-secondary transition-colors",
-                "hover:border-border-strong hover:text-text",
-                "outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                "disabled:cursor-not-allowed disabled:text-text-placeholder"
-              )}
-            >
-              <RefreshCw
-                className={cn("size-3.5", refreshing && "animate-spin")}
-                strokeWidth={1.5}
-              />
-              {t("common.refresh")}
-            </button>
-          </div>
-        ) : (
-          // See the note on the template-field thumbnails above.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={src}
-            alt={t("printer.faceAlt", { face: label })}
-            onError={() => setBrokenSrc(src)}
-            className="size-full object-contain"
-          />
-        )}
-      </div>
-    </figure>
-  )
-}
-
-/** The store never changes, so the subscription has nothing to do. */
-const subscribeToNothing = () => () => {}
-
-/**
- * What `window.print()` actually puts on paper.
- *
- * Hidden on screen, portalled to `<body>` so that no scrolling or clipping
- * ancestor sits between it and the page box, and sized in millimetres rather
- * than pixels — a card printed at "whatever 320px maps to" is a wasted blank.
- */
-function PrintSheet({ card }: { card: IDCard }) {
-  // `document` does not exist during the server render, and this component is
-  // still server-rendered even though it only ever opens from a click. Reading
-  // "am I on the client" through `useSyncExternalStore` rather than an effect
-  // keeps the server pass and the hydration pass agreeing on `false`, then
-  // flips once — no cascading render, and nothing to reset.
-  const mounted = React.useSyncExternalStore(
-    subscribeToNothing,
-    () => true,
-    () => false
-  )
-
-  if (!mounted || !card.frontImage) return null
-
-  return createPortal(
-    <div data-print-sheet aria-hidden>
-      {/* eslint-disable @next/next/no-img-element -- pre-signed, expiring URLs. */}
-      <div className="print-card">
-        <img src={card.frontImage} alt="" />
-      </div>
-      {card.backImage && (
-        <div className="print-card">
-          <img src={card.backImage} alt="" />
-        </div>
-      )}
-      {/* eslint-enable @next/next/no-img-element */}
-    </div>,
-    document.body
   )
 }

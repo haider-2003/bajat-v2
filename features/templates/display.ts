@@ -107,3 +107,65 @@ export function templateFaces(template: Template): ("front" | "back")[] {
   if (template.backImage) faces.push("back")
   return faces
 }
+
+/**
+ * How an export job's `status` reads — a label and a tone that never come
+ * back undefined, whatever the field holds.
+ *
+ * The backend has not published the vocabulary for this field, and in
+ * practice it sends a **number** (a bare status code), not the string the
+ * doc implied — the reference client never rendered it at all, so a failed
+ * job looked exactly like a pending one (docs/IDS-FLOW-EXPORTS-ROUTES.md
+ * §9.9). So:
+ *
+ *  - a word is matched loosely — `done`, `completed`, `finished` all read as
+ *    finished; `failed`, `error` as failed; and so on;
+ *  - a number, or anything unrecognised, is decided from `file` instead —
+ *    the one fact the screen acts on — and the raw value is returned as
+ *    `raw` so a cell can keep it on hover for whoever eventually maps the
+ *    codes.
+ *
+ * A row whose status says "done" and whose `file` is empty is still not
+ * downloadable, and the action reads `file`, not this.
+ */
+export function exportStatusMeta(
+  t: Translator,
+  status: string | number | boolean | null | undefined,
+  hasFile: boolean
+): {
+  label: string
+  tone: "neutral" | "info" | "success" | "warning" | "danger" | "accent"
+  /** The value as it arrived, for a tooltip. `null` when there was none. */
+  raw: string | null
+} {
+  const raw = status === null || status === undefined ? null : String(status)
+  const word = typeof status === "string" ? status.trim().toLowerCase() : ""
+
+  if (/^(done|completed?|finished|success(ful)?|ready)$/.test(word)) {
+    return { label: t("exports.status.ready"), tone: "success", raw }
+  }
+  if (/^(fail(ed|ure)?|error)$/.test(word)) {
+    return { label: t("exports.status.failed"), tone: "danger", raw }
+  }
+  if (/^(processing|running|in[_ -]?progress|started)$/.test(word)) {
+    return { label: t("exports.status.processing"), tone: "accent", raw }
+  }
+  if (/^(pending|queued|waiting|new)$/.test(word)) {
+    return { label: t("exports.status.queued"), tone: "warning", raw }
+  }
+
+  // A word this list does not know still gets a badge with its own name on
+  // it, de-shouted, rather than nothing.
+  if (word && !/^[\d.]+$/.test(word)) {
+    return {
+      label: word.replace(/[_-]+/g, " ").replace(/^\w/, (c) => c.toUpperCase()),
+      tone: "neutral",
+      raw,
+    }
+  }
+
+  // A code, or no status at all: the file is the only evidence there is.
+  return hasFile
+    ? { label: t("exports.status.ready"), tone: "success", raw }
+    : { label: t("exports.status.queued"), tone: "warning", raw }
+}

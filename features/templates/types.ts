@@ -86,16 +86,40 @@ export function readTemplateScope(value: string | null | undefined): TemplateSco
     : DEFAULT_TEMPLATE_SCOPE
 }
 
-/** A queued CSV export of one template's identities — `GET /export`. */
+/**
+ * A queued export of one template's identities — `GET /export`
+ * (docs/IDS-FLOW-EXPORTS-ROUTES.md §4).
+ *
+ * The file is a ZIP: an Excel sheet of the submissions plus a folder of every
+ * attached image. The client never opens it — it hands the URL over.
+ *
+ * `status` is the job's own word for where it is — and on the live API it is
+ * a bare **number**, not the string the doc implied, with no published
+ * vocabulary. `exportStatusMeta` (./display.ts) reads either and falls back
+ * to `file` for a code it cannot name; `file` is the only field the screen
+ * *decides* on.
+ */
 export type TemplateExport = BaseEntity & {
   id: number
-  status: string
-  /** Download URL, present once the export finishes. */
+  status?: string | number | null
+  /** Download URL. `""` / `null` until the job finishes. */
   file?: string | null
-  createdAt?: string
-  updatedAt?: string
+  createdAt?: string | null
+  updatedAt?: string | null
   template?: Template | null
   organization?: Organization | null
+}
+
+/**
+ * `GET /template/export/{templateId}?statuses[]=…` — queue an export.
+ *
+ * `statuses` are the numeric ids, stringified, and an **empty** selection
+ * means "every status", never "no status": the parameter is omitted entirely
+ * rather than sent empty (spec §5.3).
+ */
+export type ExportTemplateInput = {
+  templateId: number
+  statuses?: string[]
 }
 
 /**

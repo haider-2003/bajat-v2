@@ -113,16 +113,6 @@ export function PhotoEditor({
   const root = React.useRef<HTMLDivElement>(null)
   const free = React.useRef<HTMLDivElement>(null)
 
-  /** §4.2 — always first, and exactly once. */
-  React.useEffect(() => {
-    reset()
-    if (templateId) setTemplateId(templateId)
-    // A panel that opens over the card is right on a desktop and wrong on a
-    // tablet, where it *is* the card's space. Below the drawer breakpoint the
-    // editor opens on the work instead.
-    if (window.matchMedia("(max-width: 1023px)").matches) setPanel(null)
-  }, [reset, setTemplateId, setPanel, templateId])
-
   /**
    * §20 — the loaded design, once and only once per template.
    *
@@ -133,6 +123,42 @@ export function PhotoEditor({
    * returning the *same* template must not reload it.
    */
   const loaded = React.useRef<number | null>(null)
+
+  /**
+   * §4.2 — reset on the way in, **and on the way out**.
+   *
+   * The cleanup is the half that was missing, and the reason a second visit to
+   * /new opened with the last template's title and description already in the
+   * settings form.
+   *
+   * Resetting on mount cannot fix that on its own, because "on mount" is not
+   * early enough. A `useState` initializer in a child runs while the tree is
+   * being built, and every effect in that tree runs afterwards — so a child
+   * that seeds itself from the store reads whatever the store holds *before*
+   * this effect gets to clear it. `SettingsForm` seeds exactly like that
+   * (`useState(config)`) and create mode opens it on the very first render, so
+   * it captured the previous editor's config and kept it; the store was
+   * cleared a moment later, but the draft had already been taken.
+   *
+   * The store is module-global and outlives this component, so the fix is for
+   * the component to leave nothing behind: wipe it on unmount and the next
+   * editor's children seed from a blank store no matter how early they read
+   * it. That also stops the previous design flashing onto the canvas for a
+   * frame, which was the same race with a different symptom.
+   *
+   * The mount-side reset stays. It costs nothing and it still covers the case
+   * the cleanup cannot — a `templateId` that changes without a remount.
+   */
+  React.useEffect(() => {
+    reset()
+    if (templateId) setTemplateId(templateId)
+    // A panel that opens over the card is right on a desktop and wrong on a
+    // tablet, where it *is* the card's space. Below the drawer breakpoint the
+    // editor opens on the work instead.
+    if (window.matchMedia("(max-width: 1023px)").matches) setPanel(null)
+
+    return () => reset()
+  }, [reset, setTemplateId, setPanel, templateId])
 
   React.useEffect(() => {
     const row = templateQuery.data

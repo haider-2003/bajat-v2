@@ -1,3 +1,9 @@
+import type {
+  DesignDocument,
+  DesignVariable,
+  DesignVariableType,
+} from "@/features/templates/design"
+
 import type { IDCard } from "./types"
 
 /**
@@ -54,11 +60,23 @@ export function identityPhone(card: IDCard): string | null {
 export type RequestField = {
   /** The template's own key, kept verbatim — it is the only stable identifier. */
   key: string
-  /** The key made readable. Best-effort: some keys are transliterated Arabic. */
+  /**
+   * What to call it. The template's own `label` when the design is in hand
+   * (`requestFields(card, design)`); otherwise the key made readable —
+   * best-effort, since some keys are transliterated Arabic.
+   */
   label: string
   value: string
   /** A URL the value points at, rather than text to print. */
   image: boolean
+  /**
+   * The variable's type from the design, when known. What decides which
+   * control edits it (docs/IDS-FLOW-EXPORTS-ROUTES.md §2.4c) — absent, a
+   * field is treated as free text.
+   */
+  type?: DesignVariableType
+  /** `select` only: the choices the design offers. */
+  options?: string[]
 }
 
 const IMAGE_URL = /^https?:\/\//i
@@ -71,9 +89,20 @@ const IMAGE_URL = /^https?:\/\//i
  * that shows one field fewer. Images are flagged rather than filtered — the
  * preview dialog shows the applicant's photo, and a `dl` of labels cannot.
  */
-export function requestFields(card: IDCard): RequestField[] {
+export function requestFields(
+  card: IDCard,
+  /**
+   * The template's design, for the labels and types it authored. The list
+   * row's embedded template does not carry it; a detail screen fetches
+   * `GET /template/{id}` and reads it with `readDesign` to get one.
+   */
+  design?: DesignDocument | null
+): RequestField[] {
   const request = card.request
   if (!request) return []
+
+  const vars = new Map<string, DesignVariable>()
+  for (const variable of design?.vars ?? []) vars.set(variable.name, variable)
 
   const fields: RequestField[] = []
 
@@ -88,10 +117,37 @@ export function requestFields(card: IDCard): RequestField[] {
 
     if (!value) continue
 
-    fields.push({ key, label: humanizeKey(key), value, image: IMAGE_URL.test(value) })
+    const variable = vars.get(key)
+    fields.push({
+      key,
+      label: variable?.label?.trim() || humanizeKey(key),
+      value,
+      image: IMAGE_URL.test(value),
+      type: variable?.type,
+      options: variable?.options,
+    })
   }
 
   return fields
+}
+
+/** Types whose value is a file, never text — nothing to type into. */
+const FILE_TYPES: readonly DesignVariableType[] = ["image", "file", "signature"]
+
+/**
+ * Whether a field can be rewritten in place on an issued card
+ * (docs/IDS-FLOW-EXPORTS-ROUTES.md §2.4c).
+ *
+ * `name` and `phone` are the member's, not the card's — they are edited on
+ * the member. A file is replaced by re-issuing, not by typing over a URL. And
+ * a value that *is* an image URL is a file whatever the design says, because
+ * the design might be the thin embedded copy that says nothing.
+ */
+export function isEditableField(field: RequestField): boolean {
+  if (field.key === "name" || field.key === "phone") return false
+  if (field.type === "name" || field.type === "phone") return false
+  if (field.type && FILE_TYPES.includes(field.type)) return false
+  return !field.image
 }
 
 /**

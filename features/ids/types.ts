@@ -1,5 +1,6 @@
 import type { Organization } from "@/features/organizations/types"
 import type { Template } from "@/features/templates/types"
+import type { User } from "@/features/users/types"
 import type { BaseEntity } from "@/types/api"
 
 /**
@@ -88,6 +89,41 @@ export type IdentityCreator = BaseEntity & {
   type?: string | null
 }
 
+/**
+ * The approval stage a card is parked at — the `node` on `GET /identity/node`
+ * rows (docs/IDS-FLOW-EXPORTS-ROUTES.md §3.2).
+ *
+ * Not a full `Node`: the row carries the name and, when the backend sends it,
+ * the colour — nothing about the organization that owns the step. The
+ * reference client read `node.name` through an untyped accessor (spec §9.1);
+ * this names the shape so a column can be typed against it.
+ */
+export type IdentityNode = {
+  id?: number
+  name: string
+  color?: string | null
+}
+
+/**
+ * One approval a card has been through — `IDCard.nodeHistory[]`, in the order
+ * they happened (docs/IDS-FLOW-EXPORTS-ROUTES.md §3.4).
+ *
+ * The record does **not** say which node it was taken at: only its position
+ * in the array and `createdAt` order it against the template's flow. The last
+ * entry is the latest.
+ */
+export type NodeHistory = BaseEntity & {
+  id: number
+  /** URLs of the files uploaded at that stage. */
+  attachments?: string[] | null
+  /** Ad-hoc key/values captured at that stage. */
+  fields?: { key: string; value: string }[] | null
+  createdAt?: string | null
+  /** Who processed it. */
+  user?: User | null
+  notes?: string | null
+}
+
 export type IDCard = BaseEntity & {
   id: number
   /** The QR verification key. Stable, and what a scanner resolves. */
@@ -112,6 +148,10 @@ export type IDCard = BaseEntity & {
   member?: IdentityMember | null
   organization?: Organization | null
   creatable?: IdentityCreator | null
+  /** The current approval stage. Sent on `/identity/node` rows; absent elsewhere. */
+  node?: IdentityNode | null
+  /** The approval trail. Sent on `GET /identity/{id}`; absent from list rows. */
+  nodeHistory?: NodeHistory[] | null
 }
 
 /**
@@ -152,4 +192,50 @@ export type CreateIDCardInput = {
   template_id: number
   organization_id?: number
   branchId?: number
+} & Record<string, string | number | File | null | undefined>
+
+/**
+ * `POST /identity/approve` + `_method=PUT` — advance a card to the next node
+ * of its template's flow (docs/IDS-FLOW-EXPORTS-ROUTES.md §3.5).
+ *
+ * Multipart, because `attachments` are files. `objectToFormData` spreads the
+ * arrays into PHP's bracket notation — `attachments[0]`, `fields[0][key]`,
+ * `fields[0][value]` — which is exactly what the endpoint reads. The keys are
+ * already snake_case, so request key conversion is skipped for this call.
+ *
+ * The client never names the *target* node: the server walks the stored
+ * `template_id → node_ids[]` order itself.
+ */
+export type ApproveIdInput = {
+  identity_id: string
+  notes: string
+  attachments?: File[]
+  fields?: { key: string; value: string }[]
+}
+
+/**
+ * `PUT /identity/reject` — stop the flow at the current node.
+ *
+ * JSON, not multipart, which is why there are no attachments here: the
+ * reference client sent its `File` objects through `JSON.stringify` and
+ * uploaded their metadata (spec §9.2). Typing them out is the honest version
+ * of that — only the note reaches the server on a rejection.
+ */
+export type RejectIdInput = {
+  identity_id: string
+  notes: string
+}
+
+/**
+ * `POST /identity/{id}` + `_method=PUT` — rewrite one template variable on an
+ * issued card (docs/IDS-FLOW-EXPORTS-ROUTES.md §2.4c).
+ *
+ * The variable travels at the root under its own key, verbatim, beside the
+ * three fixed fields. `identity` here is the card's **numeric id** — not the
+ * `"by system"` literal `CreateIDCardInput` sends (spec §9.17).
+ */
+export type UpdateIdVarsInput = {
+  template_id: number
+  organization_id?: number
+  identity: number
 } & Record<string, string | number | File | null | undefined>

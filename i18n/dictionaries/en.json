@@ -381,6 +381,7 @@
     "linkExpired": "This link has expired.",
     "issued": "Issued",
     "createdBy": "Created by",
+    "details": "Details",
     "templateFields": "Template fields",
     "moveFailed": "Couldn't move this card. Try again.",
     "print": "Print"
@@ -498,6 +499,26 @@
     "deleteWarning": {
       "one": "{count} identity has been issued from this design. Consider disabling it in the editor instead, so those cards keep a template to point at.",
       "other": "{count} identities have been issued from this design. Consider disabling it in the editor instead, so those cards keep a template to point at."
+    },
+    "export": {
+      "action": "Export Excel",
+      "title": "Export identities",
+      "before": "An Excel sheet of every card cut from",
+      "after": "is prepared in the background.",
+      "statuses": "Statuses",
+      "statusesPlaceholder": "All statuses",
+      "statusesAll": "Nothing selected means every status is included.",
+      "statusesSome": {
+        "one": "Only cards in {count} status are included.",
+        "other": "Only cards in {count} statuses are included."
+      },
+      "zipDescription": "The file is a ZIP holding an Excel sheet of the submissions and a folder with every attached image.",
+      "failed": "The server refused to start the export.",
+      "starting": "Starting…",
+      "queuedTitle": "Export started",
+      "queuedDescription": "The file is being prepared on the server.",
+      "queuedNote": "It will appear on the Export History page once processing is complete. Larger templates take longer.",
+      "openHistory": "Open Export History"
     }
   },
   "issue": {
@@ -1107,7 +1128,17 @@
     "downloadLabel": "Download the export for {template}",
     "notReady": "Not ready",
     "notReadyHint": "Still being cut",
-    "readOnlyNote": "Files are produced from the Templates screen. Nothing here retries or deletes one."
+    "readOnlyNote": "Files are produced from the Templates screen. Nothing here retries or deletes one.",
+    "status": {
+      "ready": "Ready",
+      "queued": "Queued",
+      "processing": "Processing",
+      "failed": "Failed"
+    },
+    "copyLink": "Copy link",
+    "exportOf": "Export of {template}",
+    "openLabel": "Open export of {template}",
+    "goToTemplates": "Go to templates"
   },
   "organizations": {
     "metaTitle": "Organizations · Bajat",
@@ -1490,6 +1521,130 @@
       "webhook": "Webhooks",
       "news": "News",
       "statistic": "Statistics"
+    }
+  },
+  "ids": {
+    "metaTitle": "Requests · Bajat",
+    "detailMetaTitle": "Card #{id} · Bajat",
+    "countBefore": "",
+    "countAfter": " identities issued, at every stage.",
+    "columns": {
+      "card": "Card",
+      "cardholder": "Cardholder",
+      "issued": "Issued"
+    },
+    "nameFilterLabel": "Filter by cardholder name",
+    "priceFrom": "Price from",
+    "priceTo": "Price to",
+    "searchPlaceholder": "Search cards",
+    "searchLabel": "Search issued identities",
+    "emptyTitle": "No identities issued yet",
+    "emptyHint": "A card is issued from a template. Every one ever issued lands here.",
+    "emptyFiltered": "No cards match these filters",
+    "loadFailed": "Couldn't load the identities",
+    "loadOneFailed": "Couldn't load this card",
+    "openCard": "Open card #{id}",
+    "cardNumber": "Card #{id}",
+    "uniqueKey": "QR key",
+    "downloadImages": "Download images",
+    "printOrPdf": "Print / save as PDF",
+    "notFound": "This card doesn't exist",
+    "notFoundHint": "It may have been deleted, or the link is wrong.",
+    "backToRequests": "Back to requests",
+    "deleteTitle": "Delete this card?",
+    "deleteDescription": "The identity and its rendered artwork are removed. Any approval history goes with it.",
+    "deleteNote": "The member keeps their account. There is no undo.",
+    "deleteAction": "Delete card",
+    "deleteFailed": "The server refused to delete it.",
+    "decision": {
+      "title": "Decision",
+      "pendingHint": "This card is waiting on a decision. Approving moves it on; rejecting stops it here.",
+      "printHint": "This card has been approved. Send it to the print queue when it is ready to be cut.",
+      "alreadyQueuedHint": "This card is already in the print queue.",
+      "approve": "Approve",
+      "reject": "Reject",
+      "sendToPrinter": "Send to printer",
+      "alreadyQueued": "In the print queue",
+      "approveTitle": "Approve this card?",
+      "approveDescription": "Its status becomes Approved. It can then be sent to the printer.",
+      "approving": "Approving…",
+      "rejectTitle": "Reject this card?",
+      "rejectDescription": "Its status becomes Rejected. It will not be printed.",
+      "rejecting": "Rejecting…",
+      "printTitle": "Send to the printer?",
+      "printDescription": "The card joins the print queue as Waiting to print.",
+      "printNote": "The printer screen moves it on from there. Nothing is printed by this step.",
+      "sending": "Sending…",
+      "failed": "The server refused the change."
+    },
+    "fields": {
+      "editHint": "Hover a value to edit it",
+      "loadingLabels": "Loading field labels…",
+      "editLabel": "Edit {field}",
+      "numberInvalid": "Enter a number.",
+      "dateInvalid": "Pick a date.",
+      "saveFailed": "Couldn't save this field."
+    }
+  },
+  "idsFlow": {
+    "metaTitle": "ID Flow · Bajat",
+    "detailMetaTitle": "Review card #{id} · Bajat",
+    "countBefore": "",
+    "countAfter": " cards waiting at a step you review.",
+    "columns": {
+      "stage": "Stage"
+    },
+    "stageUnknown": "Stage not named",
+    "review": "Review",
+    "reviewCard": "Review card #{id}",
+    "searchPlaceholder": "Search your inbox",
+    "searchLabel": "Search the approval inbox",
+    "loadFailed": "Couldn't load the approval inbox",
+    "emptyTitle": "Nothing is waiting on you",
+    "emptyHint": "Cards appear here when they reach an approval step you are assigned to. If you expected some, check your node assignment.",
+    "emptyFiltered": "No cards match these filters",
+    "notFoundHint": "It may have been deleted, or already moved past your step.",
+    "backToInbox": "Back to ID Flow",
+    "decision": {
+      "title": "Your decision",
+      "hintAtStage": "This card is at {stage}. Approving passes it to the next step and records your note; rejecting stops the flow.",
+      "hint": "Approving passes this card to the next step and records your note; rejecting stops the flow."
+    },
+    "approve": "Approve",
+    "reject": "Reject",
+    "approving": "Approving…",
+    "rejecting": "Rejecting…",
+    "approveTitle": "Approve at this step",
+    "rejectTitle": "Reject at this step",
+    "approveBefore": "You are approving",
+    "rejectBefore": "You are rejecting",
+    "atStage": "at",
+    "approveAfter": "What you record here is kept with the card for the next reviewer.",
+    "rejectAfter": "The flow stops here. Your note is kept with the card.",
+    "approveFailed": "The server refused the approval.",
+    "rejectFailed": "The server refused the rejection.",
+    "notes": "Note",
+    "notesHelperApprove": "What you checked, or anything the next reviewer should know.",
+    "notesHelperReject": "Why it is being rejected.",
+    "notesPlaceholder": "Write a note…",
+    "fields": "Fields",
+    "fieldsHelper": "Add a reference number, a desk, or anything else worth recording at this step.",
+    "addField": "Add field",
+    "fieldKey": "Name",
+    "fieldValue": "Value",
+    "fieldKeyLabel": "Field {n} name",
+    "fieldValueLabel": "Field {n} value",
+    "removeField": "Remove field",
+    "attachments": "Attachments",
+    "attachmentsHelper": "Scans or documents to keep with this approval.",
+    "addFiles": "Add files",
+    "removeFile": "Remove {name}",
+    "history": {
+      "title": "Approval history",
+      "empty": "No approvals recorded yet",
+      "emptyHint": "This card has not passed a review step. Yours would be the first.",
+      "unknownUser": "Unknown reviewer",
+      "noNotes": "No note."
     }
   }
 }

@@ -1,7 +1,7 @@
 import type { TranslationKey, Translator } from "@/i18n/translate"
 import { formatText } from "@/utils/format"
 
-import { statusId, type StatusName } from "./types"
+import { STATUS_NAMES, statusId, type StatusName } from "./types"
 
 /**
  * How an identity's status is labelled and toned.
@@ -105,4 +105,43 @@ export function nextPrintStep(
     return { status: "PRINTED", labelKey: "printer.markAsPrinted" }
   }
   return null
+}
+
+/**
+ * Every status as a `{ key, labelKey }` option — the ledger's status facet
+ * and the export dialog's picker, both keyed by the number the API filters on.
+ *
+ * All ten, not the four the reference client offered on its ledger (spec
+ * §9.18): the Requests screen is "every identity ever issued", and a card in
+ * delivery is still one of those. The label is resolved at render time — a
+ * module constant can only hold one language.
+ */
+export const STATUS_OPTION_KEYS = STATUS_NAMES.map((status) => ({
+  key: String(statusId(status)),
+  status,
+  labelKey: STATUS_META[status].labelKey,
+}))
+
+/**
+ * What the Requests detail can do to a card, given where it is
+ * (docs/IDS-FLOW-EXPORTS-ROUTES.md §2.4a–b).
+ *
+ * - **decide** — approve or reject by status. Only while `PENDING`: a card
+ *   that has been paid for or printed has passed the point where a status
+ *   decision means anything.
+ * - **sendToPrinter** — hand off to the print queue. Anything past `PENDING`
+ *   that was not rejected; `already` marks the one case where the verb is
+ *   shown disabled rather than hidden, because "it is already there" is an
+ *   answer the operator needs, where "you cannot" is not.
+ */
+export function ledgerVerbs(status: StatusName | string | null | undefined): {
+  decide: boolean
+  sendToPrinter: boolean
+  /** Already `WAITING_TO_PRINT` — the button stays, disabled. */
+  already: boolean
+} {
+  const decide = status === "PENDING"
+  const already = status === "WAITING_TO_PRINT"
+  const sendToPrinter = !!status && status !== "PENDING" && status !== "REJECTED"
+  return { decide, sendToPrinter, already }
 }
