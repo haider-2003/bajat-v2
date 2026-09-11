@@ -13,6 +13,16 @@ import { cn } from "@/lib/utils"
  * A single-date picker: a trigger showing the chosen day, and a popover month
  * grid to pick one.
  *
+ * ### Two faces
+ *
+ * `chip` (the default) is the toolbar control: §6.6's 32px chip on the
+ * control-style face, with the label inside it — `Date · Any date` — because
+ * a filter bar has no room for a label above. `field` is the same picker in
+ * a form: it takes the text input's box (§10.3 — 36px, `--input` border,
+ * `--surface` fill, the accent focus ring), the calendar glyph at the end,
+ * and no label inside, because a `Field` already put one above it. The
+ * popover is identical either way.
+ *
  * Values are `yyyy-mm-dd` strings in and out — the same format the list
  * endpoints take — so nothing between this component and the query string has
  * to parse or reformat a date. `""` means "no date".
@@ -141,11 +151,20 @@ export function DatePicker({
   max,
   placeholder,
   className,
+  variant = "chip",
+  id,
+  "aria-describedby": describedBy,
+  invalid = false,
+  disabled = false,
 }: {
   /** `yyyy-mm-dd`, or `""` for no date. */
   value: string
   onChange: (value: string) => void
-  /** The muted half of the trigger, and part of the accessible name. */
+  /**
+   * The muted half of a `chip` trigger, and part of the accessible name. A
+   * `field` does not show it — its `Field` label does — but still announces
+   * it when no `id` wires a label up.
+   */
   label?: string
   /** Earliest selectable day, `yyyy-mm-dd`. */
   min?: string
@@ -153,6 +172,13 @@ export function DatePicker({
   max?: string
   placeholder?: string
   className?: string
+  /** `chip` for a toolbar, `field` for a form. */
+  variant?: "chip" | "field"
+  /** `field`: the `Field` wiring — its label's target, its message, its state. */
+  id?: string
+  "aria-describedby"?: string
+  invalid?: boolean
+  disabled?: boolean
 }) {
   const t = useT()
   const locale = useLocale()
@@ -191,67 +217,111 @@ export function DatePicker({
   }
 
   const todayDisabled = isDisabled(today)
+  const field = variant === "field"
+
+  /** Clearing is the usual follow-up, so it sits on the trigger rather than
+      only inside the popover. A nested <button> is invalid HTML, hence a span
+      carrying the same role and key handling. */
+  const clear = selected && !disabled && (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label={
+        label ? t("datePicker.clearFieldDate", { field: label }) : t("datePicker.clearDate")
+      }
+      onClick={(e) => {
+        e.stopPropagation()
+        onChange("")
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return
+        e.preventDefault()
+        e.stopPropagation()
+        onChange("")
+      }}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-xs",
+        "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        field
+          ? "size-5 text-text-muted transition-colors hover:text-text"
+          : cn("ms-0.5 size-4 opacity-60 transition-opacity hover:opacity-100", surface.muted)
+      )}
+    >
+      <X className="size-3" strokeWidth={2} />
+    </span>
+  )
 
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Trigger
+        id={id}
+        disabled={disabled}
+        aria-describedby={describedBy}
+        // Styling hook only: `aria-invalid` is not a thing a button can say.
+        data-invalid={invalid || undefined}
         className={cn(
-          // §18.7 — 44px for touch, the §6.6 32px chip at lg.
-          "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-md px-2.5 lg:h-8",
-          "text-sm font-medium whitespace-nowrap",
-          "transition-[box-shadow,background-color,color] duration-120",
-          "outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          "active:translate-y-px",
-          surface.face,
+          field
+            ? [
+                // §10.3 — the text input's box, with a glyph at the end.
+                "flex h-9 w-full min-w-0 items-center gap-2 rounded-lg border border-input bg-surface px-3",
+                "text-start text-sm font-normal text-text",
+                "transition-[border-color,box-shadow,background-color] duration-120 outline-none",
+                "hover:border-border-strong",
+                "focus-visible:border-accent-violet focus-visible:ring-3 focus-visible:ring-ring/45",
+                // Open reads as focused: the popover has the keyboard now.
+                "data-popup-open:border-accent-violet data-popup-open:ring-3 data-popup-open:ring-ring/45",
+                "data-invalid:border-danger data-invalid:ring-3 data-invalid:ring-danger/15",
+                "disabled:cursor-not-allowed disabled:border-border-subtle disabled:bg-background-subtle disabled:text-text-placeholder",
+                "dark:bg-surface-sunken dark:disabled:bg-[#0f0f0f]",
+              ]
+            : [
+                // §18.7 — 44px for touch, the §6.6 32px chip at lg.
+                "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-md px-2.5 lg:h-8",
+                "text-sm font-medium whitespace-nowrap",
+                "transition-[box-shadow,background-color,color] duration-120",
+                "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "active:translate-y-px",
+                surface.face,
+              ],
           className
         )}
         aria-label={
-          label ? t("datePicker.fieldDate", { field: label }) : t("datePicker.pick")
+          // A wired-up label names a field; only an unlabelled trigger needs this.
+          field && id
+            ? undefined
+            : label
+              ? t("datePicker.fieldDate", { field: label })
+              : t("datePicker.pick")
         }
       >
-        <CalendarDays
-          className={cn("size-4 shrink-0", surface.muted)}
-          strokeWidth={1.5}
-        />
-        {label && <span className={surface.muted}>{label}</span>}
-        {/* Unset reads as muted, a chosen date at full contrast — both taken
-            from the surface, so the ink face stays legible. */}
-        <span className={selected ? undefined : surface.muted}>
-          {selected
-            ? triggerFmt(tag).format(selected)
-            : placeholder ?? t("datePicker.anyDate")}
-        </span>
-        {/* Clearing is the usual follow-up, so it sits on the trigger rather
-            than only inside the popover. A nested <button> is invalid HTML,
-            hence a span carrying the same role and key handling. */}
-        {selected && (
-          <span
-            role="button"
-            tabIndex={0}
-            aria-label={
-              label
-                ? t("datePicker.clearFieldDate", { field: label })
-                : t("datePicker.clearDate")
-            }
-            onClick={(e) => {
-              e.stopPropagation()
-              onChange("")
-            }}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter" && e.key !== " ") return
-              e.preventDefault()
-              e.stopPropagation()
-              onChange("")
-            }}
-            className={cn(
-              "ms-0.5 inline-flex size-4 items-center justify-center rounded-xs",
-              "transition-opacity hover:opacity-100 opacity-60",
-              "outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              surface.muted
-            )}
-          >
-            <X className="size-3" strokeWidth={2} />
-          </span>
+        {field ? (
+          <>
+            <span
+              className={cn("min-w-0 flex-1 truncate", !selected && "text-text-placeholder")}
+            >
+              {selected ? triggerFmt(tag).format(selected) : (placeholder ?? t("datePicker.pick"))}
+            </span>
+            {clear}
+            <CalendarDays
+              className="size-4 shrink-0 text-text-placeholder"
+              strokeWidth={1.5}
+              aria-hidden
+            />
+          </>
+        ) : (
+          <>
+            <CalendarDays
+              className={cn("size-4 shrink-0", surface.muted)}
+              strokeWidth={1.5}
+            />
+            {label && <span className={surface.muted}>{label}</span>}
+            {/* Unset reads as muted, a chosen date at full contrast — both
+                taken from the surface, so the ink face stays legible. */}
+            <span className={selected ? undefined : surface.muted}>
+              {selected ? triggerFmt(tag).format(selected) : (placeholder ?? t("datePicker.anyDate"))}
+            </span>
+            {clear}
+          </>
         )}
       </PopoverPrimitive.Trigger>
 

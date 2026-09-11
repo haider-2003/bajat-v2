@@ -4,7 +4,13 @@ import api from "@/api/client"
 import { createApiFactory } from "@/utils/api/api-factory"
 import type { RequestOptions } from "@/types/axios"
 
-import { statusId, type ChangeStatusInput, type IDCard, type StatusName } from "./types"
+import {
+  statusId,
+  type ChangeStatusInput,
+  type CreateIDCardInput,
+  type IDCard,
+  type StatusName,
+} from "./types"
 
 /**
  * IDs (identities). See docs/api-types.md § ids for every shape, and
@@ -32,7 +38,7 @@ const REQUEST_OPTIONS: RequestOptions = {
   skipResponseKeyConversion: SKIP,
 }
 
-const idsApi = createApiFactory<IDCard>({
+const idsApi = createApiFactory<IDCard, CreateIDCardInput>({
   entityName: "identity",
   endpoint: "/identity",
   isFormData: true,
@@ -46,12 +52,29 @@ export const useGetIds = idsApi.useGetList
 export const useGetId = idsApi.useGetById
 
 /**
+ * `POST /identity` — issue a card from a template.
+ *
+ * The factory's create, typed to `CreateIDCardInput`: one multipart body with
+ * the template's variables flat at the root (docs/ISSUE-ID-FORM.md §8). The
+ * body is assembled by `buildIssuePayload` in ./issue-form.ts rather than at
+ * the call site, so the one place that knows the wire shape is next to the
+ * one place that knows which variables a design collects.
+ *
+ * Invalidates every `["identity"]` query, as every factory write does. The
+ * *templates* list is stale too after this — `identitiesCount` moved — and
+ * the issue sheet invalidates that itself, because the factory only knows its
+ * own resource.
+ */
+export const useCreateId = idsApi.useCreate
+
+/**
  * ### Documented but not built
  *
- * The factory generates create / update / delete for this resource too, and
- * they are not exported: an exported hook reads as a supported one. Issuing a
- * card is the photo-editor flow and needs `CreateIDCardInput`'s template
- * variables; deleting one is not something a queue screen should offer.
+ * The factory generates update / delete for this resource too, and they are
+ * not exported: an exported hook reads as a supported one. Deleting a card is
+ * not something a queue screen should offer, and updating one is the
+ * `useUpdateIdVars` / `useUpdateIdDates` pair below, which take different
+ * paths from the factory's `POST /identity/{id}`.
  *
  * Hand-written and still missing, for the same reason — no screen calls them:
  *

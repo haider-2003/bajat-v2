@@ -47,6 +47,7 @@ import { readPageInfo } from "@/utils/api/pagination"
 import { DEFAULT_PAGE_SIZE } from "@/utils/constants"
 
 import { createColumns } from "./columns"
+import { IssueIdSheet } from "./issue-id-sheet"
 import {
   CloneTemplateDialog,
   DeleteTemplateDialog,
@@ -196,6 +197,7 @@ export function TemplatesClient() {
 
   /** Which template each dialog is about. `null` closes it. */
   const [previewed, setPreviewed] = React.useState<Template | null>(null)
+  const [issuing, setIssuing] = React.useState<Template | null>(null)
   const [cloning, setCloning] = React.useState<Template | null>(null)
   const [resetting, setResetting] = React.useState<Template | null>(null)
   const [deleting, setDeleting] = React.useState<Template | null>(null)
@@ -305,6 +307,7 @@ export function TemplatesClient() {
   const handlers: TemplateActionHandlers = React.useMemo(
     () => ({
       onPreview: setPreviewed,
+      onIssue: setIssuing,
       onDuplicate: setCloning,
       onResetSequences: setResetting,
       onDelete: setDeleting,
@@ -567,6 +570,14 @@ export function TemplatesClient() {
         onOpenChange={(open) => !open && setPreviewed(null)}
         onRefresh={() => templatesQuery.refetch()}
         refreshing={templatesQuery.isFetching}
+      />
+      {/* The one sheet on this screen, and the reason it is a sheet: issuing
+          happens several times in a sitting, and the gallery stays behind it
+          rather than being navigated away from. */}
+      <IssueIdSheet
+        template={liveRow(issuing)}
+        open={issuing !== null}
+        onOpenChange={(open) => !open && setIssuing(null)}
       />
       <CloneTemplateDialog
         template={liveRow(cloning)}

@@ -124,3 +124,32 @@ export type ChangeStatusInput = {
   status: number
   notes?: string
 }
+
+/**
+ * `POST /identity` — issue a card. See docs/ISSUE-ID-FORM.md §8.
+ *
+ * One flat multipart body: the four fixed fields, then **one root-level key
+ * per template variable**, named exactly as the template's `vars[]` names it.
+ * The factory sends keys verbatim (`disableRequestKeyConversion`), which is
+ * what lets `employee_no` and a transliterated Arabic key reach the server
+ * unrenamed — and what makes the mixed casing below deliberate rather than
+ * careless: `template_id` and `organization_id` are snake, `branchId` is
+ * camel, and the server reads each of them spelled exactly like that.
+ *
+ * `identity` is the literal `"by system"` — the marker for a dashboard-issued
+ * card, as opposed to the public self-service form.
+ *
+ * Values follow `objectToFormData` (utils/objects.ts): a `File` becomes a
+ * binary part, a string or number is sent as text, and `null` **omits the
+ * key** — which the renderer treats differently from an empty string (an
+ * absent key leaves the `{placeholder}` on the card, `""` prints blank).
+ */
+export type CreateIDCardInput = {
+  identity: "by system"
+  name: string
+  /** `964` + ten digits — see `toApiPhone` in utils/format.ts. */
+  phone: string
+  template_id: number
+  organization_id?: number
+  branchId?: number
+} & Record<string, string | number | File | null | undefined>
