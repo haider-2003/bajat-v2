@@ -47,6 +47,43 @@ export type QueryKeyFactory = {
 /** The default error type: every hook rejects with an Axios error. */
 export type ApiError = AxiosError
 
+/**
+ * One entity, out of whatever envelope it arrived in.
+ *
+ * `GET /endpoint/{id}` is *documented* as returning the row directly
+ * (docs/api-types.md § Response envelopes) and *observed* returning it wrapped
+ * in the same `data` envelope the list endpoints use — the identical split
+ * `readFlowNodes` in features/template-flow/api.ts already records for
+ * `/template/flow/{id}`, and for the same reason: the envelope is the API's
+ * convention and the docs describe the shape somebody expected.
+ *
+ * Guessing wrong fails **silently**. Handing back `{ data: row }` where a row
+ * was promised makes every field read as `undefined`, so nothing throws, no
+ * request errors, and the screen just comes up empty — which is how a template
+ * opened in the editor with none of its design and none of its metadata.
+ *
+ * So neither shape is assumed. A wrapper is recognised by what it *lacks*: an
+ * envelope carries `data` and none of the entity's own columns, while a row
+ * that happens to have its own `data` column still has an `id`. Anything
+ * ambiguous is left exactly as it came.
+ */
+function unwrapEntity<TEntity>(body: unknown): TEntity {
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    !("data" in body) ||
+    "id" in body
+  ) {
+    return body as TEntity
+  }
+
+  const inner = (body as { data: unknown }).data
+  return inner && typeof inner === "object" && !Array.isArray(inner)
+    ? (inner as TEntity)
+    : (body as TEntity)
+}
+
 type QueryOptions<TData> = Omit<
   UseQueryOptions<TData, ApiError, TData>,
   "queryKey" | "queryFn"
@@ -128,7 +165,7 @@ export function createApiFactory<
         const response = await api.get<TEntity>(`${endpoint}/${id}`, {
           options: requestOptions,
         })
-        return response.data
+        return unwrapEntity<TEntity>(response.data)
       },
       // Never fires before an id exists — avoids a `/endpoint/undefined` request.
       enabled: !!id,
@@ -145,7 +182,7 @@ export function createApiFactory<
           headers,
           options: requestOptions,
         })
-        return response.data
+        return unwrapEntity<TEntity>(response.data)
       },
       ...options,
       // Every mutation refreshes the resource, so tables update themselves and
@@ -188,7 +225,7 @@ export function createApiFactory<
               options: requestOptions,
             })
 
-        return response.data
+        return unwrapEntity<TEntity>(response.data)
       },
       ...options,
       onSuccess: (data, variables, onMutateResult, context) => {

@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { Select as SelectPrimitive } from "@base-ui/react/select"
+import { Check, ChevronDown } from "lucide-react"
 
 import { useT } from "@/i18n/context"
 import { cn } from "@/lib/utils"
@@ -359,6 +361,218 @@ export function Field({
       )}
       {...props}
     />
+  )
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   SelectField — a grouped one-of-N picker
+   ──────────────────────────────────────────────────────────────────────── */
+
+export type SelectOption = {
+  value: string
+  label: string
+  /** Muted trailing text: a unit, a sample, or why the row is unavailable. */
+  note?: string
+  icon?: React.ComponentType<{ className?: string; strokeWidth?: number }>
+  disabled?: boolean
+}
+
+export type SelectGroup = {
+  /** Omit for an ungrouped run of options. */
+  label?: string
+  options: SelectOption[]
+}
+
+/**
+ * The panels' dropdown.
+ *
+ * ### Why not the native `<select>` it replaces
+ *
+ * A native select inside a `Field` looked right until it was opened, and then
+ * the operating system drew the list: a bare white column in the system font,
+ * no icons, `optgroup` headings in bold serif on Windows, and — the part that
+ * actually mattered — fifteen variable types whose only distinguishing mark was
+ * a word. The three that are unavailable while a template never expires could
+ * say so only by having the reason glued onto the label, so the list read
+ * `Expiration date — needs an expiry duration` and wrapped.
+ *
+ * This one is the editor's own material through: a **Well** for the trigger,
+ * which is what §materials reserves for a one-of-N control, and a **Float** for
+ * the popup, like every other thing that hovers over the canvas. The reason a
+ * row is unavailable is a muted note in its own column, so the label stays a
+ * label.
+ *
+ * ### Anatomy
+ *
+ * Base UI's Select rather than a Menu: this picks a value, it has a selected
+ * state to indicate, and it needs the type-ahead and the roving focus that come
+ * with the listbox role. `alignItemWithTrigger` is off — the native-style
+ * overlay that puts the selected row on top of the trigger is disorienting in a
+ * 284px panel, where the popup is nearly as tall as the panel itself.
+ *
+ * The whole control is portalled, which is what lets it escape the panel's
+ * `overflow-hidden` and the chrome layer's stacking context.
+ */
+export function SelectField({
+  value,
+  onValueChange,
+  groups,
+  label,
+  disabled,
+  className,
+}: {
+  value: string
+  onValueChange: (value: string) => void
+  groups: SelectGroup[]
+  /** Accessible name. The visible `FieldLabel` beside it is not one. */
+  label: string
+  disabled?: boolean
+  className?: string
+}) {
+  const selected = React.useMemo(
+    () =>
+      groups
+        .flatMap((group) => group.options)
+        .find((option) => option.value === value),
+    [groups, value]
+  )
+
+  const Icon = selected?.icon
+
+  return (
+    <SelectPrimitive.Root
+      value={value}
+      onValueChange={(next) => onValueChange(String(next))}
+      disabled={disabled}
+    >
+      <SelectPrimitive.Trigger
+        aria-label={label}
+        className={cn(
+          "flex h-8 w-full items-center gap-2 rounded-[9px] bg-[var(--editor-well)] px-2.5",
+          "text-[13px] text-text outline-none select-none",
+          "transition-[background-color,box-shadow] duration-120",
+          "hover:bg-[var(--editor-press)]",
+          "focus-visible:ring-2 focus-visible:ring-ring",
+          // Open reads as pressed, the same way a Chip does — the popup is the
+          // continuation of the control, not a separate surface.
+          "data-popup-open:bg-[var(--editor-press)]",
+          "data-disabled:pointer-events-none data-disabled:opacity-55",
+          className
+        )}
+      >
+        {Icon && (
+          <Icon className="size-3.5 shrink-0 text-text-placeholder" strokeWidth={1.7} />
+        )}
+        <span className="min-w-0 flex-1 truncate text-start">
+          {selected?.label ?? value}
+        </span>
+        <SelectPrimitive.Icon
+          render={
+            <ChevronDown
+              className="size-3.5 shrink-0 text-text-placeholder transition-transform duration-150 in-data-popup-open:rotate-180"
+              strokeWidth={2}
+            />
+          }
+        />
+      </SelectPrimitive.Trigger>
+
+      <SelectPrimitive.Portal>
+        <SelectPrimitive.Positioner
+          side="bottom"
+          sideOffset={6}
+          align="start"
+          alignItemWithTrigger={false}
+          className="z-50 outline-none"
+        >
+          <SelectPrimitive.Popup
+            className={cn(
+              "max-h-(--available-height) w-(--anchor-width) min-w-[200px] overflow-y-auto",
+              "rounded-[13px] bg-[var(--editor-float)] p-1.5 shadow-[var(--editor-shadow-pop)]",
+              "origin-(--transform-origin) outline-none scrollbar-quiet",
+              "transition-[transform,opacity] duration-120 ease-[cubic-bezier(0.16,1,0.3,1)]",
+              "data-starting-style:scale-[0.97] data-starting-style:opacity-0",
+              "data-ending-style:scale-[0.97] data-ending-style:opacity-0",
+              "motion-reduce:transition-none"
+            )}
+          >
+            <SelectPrimitive.List>
+              {groups.map((group, i) => (
+                <SelectPrimitive.Group key={group.label ?? i}>
+                  {group.label && (
+                    <SelectPrimitive.GroupLabel
+                      className={cn(
+                        "flex items-center gap-2 px-1.5 pb-1.5",
+                        "text-[10px] font-semibold tracking-[0.06em] text-text-placeholder uppercase",
+                        // The gap belongs *between* groups, so the first heading
+                        // sits tight against the popup's own padding. `first:`
+                        // cannot say this — every label is the first child of
+                        // its own group, so it would apply to all of them.
+                        i === 0 ? "pt-1" : "pt-3"
+                      )}
+                    >
+                      {group.label}
+                      <span className="h-px flex-1 bg-[var(--editor-line)]" />
+                    </SelectPrimitive.GroupLabel>
+                  )}
+
+                  {group.options.map((option) => (
+                    <SelectItemRow key={option.value} option={option} />
+                  ))}
+                </SelectPrimitive.Group>
+              ))}
+            </SelectPrimitive.List>
+          </SelectPrimitive.Popup>
+        </SelectPrimitive.Positioner>
+      </SelectPrimitive.Portal>
+    </SelectPrimitive.Root>
+  )
+}
+
+/**
+ * One row.
+ *
+ * The check sits in a reserved 14px column rather than being conjured on
+ * selection, so choosing a different type does not shift every label in the
+ * list sideways by the width of a tick.
+ */
+function SelectItemRow({ option }: { option: SelectOption }) {
+  const Icon = option.icon
+
+  return (
+    <SelectPrimitive.Item
+      value={option.value}
+      disabled={option.disabled}
+      className={cn(
+        "flex h-[30px] cursor-default items-center gap-2 rounded-[9px] px-1.5",
+        "text-[12.5px] text-text outline-none select-none",
+        "data-highlighted:bg-[var(--editor-hover)]",
+        "data-selected:text-accent-violet",
+        "data-disabled:pointer-events-none data-disabled:opacity-45"
+      )}
+    >
+      {Icon && (
+        <Icon
+          className="size-3.5 shrink-0 text-text-placeholder in-data-selected:text-accent-violet"
+          strokeWidth={1.7}
+        />
+      )}
+
+      <SelectPrimitive.ItemText className="min-w-0 flex-1 truncate">
+        {option.label}
+      </SelectPrimitive.ItemText>
+
+      {option.note && (
+        <span className="shrink-0 text-[10.5px] whitespace-nowrap text-text-placeholder">
+          {option.note}
+        </span>
+      )}
+
+      <span className="flex size-3.5 shrink-0 items-center justify-center">
+        <SelectPrimitive.ItemIndicator
+          render={<Check className="size-3.5 text-accent-violet" strokeWidth={2.4} />}
+        />
+      </span>
+    </SelectPrimitive.Item>
   )
 }
 

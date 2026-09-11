@@ -253,6 +253,13 @@ type EditorState = {
   setConfig: (config: TemplateConfig) => void
   setTemplateId: (id: number | null) => void
   markSaved: () => void
+  /** Replaces the whole editable state with a template loaded from the API. */
+  hydrate: (loaded: {
+    doc: EditorDocument | null
+    variables: EditorVariable[]
+    config: TemplateConfig
+    templateId: number
+  }) => void
 
   // ── view ──
   setZoom: (zoom: number) => void
@@ -477,6 +484,40 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setConfig: (config) => set({ config, hasConfigured: true, dirty: true }),
   setTemplateId: (id) => set({ templateId: id }),
   markSaved: () => set({ dirty: false }),
+
+  /**
+   * Load a saved template into the editor.
+   *
+   * Not `replaceDocument` + `setConfig` + a variables setter, because those
+   * three each push history and set `dirty` — and a template that has just been
+   * *read* has no unsaved changes and nothing to undo back to. Undoing past a
+   * load would land on the blank document `reset()` left behind, which is the
+   * one state the operator can never want.
+   *
+   * `hasConfigured` is true on arrival: the metadata exists, it came from the
+   * record, and §4.3's gate is about a template that has never had any.
+   *
+   * A row with no design (`doc: null`) keeps the blank one and takes the
+   * metadata — a record can carry terms before it carries artwork.
+   */
+  hydrate: ({ doc, variables, config, templateId }) =>
+    set({
+      doc: doc ? clone(doc) : blankDocument(),
+      variables,
+      config,
+      hasConfigured: true,
+      templateId,
+      selectedId: null,
+      activePage: 0,
+      styleSource: null,
+      dirty: false,
+      history: [],
+      historyIndex: -1,
+      // The document's size is the one thing the view was framed against, and
+      // it has just changed. Un-touching the view lets the next layout pass
+      // re-fit rather than leaving an A6 card half off the screen.
+      viewTouched: false,
+    }),
 
   /** Button/keyboard zoom snaps to the step; wheel zoom goes through `setView`. */
   setZoom: (zoom) =>

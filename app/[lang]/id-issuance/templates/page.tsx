@@ -1,15 +1,13 @@
 import type { Metadata } from "next"
-import { Plus } from "lucide-react"
 
 import { AppShell } from "@/components/layout/app-shell"
 import { SidebarTrigger } from "@/components/layout/sidebar"
-import { Button } from "@/components/ui/button"
-import { LocaleLink } from "@/i18n/link"
 import { getTranslations } from "@/i18n/server"
 
 import {
+  NewTemplateButton,
   TemplatesClient,
-  TemplatesCount,
+  TemplatesSubtitle,
 } from "./components/templates-client"
 
 /**
@@ -18,11 +16,16 @@ import {
  * Rows come from `GET /template`, paged and filtered by the server
  * (docs/api-types.md § templates). The editor at `./new` and `./[id]/edit`
  * authors the design; this screen is everything around it — finding one,
- * copying one, retiring one.
+ * copying one, assigning one to an organization, retiring one.
  *
  * The layout is the standard list-page shell: identity bar, title block with
  * the one primary action, then the client. What is different is underneath —
- * see the note on `TemplatesClient` for why this list opens as a gallery.
+ * the client opens with two tabs (an organization's own cards, and the public
+ * catalogue), and see its note for why the list is a gallery.
+ *
+ * The subtitle and the primary action are client components: both depend on
+ * things a Server Component cannot read — the `?type=` tab for the count's
+ * wording, and the auth store for the `create-template` gate.
  */
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations()
@@ -60,28 +63,13 @@ export default async function TemplatesPage() {
             </h1>
             {/* Split around the live count — see the note on App Users. */}
             <p className="mt-1 text-[13px] text-text-muted">
-              {t("templates.countBefore")}
-              <TemplatesCount />
-              {t("templates.countAfter")}
+              <TemplatesSubtitle />
             </p>
           </div>
 
           {/* §4.6.2 — the primary action right-aligns to the opposite gutter,
-              on the title's own row rather than in the filter toolbar below.
-              A link, not a dialog: a new template is authored in the editor,
-              which is a full-viewport tool.
-
-              `LocaleLink` rather than `next/link`: every route lives under
-              `/[lang]`, so a bare `/id-issuance/templates/new` matches nothing. */}
-          <Button
-            size="lg"
-            className="h-11 w-full sm:h-9 sm:w-auto"
-            nativeButton={false}
-            render={<LocaleLink href="/id-issuance/templates/new" />}
-          >
-            <Plus data-icon="inline-start" strokeWidth={1.75} />
-            {t("templates.new")}
-          </Button>
+              on the title's own row rather than in the filter toolbar below. */}
+          <NewTemplateButton />
         </div>
 
         <TemplatesClient />

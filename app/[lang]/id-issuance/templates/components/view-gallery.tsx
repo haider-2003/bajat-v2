@@ -2,17 +2,19 @@
 
 import * as React from "react"
 import type { Table as TanTable } from "@tanstack/react-table"
+import { Building2 } from "lucide-react"
 
 import { EmptyState } from "@/components/table/empty-state"
 import { SoftBadge } from "@/components/ui/data-bits"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAuthStore } from "@/features/auth/store"
 import {
   templateIssued,
   templatePrice,
   templateStatus,
   templateValidity,
 } from "@/features/templates/display"
-import type { Template } from "@/features/templates/types"
+import type { Template, TemplateScope } from "@/features/templates/types"
 import { useT } from "@/i18n/context"
 import type { Features } from "@/lib/table-features"
 import { cn } from "@/lib/utils"
@@ -61,12 +63,23 @@ import {
  *
  * It is also the responsive fallback: below `lg` the table collapses to this
  * rather than squeezing nine columns (§8.12).
+ *
+ * ### The tile knows which tab it is on
+ *
+ * `scope` decides the verbs in the footer (see `TemplateActions`) and one
+ * line of the body: the issued count is a fact about an organization's card
+ * and is not printed on a public blueprint, which nothing is ever issued
+ * from. An admin on the organization tab also gets the owner's name — with
+ * every organization's cards in one grid, it is how two "Staff Card 2026"s
+ * are told apart (docs/CARD-CREATE-ASSIGN-GALLERY.md §5.4).
  */
 export function GalleryView({
   table,
+  scope,
   handlers,
 }: {
   table: TanTable<Features, Template>
+  scope: TemplateScope
   handlers: TemplateActionHandlers
 }) {
   const t = useT()
@@ -84,7 +97,12 @@ export function GalleryView({
     // Auto-fill reflows without media queries (§18.5). 16px gap (§9.1).
     <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
       {templates.map((template) => (
-        <TemplateCard key={template.id} template={template} handlers={handlers} />
+        <TemplateCard
+          key={template.id}
+          template={template}
+          scope={scope}
+          handlers={handlers}
+        />
       ))}
     </div>
   )
@@ -92,13 +110,24 @@ export function GalleryView({
 
 function TemplateCard({
   template,
+  scope,
   handlers,
 }: {
   template: Template
+  scope: TemplateScope
   handlers: TemplateActionHandlers
 }) {
   const t = useT()
+  const isAdmin = useAuthStore((s) => s.user?.type === "admin")
   const status = templateStatus(t, template)
+
+  /**
+   * The owner, for an admin looking across organizations. An organization
+   * user's tab holds only their own cards, where the name would be the same
+   * on every tile; the public tab's rows have no owner at all.
+   */
+  const owner =
+    isAdmin && scope === "organization" ? template.organization?.name : undefined
 
   /**
    * The description, unless it is just the title again.
@@ -121,11 +150,11 @@ function TemplateCard({
    * "1,204 issued · — · 12 months".
    */
   const meta = [
-    template.identitiesCount === undefined
-      ? null
-      : t("templates.issuedCount", {
+    scope === "organization" && template.identitiesCount !== undefined
+      ? t("templates.issuedCount", {
           count: templateIssued(template.identitiesCount),
-        }),
+        })
+      : null,
     templatePrice(t, template.price),
     templateValidity(t, template.identityDuration),
     template.branchRequired ? t("templates.branchRequired") : null,
@@ -202,6 +231,20 @@ function TemplateCard({
           {formatText(template.title)}
         </h3>
 
+        {owner && (
+          <p
+            title={owner}
+            className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-text-secondary"
+          >
+            <Building2
+              className="size-3.5 shrink-0 text-text-muted"
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <span className="truncate">{formatText(owner)}</span>
+          </p>
+        )}
+
         {/* Clamped rather than truncated: a description is a sentence, and one
             line of it usually stops mid-clause. Two lines is enough to tell two
             similar cards apart, which is all it is here for. */}
@@ -227,6 +270,7 @@ function TemplateCard({
             not exist on a phone. */}
         <TemplateActionRow
           template={template}
+          scope={scope}
           handlers={handlers}
           className="mt-3.5"
         />

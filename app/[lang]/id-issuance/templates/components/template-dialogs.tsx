@@ -33,6 +33,15 @@ import { Field, FieldSet } from "@/components/ui/field"
 import { Input, InputGroup, InputGroupAddon } from "@/components/ui/input"
 import { Segmented } from "@/components/ui/segmented"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { useAuthStore } from "@/features/auth/store"
+import { useGetOrganizations } from "@/features/organizations/api"
+import {
   useCloneTemplate,
   useDeleteTemplate,
   useResetTemplateSequences,
@@ -43,7 +52,7 @@ import {
   templateStatus,
   templateValidity,
 } from "@/features/templates/display"
-import type { Template } from "@/features/templates/types"
+import type { Template, TemplateScope } from "@/features/templates/types"
 import { cn } from "@/lib/utils"
 import type { ApiErrorBody } from "@/types/api"
 import { formatText } from "@/utils/format"
@@ -71,6 +80,13 @@ const CONTROL = "h-11 text-base md:h-9 md:text-sm"
 
 /** §18.6 — the footer's actions go full-width before the row goes horizontal. */
 const ACTION = "h-11 w-full md:h-9 md:w-auto"
+
+/** The same box as `CONTROL`, spelled for the select primitive's size slots. */
+const SELECT_TRIGGER =
+  "w-full border-input bg-surface text-base data-[size=default]:h-11 focus-visible:border-accent-violet focus-visible:ring-ring/45 aria-invalid:border-danger aria-invalid:ring-danger/15 md:text-sm md:data-[size=default]:h-9 dark:bg-surface-sunken"
+
+/** The admin's organization picker source. One stable key, shared with the list screens. */
+const ORGANIZATIONS_QUERY = { page: 1, pageSize: 100 } as const
 
 /* ------------------------------------------------------------------ *
  * Shared bits
@@ -135,9 +151,17 @@ type Face = "front" | "back"
  * back share one frame through a segmented switch rather than sitting side by
  * side — a card is looked at one face at a time, and two 280px thumbnails are
  * worse than one 590px face.
+ *
+ * The footer's "Open in editor" follows the row control's Edit gate
+ * (`TemplateActions`): on the organization tab `update-template` and
+ * `show-template`, on the public tab admin plus `update-template`. Hidden
+ * rather than disabled here — the row already shows the disabled state, and a
+ * dialog footer with one dead button in it reads as broken. The issued count
+ * is likewise left off a public card, which nothing is issued from.
  */
 export function TemplatePreviewDialog({
   template,
+  scope,
   open,
   onOpenChange,
   onRefresh,
@@ -145,6 +169,7 @@ export function TemplatePreviewDialog({
 }: {
   /** `null` between openings — nothing renders. */
   template: Template | null
+  scope: TemplateScope
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Refetches the list, which is what mints fresh image URLs. */
@@ -156,6 +181,7 @@ export function TemplatePreviewDialog({
       {template && (
         <PreviewBody
           template={template}
+          scope={scope}
           onRefresh={onRefresh}
           refreshing={refreshing}
         />
@@ -166,17 +192,25 @@ export function TemplatePreviewDialog({
 
 function PreviewBody({
   template,
+  scope,
   onRefresh,
   refreshing,
 }: {
   template: Template
+  scope: TemplateScope
   onRefresh: () => void
   refreshing: boolean
 }) {
   const t = useT()
+  const can = useAuthStore((s) => s.can)
+  const isAdmin = useAuthStore((s) => s.user?.type === "admin")
   const [face, setFace] = React.useState<Face>("front")
   const status = templateStatus(t, template)
   const hasBack = !!template.backImage
+  const isPublic = scope === "global"
+  const canEdit = isPublic
+    ? isAdmin && can("update-template")
+    : can("update-template") && can("show-template")
 
   // A template with no back artwork has nothing to switch to, so the control is
   // absent rather than present-and-half-disabled. `face` is only ever read
@@ -228,10 +262,17 @@ function PreviewBody({
 
         {/* The terms an identity is actually cut on (§9.3). */}
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-          <Term
-            label={t("templates.columns.issued")}
-            value={templateIssued(template.identitiesCount)}
-          />
+          {isPublic ? (
+            <Term
+              label={t("filters.attributes.organization")}
+              value={t("templates.publicBadge")}
+            />
+          ) : (
+            <Term
+              label={t("templates.columns.issued")}
+              value={templateIssued(template.identitiesCount)}
+            />
+          )}
           <Term
             label={t("templates.columns.price")}
             value={templatePrice(t, template.price)}
@@ -300,14 +341,16 @@ function PreviewBody({
             </Button>
           }
         />
-        <Button
-          className={ACTION}
-          nativeButton={false}
-          render={<Link href={`/id-issuance/templates/${template.id}/edit`} />}
-        >
-          <Pencil data-icon="inline-start" strokeWidth={1.75} />
-          {t("templates.openInEditor")}
-        </Button>
+        {canEdit && (
+          <Button
+            className={ACTION}
+            nativeButton={false}
+            render={<Link href={`/id-issuance/templates/${template.id}/edit`} />}
+          >
+            <Pencil data-icon="inline-start" strokeWidth={1.75} />
+            {t("templates.openInEditor")}
+          </Button>
+        )}
       </DialogFooter>
     </DialogContent>
   )
@@ -370,34 +413,56 @@ function ShareKey({ value }: { value: string }) {
  * Duplicate
  * ------------------------------------------------------------------ */
 
-type CloneField = "title" | "description" | "price"
+type CloneField = "title" | "description" | "price" | "organizationId"
 
 /** Server validation errors, keyed by the **wire** name the interceptor sends. */
 const CLONE_WIRE_NAMES: Record<string, CloneField> = {
   title: "title",
   description: "description",
   price: "price",
+  organization_id: "organizationId",
 }
 
 /**
- * Duplicate — `POST /template/clone`.
+ * Clone — `POST /template/clone`. One request, three conversations.
  *
  * The design comes across untouched; the terms are re-asked, because a copy
  * that shares its original's title is indistinguishable from it in every list
- * on this screen. Prefilled with "<title> (copy)" and the original's price, so
- * the common case is one keystroke.
+ * on this screen. Prefilled with the original's price and, on the organization
+ * tab, "<title> (copy)", so the common case is one keystroke.
  *
- * Cloning into *another organization* is part of the endpoint and is
- * deliberately not offered: this screen never asks which organization it is
- * looking at, so a picker here would be the one control on it that changes
- * scope.
+ * ### Which conversation depends on the tab and the user
+ *
+ * docs/CARD-CREATE-ASSIGN-GALLERY.md §4. The endpoint is the same; what it
+ * *means* is not:
+ *
+ * - **Organization tab** — *Duplicate*: a second copy of one of your own cards
+ *   on new terms. The title gets the "(copy)" suffix so the two are told apart.
+ * - **Public tab, organization user** — *Use for my organization*: adopt a
+ *   shared blueprint. The server stamps the copy with the token's organization;
+ *   nothing is sent about it. The title is kept as-is — there is no original
+ *   in their list to collide with.
+ * - **Public tab, admin** — *Assign to organization*: the one client action
+ *   that names an owner. An admin has no organization of their own, so the
+ *   picker is **required**, and `organization_id` goes on the wire. On the
+ *   organization tab an admin gets the same picker prefilled with the source
+ *   card's owner, so a duplicate stays where it came from unless they say
+ *   otherwise.
+ *
+ * The public tab is deliberately the one place a card changes hands. Every
+ * other control on the screen reads within a scope; this one moves a design
+ * across one, and the dialog says so in words rather than leaving it to the
+ * picker.
  */
 export function CloneTemplateDialog({
   template,
+  scope,
   open,
   onOpenChange,
 }: {
   template: Template | null
+  /** The tab the row came from — picks the wording and the target. */
+  scope: TemplateScope
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
@@ -406,7 +471,11 @@ export function CloneTemplateDialog({
       {/* Mounted per opening, so a cancelled draft never comes back on the next
           open and the mutation's error state starts clean. */}
       {template && (
-        <CloneForm template={template} onDone={() => onOpenChange(false)} />
+        <CloneForm
+          template={template}
+          scope={scope}
+          onDone={() => onOpenChange(false)}
+        />
       )}
     </Dialog>
   )
@@ -414,16 +483,25 @@ export function CloneTemplateDialog({
 
 function CloneForm({
   template,
+  scope,
   onDone,
 }: {
   template: Template
+  scope: TemplateScope
   onDone: () => void
 }) {
   const t = useT()
+  const isAdmin = useAuthStore((s) => s.user?.type === "admin")
+  const adopting = scope === "global"
+
   // The "(copy)" suffix is part of the default title an operator sees in the
-  // field, so it is translated like any other visible string.
+  // field, so it is translated like any other visible string. Adopting a
+  // public card keeps its name: the copy is the first of its kind in that
+  // organization's list.
   const [title, setTitle] = React.useState(
-    t("templates.copySuffix", { title: template.title })
+    adopting
+      ? template.title
+      : t("templates.copySuffix", { title: template.title })
   )
   const [description, setDescription] = React.useState(
     template.description?.trim() ?? ""
@@ -432,12 +510,50 @@ function CloneForm({
     const amount = Number(template.price)
     return Number.isFinite(amount) ? String(amount) : "0"
   })
+  /** Admin only. `""` until chosen; prefilled with the owner on the org tab. */
+  const [organizationId, setOrganizationId] = React.useState(() =>
+    isAdmin && template.organization?.id ? String(template.organization.id) : ""
+  )
   const [errors, setErrors] = React.useState<
     Partial<Record<CloneField, string>>
   >({})
 
+  // Organization users never see the picker, so they never pay for the list.
+  const organizationsQuery = useGetOrganizations(ORGANIZATIONS_QUERY, {
+    enabled: isAdmin,
+  })
+  const organizationItems = React.useMemo(
+    () =>
+      (organizationsQuery.data?.data.data ?? []).map((organization) => ({
+        value: String(organization.id),
+        label: organization.name,
+      })),
+    [organizationsQuery.data]
+  )
+
   const clone = useCloneTemplate()
   const submitting = clone.isPending
+
+  const copy = adopting
+    ? isAdmin
+      ? {
+          title: t("templates.assignTitle"),
+          before: t("templates.adoptBefore"),
+          after: t("templates.assignAfter"),
+          action: t("templates.assignToOrganization"),
+        }
+      : {
+          title: t("templates.adoptTitle"),
+          before: t("templates.adoptBefore"),
+          after: t("templates.adoptAfter"),
+          action: t("templates.useForOrganization"),
+        }
+    : {
+        title: t("templates.duplicateTitle"),
+        before: t("templates.duplicateBefore"),
+        after: t("templates.duplicateAfter"),
+        action: t("templates.duplicate"),
+      }
 
   /**
    * The whole-form error, once the field-level ones have been claimed. A 422
@@ -482,6 +598,11 @@ function CloneForm({
     if (price.trim() === "" || !Number.isFinite(amount) || amount < 0) {
       found.price = t("templates.form.priceInvalid")
     }
+    // An admin has no organization of their own for the server to fall back
+    // on, so the target is required for them and only them (spec §4.4).
+    if (isAdmin && !organizationId) {
+      found.organizationId = t("templates.form.organizationRequired")
+    }
 
     setErrors(found)
     if (Object.keys(found).length > 0) return
@@ -493,6 +614,11 @@ function CloneForm({
         description: description.trim(),
         // A **string**, and the API means it (docs/api-types.md § gotcha 6).
         price: String(amount),
+        // Only an admin names the owner; an organization user's copy lands in
+        // the token's organization without a word from the client.
+        ...(isAdmin && organizationId
+          ? { organizationId: Number(organizationId) }
+          : {}),
       },
       {
         onSuccess: onDone,
@@ -517,21 +643,60 @@ function CloneForm({
       <DialogCloseButton disabled={submitting} />
 
       <DialogHeader>
-        <DialogTitle>{t("templates.duplicateTitle")}</DialogTitle>
+        <DialogTitle>{copy.title}</DialogTitle>
         {/* The template name is a value, not a phrase, so the sentence is
             split around it rather than interpolated — `t()` returns a string
             and cannot hold the emphasised span. */}
         <DialogDescription>
-          {t("templates.duplicateBefore")}{" "}
+          {copy.before}{" "}
           <span className="font-medium text-text-secondary">
             {formatText(template.title)}
           </span>{" "}
-          {t("templates.duplicateAfter")}
+          {copy.after}
         </DialogDescription>
       </DialogHeader>
 
       <DialogBody>
         <FieldSet>
+          {/* First, because it is the one decision the rest of the form does
+              not change: *where* the copy goes. Admin only — see the note on
+              the dialog. */}
+          {isAdmin && (
+            <Field
+              label={t("templates.form.organization")}
+              error={errors.organizationId}
+            >
+              {(control) => (
+                <Select
+                  items={organizationItems}
+                  value={organizationId || null}
+                  onValueChange={(value) =>
+                    edit("organizationId", setOrganizationId)(value ?? "")
+                  }
+                  disabled={submitting || organizationsQuery.isPending}
+                >
+                  <SelectTrigger {...control} className={SELECT_TRIGGER}>
+                    <SelectValue
+                      className="truncate"
+                      placeholder={
+                        organizationsQuery.isPending
+                          ? t("members.form.loadingOrganizations")
+                          : t("members.form.selectOrganization")
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizationItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </Field>
+          )}
+
           <Field label={t("templates.form.title")} error={errors.title}>
             {(control) => (
               <Input
@@ -620,7 +785,11 @@ function CloneForm({
               strokeWidth={1.75}
             />
           )}
-          {submitting ? t("templates.duplicating") : t("templates.duplicate")}
+          {submitting
+            ? adopting
+              ? t("templates.adopting")
+              : t("templates.duplicating")
+            : copy.action}
         </Button>
       </DialogFooter>
     </DialogContent>

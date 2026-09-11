@@ -1,10 +1,18 @@
 "use client"
 
-import { Copy, IdCard, RotateCcw, Trash2, Workflow } from "lucide-react"
+import {
+  Building2,
+  Copy,
+  IdCard,
+  Pencil,
+  RotateCcw,
+  Trash2,
+  Workflow,
+} from "lucide-react"
 
-import { RowActions } from "@/components/table/row-actions"
+import { RowActions, type RowActionItem } from "@/components/table/row-actions"
 import { useAuthStore } from "@/features/auth/store"
-import type { Template } from "@/features/templates/types"
+import type { Template, TemplateScope } from "@/features/templates/types"
 import { useT } from "@/i18n/context"
 import { useLocaleRouter } from "@/i18n/navigation"
 
@@ -24,6 +32,20 @@ import { useLocaleRouter } from "@/i18n/navigation"
  * render. What is left that is specific to templates is the *verbs*, which is
  * all this file is.
  *
+ * ### The verbs depend on which tab the row is on
+ *
+ * docs/CARD-CREATE-ASSIGN-GALLERY.md §5.6. A row on the **organization** tab
+ * is a card an identity is issued from, so its verbs are the issuing ones:
+ * Edit, Issue, Manage flow, Duplicate, Reset sequences, Delete. A row on the
+ * **public** tab is a blueprint owned by nobody — it cannot be issued from,
+ * has no flow and no sequences to reset — so it has exactly one verb for an
+ * organization user, *adopt it*, and for an admin, who authors the catalogue,
+ * Edit on the surface with *assign it* and Delete behind the menu.
+ *
+ * The surface segment is therefore not always Edit: `RowActions` takes a
+ * `primary` for the case where a screen's main verb is something else, and on
+ * the public tab an organization user's main verb is the clone.
+ *
  * ### Preview is not one of them
  *
  * It was in the tile row, on the artwork, *and* in the overflow menu — one
@@ -36,7 +58,8 @@ import { useLocaleRouter } from "@/i18n/navigation"
  *
  * Editing a template is a navigation to the editor, so the surface segment is
  * a real `Link` — it middle-clicks and opens in a new tab like any other.
- * `RowActions` takes `editHref` for exactly this.
+ * `RowActions` takes `href` on the primary for exactly this. When the grant is
+ * missing it becomes a disabled button instead: a link cannot be disabled.
  *
  * ### The screen owns the dialogs
  *
@@ -52,27 +75,31 @@ import { useLocaleRouter } from "@/i18n/navigation"
  * this one routes by hand. Worth widening that type the second a screen needs
  * two of these; one is not yet a pattern.
  *
- * ### Issue ID is the only gated verb
+ * ### Gates: disabled where the verb is the point, hidden where it is not
  *
- * `create-identity`, per docs/IDS-TEMPLATES-CARD-ACTIONS.md §3.3, which gates
- * it with a tooltip rather than by hiding it — so the entry stays in the menu
- * and goes disabled. That is the right way round for this one: every other
- * screen's Add button is *absent* without its permission because the reader
- * has no reason to know it exists, whereas issuing is the whole point of a
- * template, and a clerk who cannot do it needs to know the button is real and
- * the grant is missing, not wonder whether the feature shipped.
+ * docs/CARD-CREATE-ASSIGN-GALLERY.md §7 is the matrix. Edit, Issue and
+ * Manage flow go *disabled* without their grants rather than vanishing: they
+ * are what a template is for, and a clerk who cannot do them needs to know the
+ * button is real and the grant is missing, not wonder whether the feature
+ * shipped. Delete is *hidden* without `delete-template`, the way every other
+ * screen hides its destructive verb — nobody needs to be told they cannot
+ * remove something. On the public tab, Edit and Delete are hidden for anyone
+ * who is not an admin: the catalogue is not theirs to change, and their copy
+ * (once adopted) is where those verbs live.
  *
  * `<Permission>` is not used because a `DropdownMenuItem` is described by data
  * here rather than by a wrapped child; `can()` is the same check the component
  * makes. Like every client-side gate it is display only — the server is the
- * authority on `POST /identity`.
+ * authority.
  *
- * Issuing writes an identity, so unlike Edit it is not a navigation: it opens
- * the sheet the screen owns, over the row it was started from.
+ * Adopting a public card has **no client gate** — the backend defines
+ * `clone-template` but the reference client never checked it (spec §4.2), so
+ * the server's refusal is surfaced by the dialog rather than a hidden button.
  */
 export type TemplateActionHandlers = {
   onPreview: (template: Template) => void
   onIssue: (template: Template) => void
+  /** Clone — into the same organization from the org tab, into one from the public tab. */
   onDuplicate: (template: Template) => void
   onResetSequences: (template: Template) => void
   onDelete: (template: Template) => void
@@ -80,57 +107,129 @@ export type TemplateActionHandlers = {
 
 export function TemplateActions({
   template,
+  scope,
   handlers,
   className,
 }: {
   template: Template
+  /** Which tab the row is on — decides the verbs. */
+  scope: TemplateScope
   handlers: TemplateActionHandlers
   className?: string
 }) {
   const t = useT()
   const router = useLocaleRouter()
   const can = useAuthStore((s) => s.can)
+  const isAdmin = useAuthStore((s) => s.user?.type === "admin")
+
+  const editHref = `/id-issuance/templates/${template.id}/edit`
+
+  if (scope === "global") {
+    // Organization user: the only thing they can do with a public card is
+    // take a copy, so that is the whole control — one segment, no menu.
+    if (!isAdmin) {
+      return (
+        <RowActions
+          label={template.title}
+          primary={{
+            label: t("templates.useForOrganization"),
+            icon: Copy,
+            onSelect: () => handlers.onDuplicate(template),
+          }}
+          className={className}
+        />
+      )
+    }
+
+    // Admin: authors the catalogue, so Edit stays on the surface (when the
+    // grant allows) and the hand-off to an organization sits behind it.
+    const items: RowActionItem[] = [
+      {
+        key: "assign",
+        label: t("templates.assignToOrganization"),
+        icon: Building2,
+        onSelect: () => handlers.onDuplicate(template),
+      },
+    ]
+    if (can("delete-template")) {
+      items.push({
+        key: "delete",
+        label: t("templates.delete"),
+        icon: Trash2,
+        destructive: true,
+        onSelect: () => handlers.onDelete(template),
+      })
+    }
+
+    return (
+      <RowActions
+        label={template.title}
+        primary={
+          can("update-template")
+            ? { label: t("common.edit"), icon: Pencil, href: editHref }
+            : {
+                label: t("templates.assignToOrganization"),
+                icon: Building2,
+                onSelect: () => handlers.onDuplicate(template),
+              }
+        }
+        // With Assign already on the surface it is not repeated in the menu.
+        items={can("update-template") ? items : items.slice(1)}
+        className={className}
+      />
+    )
+  }
+
+  // Organization tab — the issuing verbs.
+  const canEdit = can("update-template") && can("show-template")
+
+  const items: RowActionItem[] = [
+    {
+      key: "issue",
+      label: t("issue.action"),
+      icon: IdCard,
+      disabled: !can("create-identity"),
+      onSelect: () => handlers.onIssue(template),
+    },
+    {
+      key: "flow",
+      label: t("templates.manageFlow"),
+      icon: Workflow,
+      disabled: !(can("update-flow") && can("show-flow")),
+      onSelect: () => router.push(`/id-issuance/templates/${template.id}/flow`),
+    },
+    {
+      key: "duplicate",
+      label: t("templates.duplicate"),
+      icon: Copy,
+      onSelect: () => handlers.onDuplicate(template),
+    },
+    {
+      key: "reset",
+      label: t("templates.resetSequences"),
+      icon: RotateCcw,
+      onSelect: () => handlers.onResetSequences(template),
+    },
+  ]
+  if (can("delete-template")) {
+    items.push({
+      key: "delete",
+      label: t("templates.delete"),
+      icon: Trash2,
+      destructive: true,
+      onSelect: () => handlers.onDelete(template),
+    })
+  }
 
   return (
     <RowActions
       label={template.title}
-      editHref={`/id-issuance/templates/${template.id}/edit`}
-      editLabel={t("common.edit")}
-      items={[
-        {
-          key: "issue",
-          label: t("issue.action"),
-          icon: IdCard,
-          disabled: !can("create-identity"),
-          onSelect: () => handlers.onIssue(template),
-        },
-        {
-          key: "flow",
-          label: t("templates.manageFlow"),
-          icon: Workflow,
-          onSelect: () =>
-            router.push(`/id-issuance/templates/${template.id}/flow`),
-        },
-        {
-          key: "duplicate",
-          label: t("templates.duplicate"),
-          icon: Copy,
-          onSelect: () => handlers.onDuplicate(template),
-        },
-        {
-          key: "reset",
-          label: t("templates.resetSequences"),
-          icon: RotateCcw,
-          onSelect: () => handlers.onResetSequences(template),
-        },
-        {
-          key: "delete",
-          label: t("templates.delete"),
-          icon: Trash2,
-          destructive: true,
-          onSelect: () => handlers.onDelete(template),
-        },
-      ]}
+      primary={
+        canEdit
+          ? { label: t("common.edit"), icon: Pencil, href: editHref }
+          : { label: t("common.edit"), icon: Pencil, disabled: true }
+      }
+      items={items}
       className={className}
     />
   )
@@ -145,16 +244,19 @@ export function TemplateActions({
  */
 export function TemplateActionRow({
   template,
+  scope,
   handlers,
   className,
 }: {
   template: Template
+  scope: TemplateScope
   handlers: TemplateActionHandlers
   className?: string
 }) {
   return (
     <TemplateActions
       template={template}
+      scope={scope}
       handlers={handlers}
       className={className}
     />

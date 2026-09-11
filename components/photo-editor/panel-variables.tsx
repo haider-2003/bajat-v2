@@ -42,6 +42,7 @@ import {
   FieldLabel,
   Hint,
   IconButton,
+  SelectField,
   SubHead,
   Toggle,
 } from "./materials"
@@ -402,6 +403,40 @@ function DraftForm({
   const key = formatVariableName(draft.name)
 
   /**
+   * §10.1's fifteen, as the dropdown wants them: grouped by who supplies the
+   * value, glyphed by what the type puts on the card, and with the two that a
+   * never-expiring template cannot use marked rather than hidden.
+   *
+   * Marked, not hidden, because their absence would be the puzzle. The note
+   * names the setting to change; the row itself stays unselectable.
+   */
+  const typeGroups = React.useMemo(
+    () =>
+      VARIABLE_GROUPS.map((group) => ({
+        label: t(VARIABLE_GROUP_LABELS[group]),
+        // The row is `item`, not `t`: `t` is the translator here, and the old
+        // shadowing would hide it inside this map.
+        options: VARIABLE_TYPES.filter((item) => item.group === group).map((item) => ({
+          value: item.value,
+          label: t(item.labelKey),
+          icon:
+            item.element === "image"
+              ? ImageIcon
+              : item.element === "text"
+                ? TypeIcon
+                : FileIcon,
+          // §10.1 — no expiry duration means no expiry date to print.
+          disabled: item.needsDuration && config.identityDuration === 0,
+          note:
+            item.needsDuration && config.identityDuration === 0
+              ? t("editor.vars.needsExpiry")
+              : undefined,
+        })),
+      })),
+    [t, config.identityDuration]
+  )
+
+  /**
    * §10.4 — a type change rewrites the draft.
    *
    * The clearing branch is the subtle half: leaving a *locked* name behind when
@@ -567,31 +602,12 @@ function DraftForm({
 
         <div className="mt-3.5" />
         <FieldLabel>{t("editor.vars.type")}</FieldLabel>
-        <Field>
-          <select
-            value={draft.type}
-            onChange={(e) => changeType(e.target.value as VariableType)}
-            className="w-full cursor-pointer border-0 bg-transparent p-0 text-[13px] text-text outline-none"
-          >
-            {VARIABLE_GROUPS.map((group) => (
-              <optgroup key={group} label={t(VARIABLE_GROUP_LABELS[group])}>
-                {/* The row is `item`, not `t`: `t` is the translator now, and the
-                    old shadowing would hide it inside this map. */}
-                {VARIABLE_TYPES.filter((item) => item.group === group).map((item) => {
-                  // §10.1 — no expiry duration means no expiry date to print.
-                  const blocked = item.needsDuration && config.identityDuration === 0
-                  return (
-                    <option key={item.value} value={item.value} disabled={blocked}>
-                      {blocked
-                        ? t("editor.vars.needsExpiry", { type: t(item.labelKey) })
-                        : t(item.labelKey)}
-                    </option>
-                  )
-                })}
-              </optgroup>
-            ))}
-          </select>
-        </Field>
+        <SelectField
+          label={t("editor.vars.type")}
+          value={draft.type}
+          onValueChange={(next) => changeType(next as VariableType)}
+          groups={typeGroups}
+        />
 
         <div className="mt-3.5">
           <FieldLabel required locked={meta.lockName}>

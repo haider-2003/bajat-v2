@@ -348,13 +348,26 @@ function QrRender({
     if (!ref.current) return
     QRCode.toCanvas(ref.current, element.qrValue || "no-data", {
       width: Math.max(21, Math.round(element.width)),
-      margin: 2,
-      color: { dark: element.qrColor || "#000000", light: "#FFFFFF" },
+      // The quiet zone the design was authored with, not a guess: it is stored
+      // on the element now (features/templates/design.ts), and a preview that
+      // draws a different border from the editor is a preview of a different
+      // card. Older documents carry none and keep the 2 they always had.
+      margin: element.qrMargin ?? 2,
+      color: {
+        dark: element.qrColor || "#000000",
+        light: element.qrTransparent ? "#00000000" : "#FFFFFF",
+      },
     }).catch(() => {
       // A stand-in code that fails to draw is not worth interrupting the form
       // over; the slot keeps its box.
     })
-  }, [element.qrValue, element.qrColor, element.width])
+  }, [
+    element.qrValue,
+    element.qrColor,
+    element.qrMargin,
+    element.qrTransparent,
+    element.width,
+  ])
 
   return (
     <div style={box}>

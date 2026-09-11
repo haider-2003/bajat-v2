@@ -45,10 +45,45 @@ export type Template = BaseEntity & {
   shareKey?: string | null
   /** The design document. Opaque here; only the photo editor reads its shape. */
   template?: Record<string, unknown> | null
+  /**
+   * The ownership marker. **Set** on an organization's own template, **absent**
+   * on a public one — see `TemplateScope`. The list filter `type` is how the
+   * server exposes the same split.
+   */
   organization?: Organization | null
   /** ISO 8601 strings, never `Date` objects. Absent on an embedded copy. */
   createdAt?: string | null
   updatedAt?: string | null
+}
+
+/**
+ * Which of the two populations a template belongs to — the `type` filter on
+ * `GET /template`, and the two tabs of the templates screen.
+ *
+ * - `organization` — owned by an organization (`organization` is set). The
+ *   ones an identity can actually be issued from. An organization user sees
+ *   their own; an admin sees every organization's, optionally narrowed with
+ *   `organization_id`.
+ * - `global` — the public catalogue, owned by nobody (`organization` absent).
+ *   Blueprints to be adopted with `POST /template/clone`, not used directly.
+ *
+ * Ownership is decided **server-side from the bearer token** on `POST
+ * /template`: an organization user's save lands in their organization, an
+ * admin's lands in the public catalogue. The client never sends it, which is
+ * why `CreateTemplateInput` has no organization field.
+ */
+export type TemplateScope = "organization" | "global"
+
+export const TEMPLATE_SCOPES: readonly TemplateScope[] = ["organization", "global"]
+
+/** The tab a URL with no `?type=` opens on. */
+export const DEFAULT_TEMPLATE_SCOPE: TemplateScope = "organization"
+
+/** Narrows an untrusted string (a query param) to a scope, or the default. */
+export function readTemplateScope(value: string | null | undefined): TemplateScope {
+  return TEMPLATE_SCOPES.includes(value as TemplateScope)
+    ? (value as TemplateScope)
+    : DEFAULT_TEMPLATE_SCOPE
 }
 
 /** A queued CSV export of one template's identities — `GET /export`. */
@@ -95,8 +130,15 @@ export type UpdateTemplateInput = CreateTemplateInput
 /**
  * `POST /template/clone` — copies the design, takes new terms.
  *
- * `organizationId` is how a design is handed to another organization; omitted,
- * the copy lands in the original's.
+ * This is the one client action that explicitly targets an organization, and
+ * so the only way a public template becomes an organization's: the server
+ * copies the design, the variables, `branch_required` and `identity_duration`
+ * from `templateId` into a **new** row and stamps it with an owner.
+ *
+ * `organizationId` names that owner. Only an **admin** may send it — it is
+ * how they push a public card into a specific organization. Omitted, the
+ * server uses the bearer token's organization, which is the only thing an
+ * organization user can clone into anyway.
  */
 export type CloneTemplateInput = {
   templateId: number

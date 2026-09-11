@@ -21,7 +21,7 @@ import {
   templateStatus,
   templateValidity,
 } from "@/features/templates/display"
-import type { Template } from "@/features/templates/types"
+import type { Template, TemplateScope } from "@/features/templates/types"
 import type { Translator } from "@/i18n/translate"
 import type { Features } from "@/lib/table-features"
 import { formatText } from "@/utils/format"
@@ -45,12 +45,37 @@ import { TemplateActions, type TemplateActionHandlers } from "./template-actions
  * gallery uses, so the two views cannot disagree about what a template looks
  * like.
  *
+ * ### The public tab has one column fewer
+ *
+ * "Issued" counts identities cut from a design, and nothing is ever cut from a
+ * public blueprint — it is copied into an organization first
+ * (docs/CARD-CREATE-ASSIGN-GALLERY.md §5.5). A column of zeros would not be
+ * wrong, but it would invite the question "why is nobody using these", which
+ * has the wrong premise. Omitted from the definition rather than hidden
+ * through `columnVisibility`, so the View menu cannot bring it back.
+ *
  * `meta.priority` drives which columns drop first on narrow viewports (§8.12).
  */
 export function createColumns(
   t: Translator,
+  scope: TemplateScope,
   handlers: TemplateActionHandlers
 ): ColumnDef<Features, Template, unknown>[] {
+  const issued: ColumnDef<Features, Template, unknown> = {
+    id: "issued",
+    accessorFn: (row) => row.identitiesCount ?? 0,
+    header: () => <HeadCell icon={IdCard}>{t("templates.columns.issued")}</HeadCell>,
+    // Right-aligned and tabular: a column of counts is compared down its own
+    // edge, not read across (§8.6).
+    cell: ({ row }) => (
+      <span className="block text-end text-[13px] tabular-nums text-text-secondary">
+        {templateIssued(row.original.identitiesCount)}
+      </span>
+    ),
+    size: 110,
+    meta: { priority: 80, label: t("templates.columns.issued") },
+  }
+
   return [
     {
       accessorKey: "id",
@@ -108,20 +133,7 @@ export function createColumns(
       size: 120,
       meta: { priority: 90, label: t("common.status") },
     },
-    {
-      id: "issued",
-      accessorFn: (row) => row.identitiesCount ?? 0,
-      header: () => <HeadCell icon={IdCard}>{t("templates.columns.issued")}</HeadCell>,
-      // Right-aligned and tabular: a column of counts is compared down its own
-      // edge, not read across (§8.6).
-      cell: ({ row }) => (
-        <span className="block text-end text-[13px] tabular-nums text-text-secondary">
-          {templateIssued(row.original.identitiesCount)}
-        </span>
-      ),
-      size: 110,
-      meta: { priority: 80, label: t("templates.columns.issued") },
-    },
+    ...(scope === "organization" ? [issued] : []),
     {
       id: "price",
       accessorFn: (row) => Number(row.price ?? 0),
@@ -187,7 +199,11 @@ export function createColumns(
       // `justify-end` on the group itself would only space its own segments.
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <TemplateActions template={row.original} handlers={handlers} />
+          <TemplateActions
+            template={row.original}
+            scope={scope}
+            handlers={handlers}
+          />
         </div>
       ),
       size: 130,

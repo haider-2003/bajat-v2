@@ -126,6 +126,15 @@ export type EditorPage = {
   /** Index-derived in the UI — first is Front, second is Back (§14). */
   name: string
   background: string
+  /**
+   * A full-bleed background picture — **preserved, never authored**.
+   *
+   * No panel writes one: the Page panel offers a colour and nothing else. It is
+   * here because a document authored in the legacy tool can carry one (§19.2),
+   * and a save that silently dropped it would erase the artwork of every
+   * template imported from there.
+   */
+  backgroundImage?: string
   elements: CanvasElement[]
 }
 

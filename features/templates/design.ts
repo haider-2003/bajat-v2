@@ -98,6 +98,17 @@ export type DesignElement = {
   isQR?: boolean
   qrValue?: string
   qrColor?: string
+  /**
+   * Quiet-zone width in **modules**, and whether the light modules are
+   * transparent.
+   *
+   * Neither changes what the code encodes — the renderer re-encodes at print
+   * time — but both are deliberate authoring choices, and a quiet zone is the
+   * usual reason a printed QR stops scanning, so they are carried rather than
+   * re-guessed. Absent on a document written before they were stored.
+   */
+  qrMargin?: number
+  qrTransparent?: boolean
 
   /** The variable this element prints, by data key. */
   variable?: string
@@ -293,6 +304,9 @@ function readElement(raw: Raw, index: number): DesignElement | null {
       element.isQR = true
       element.qrValue = str(custom, "value") || "no-data"
       element.qrColor = str(custom, "color") || "#000000"
+      const margin = looseNum(custom, "margin")
+      if (margin !== undefined) element.qrMargin = margin
+      if (bool(custom, "transparent") === true) element.qrTransparent = true
     }
   }
 

@@ -1,13 +1,29 @@
 "use client"
 
 import * as React from "react"
-import { AlertTriangle, Check, Info } from "lucide-react"
+import axios from "axios"
+import { AlertTriangle, Check, Info, Loader2 } from "lucide-react"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { useT } from "@/i18n/context"
 import { useLocaleRouter } from "@/i18n/navigation"
+import {
+  useCreateTemplate,
+  useGetTemplate,
+  useResetTemplateSequences,
+  useUpdateTemplate,
+} from "@/features/templates/api"
+import {
+  buildDesignAssets,
+  buildTemplatePayload,
+  downloadJson,
+  exportFileName,
+  serializeExport,
+  templateToEditor,
+} from "@/features/templates/editor-io"
 import { useEditorStore } from "@/features/templates/editor-store"
 import type { EditorVariable } from "@/features/templates/editor-types"
+import type { ApiErrorBody } from "@/types/api"
 import { cn } from "@/lib/utils"
 
 import { ActionBar, DocBar, TEMPLATES_HREF, ZoomBar } from "./chrome"
@@ -32,15 +48,32 @@ import { Stage } from "./stage"
  * **reset before anything else**, or a second visit inherits the previous
  * template's variables.
  *
- * ### What is not wired yet
+ * ### Persistence
  *
- * Save and export are local — there is no `features/templates/api.ts` in this
- * repo yet, and inventing endpoints would be worse than an honest stub. The
- * QR-presence gate (§16.1) *is* enforced, because it is a rule about the
- * document rather than about transport.
+ * `features/templates/editor-io.ts` owns both directions of the JSON (§19,
+ * §20); this file owns only *when* they run. Three moments:
+ *
+ *   load    edit mode, once `GET /template/{id}` resolves — §16.1's inverse
+ *   save    `POST /template` or `PUT /template/{id}`, behind two gates (§16.1)
+ *   export  the same document, to a file, with the metadata alongside (§16.2)
+ *
+ * A successful create does **not** navigate to `/templates/{id}/edit`. It flips
+ * this editor into edit mode in place, exactly as §16.1 step 6 specifies:
+ * routing would remount the component, `reset()` would wipe the document, and
+ * the design would have to be fetched back from the server it was just sent to.
  */
 
 type Toast = { id: number; message: string; tone: "ok" | "bad" | "info" }
+
+/** An Axios rejection, reduced to one line somebody can act on. */
+function readError(error: unknown, fallback: string, offline: string): string {
+  if (!axios.isAxiosError(error)) return fallback
+  const body = error.response?.data as ApiErrorBody | undefined
+  const first = Object.values(body?.errors ?? {})[0]?.[0]
+  // `first` and `body.message` are the server's own wording and pass through
+  // untranslated — only the strings this app writes itself are localised.
+  return first ?? body?.message ?? (error.response ? fallback : offline)
+}
 
 export function PhotoEditor({
   templateId,
@@ -55,10 +88,9 @@ export function PhotoEditor({
   const router = useLocaleRouter()
   const reset = useEditorStore((s) => s.reset)
   const setTemplateId = useEditorStore((s) => s.setTemplateId)
+  const hydrate = useEditorStore((s) => s.hydrate)
   const hasConfigured = useEditorStore((s) => s.hasConfigured)
   const hasQR = useEditorStore((s) => s.hasQR())
-  const variables = useEditorStore((s) => s.variables)
-  const config = useEditorStore((s) => s.config)
   const markSaved = useEditorStore((s) => s.markSaved)
   const setPanel = useEditorStore((s) => s.setPanel)
 
@@ -67,6 +99,16 @@ export function PhotoEditor({
   const [settingsOpen, setSettingsOpen] = React.useState(mode === "create")
   const [resetTarget, setResetTarget] = React.useState<EditorVariable | null>(null)
   const [toasts, setToasts] = React.useState<Toast[]>([])
+  const [busy, setBusy] = React.useState(false)
+
+  const templateQuery = useGetTemplate(mode === "edit" ? templateId : undefined)
+  const createTemplate = useCreateTemplate()
+  const updateTemplate = useUpdateTemplate()
+  const resetSequences = useResetTemplateSequences()
+
+  /** Nothing may be edited while the design is still being fetched. */
+  const loading = mode === "edit" && templateQuery.isPending && !!templateId
+  const saving = busy || createTemplate.isPending || updateTemplate.isPending
 
   const root = React.useRef<HTMLDivElement>(null)
   const free = React.useRef<HTMLDivElement>(null)
@@ -79,9 +121,25 @@ export function PhotoEditor({
     // tablet, where it *is* the card's space. Below the drawer breakpoint the
     // editor opens on the work instead.
     if (window.matchMedia("(max-width: 1023px)").matches) setPanel(null)
-    // Loading an existing template's design belongs here, once the templates
-    // API exists. Until then edit mode opens an empty document with its id set.
   }, [reset, setTemplateId, setPanel, templateId])
+
+  /**
+   * §20 — the loaded design, once and only once per template.
+   *
+   * The guard is a ref rather than a piece of state because hydrating is not a
+   * render concern: react-query hands back the same row object on every
+   * background refetch, and re-hydrating on one would throw away whatever the
+   * operator had drawn since. The id is the identity that matters — a refetch
+   * returning the *same* template must not reload it.
+   */
+  const loaded = React.useRef<number | null>(null)
+
+  React.useEffect(() => {
+    const row = templateQuery.data
+    if (!row || loaded.current === row.id) return
+    loaded.current = row.id
+    hydrate({ ...templateToEditor(row), templateId: row.id })
+  }, [templateQuery.data, hydrate])
 
   /**
    * Report the free area — the middle band's spacer — to the store.
@@ -181,33 +239,119 @@ export function PhotoEditor({
   }, [])
 
   /**
-   * §16.1 — the only structural validation there is.
+   * §4.3 — nothing leaves the editor before the metadata exists.
    *
-   * So it earns real treatment: refuse the save, open the QR panel, and say the
-   * rule. Three things from one failure, and the operator never has to work out
-   * where to go next.
+   * A refusal that opens the form it is asking for, rather than a disabled
+   * button the operator has to reverse-engineer.
    */
-  const save = () => {
-    if (!hasConfigured) {
-      setSettingsOpen(true)
-      return
-    }
-    if (!hasQR) {
-      setPanel("qr")
-      notify(t("editor.qrRequired"), "bad")
-      return
-    }
-    markSaved()
-    notify(t("editor.savedLocally", { count: variables.length }), "ok")
+  const configured = (): boolean => {
+    if (hasConfigured) return true
+    setSettingsOpen(true)
+    return false
   }
 
-  const exportJson = () => {
-    notify(
-      // The filename stem falls back to a slug, not a sentence, so it stays
-      // filesystem-safe in either language.
-      `${config.title || "id-card-template"}-${new Date().toISOString().slice(0, 10)}.json`,
-      "ok"
-    )
+  /**
+   * §16.1 — the only structural validation there is, and it gates the **save**
+   * alone.
+   *
+   * Export is deliberately not behind it: a file is not a published template,
+   * and refusing to let somebody take a work-in-progress design off the screen
+   * because it has no QR yet protects nothing.
+   *
+   * It earns real treatment rather than a disabled button: refuse, open the QR
+   * panel, and say the rule. Three things from one failure, and the operator
+   * never has to work out where to go next.
+   */
+  const hasQrElement = (): boolean => {
+    if (hasQR) return true
+    setPanel("qr")
+    notify(t("editor.qrRequired"), "bad")
+    return false
+  }
+
+  /**
+   * Create, or update — decided by whether an id exists, not by `mode`.
+   *
+   * A create that has already succeeded leaves `templateId` set, so the second
+   * press of Save updates the row the first one made instead of cutting a
+   * duplicate template. That is the whole reason the id and not the prop is the
+   * discriminator.
+   */
+  const save = async () => {
+    if (saving || !configured() || !hasQrElement()) return
+
+    // `doc` is read here rather than subscribed to: a component that re-renders
+    // on every pixel of every drag is the one thing a canvas editor cannot
+    // afford, and the save only needs the document as it is at the click.
+    const { doc, variables: vars, config: meta, templateId: id } = useEditorStore.getState()
+
+    setBusy(true)
+    try {
+      const assets = await buildDesignAssets(doc, vars)
+      const payload = buildTemplatePayload(doc, vars, meta, assets)
+
+      if (id) {
+        await updateTemplate.mutateAsync({ id, data: payload })
+        markSaved()
+        notify(t("editor.saveUpdated"), "ok")
+      } else {
+        const created = await createTemplate.mutateAsync(payload)
+        // §16.1 step 6 — edit mode from here on, without leaving the page.
+        setTemplateId(created.id)
+        loaded.current = created.id
+        markSaved()
+        notify(t("editor.saveCreated", { count: vars.length }), "ok")
+      }
+    } catch (error) {
+      notify(
+        readError(error, t("editor.saveFailed"), t("common.cannotReachServer")),
+        "bad"
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** §16.2 — the same document, to a file, with the metadata beside it. */
+  const exportJson = async () => {
+    if (saving || !configured()) return
+
+    const { doc, variables: vars, config: meta } = useEditorStore.getState()
+
+    setBusy(true)
+    try {
+      const assets = await buildDesignAssets(doc, vars)
+      const name = exportFileName(meta.title)
+      downloadJson(name, serializeExport(doc, vars, meta, assets))
+      notify(t("editor.exported", { file: name }), "ok")
+    } catch {
+      notify(t("editor.exportFailed"), "bad")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * §10.7 — `PUT /template/{id}/reset`.
+   *
+   * The dialog already refuses to arm on an unsaved template, so an id exists
+   * by the time this runs; the check is here because `templateId` is state and
+   * a guard that reads the value it acts on is worth more than a comment.
+   */
+  const resetSequence = () => {
+    const id = useEditorStore.getState().templateId
+    if (!id) return
+    resetSequences.mutate(id, {
+      onSuccess: () => {
+        setResetTarget(null)
+        notify(t("editor.sequenceReset"), "bad")
+      },
+      onError: (error) =>
+        notify(
+          readError(error, t("editor.resetFailed"), t("common.cannotReachServer")),
+          "bad"
+        ),
+    })
   }
 
   return (
@@ -226,8 +370,20 @@ export function PhotoEditor({
             row, a middle band, a bottom row, laid out by flex. The rail sits
             below the top row because it is *after* it, at any width.
 
-            The layer ignores pointer events; each slab takes them back. */}
-        <div className="pointer-events-none absolute inset-0 z-60 flex flex-col gap-4 p-4">
+            The layer ignores pointer events; each slab takes them back.
+
+            ### Why 48 and not 60
+
+            Everything that leaves the page — a dialog's backdrop, a dropdown,
+            a tooltip — is portalled to `<body>` at `z-50`. This layer is a
+            sibling of that portal, so at 60 it sat *over* all of them: the
+            settings dialog dimmed the canvas and left the rail, the panel and
+            the toolbar bright and clickable behind its own backdrop, and a
+            font menu opened from the property bar disappeared under the
+            variables panel. 48 clears the stage's guides and measurements
+            (40–47) and stays under the portal layer, which is the whole
+            ordering: work, chrome, then anything modal over both. */}
+        <div className="pointer-events-none absolute inset-0 z-48 flex flex-col gap-4 p-4">
           {/* Three lanes: document, contextual properties, actions.
      
               They keep their intrinsic widths (the document slab truncates its
@@ -284,7 +440,73 @@ export function PhotoEditor({
               {toast.message}
             </div>
           ))}
+
+          {/* A load that failed — stated rather than toasted.
+
+              The editor stays usable on purpose (§4.1 prefers a working blank
+              editor to an error page), but "blank" and "blank because the
+              fetch failed" are different situations and only one of them is a
+              reason not to start drawing over a template that already exists.
+              So it persists until the retry succeeds, and it carries the
+              retry, which a toast could not. */}
+          {templateQuery.isError && (
+            <div
+              role="alert"
+              className={cn(
+                "pointer-events-auto flex items-center gap-2.5 rounded-xl py-2.5 pe-1.5 ps-3.5 text-[13px] text-danger",
+                "bg-[var(--editor-float)] shadow-[var(--editor-shadow-pop)]"
+              )}
+            >
+              <AlertTriangle className="size-4 shrink-0" strokeWidth={1.9} />
+              {t("editor.loadFailed")}
+              <button
+                type="button"
+                onClick={() => templateQuery.refetch()}
+                className={cn(
+                  "shrink-0 rounded-[9px] px-2 py-1 text-[12.5px] font-medium text-text-secondary",
+                  "transition-colors duration-120 hover:bg-[var(--editor-hover)] hover:text-text",
+                  "outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                )}
+              >
+                {t("common.retry")}
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* The two moments the editor is not the operator's to touch: the
+            design is still arriving, or it is on its way out.
+
+            One veil for both, above the chrome and below the portal layer, so a
+            dialog opened before the save started still sits over it. It takes
+            pointer events deliberately — a drag begun mid-save would be applied
+            to a document that has already been serialized. */}
+        {(loading || saving) && (
+          <div
+            role="status"
+            aria-live="polite"
+            className={cn(
+              "absolute inset-0 z-49 flex items-center justify-center",
+              // `bg-editor-ground` rather than `bg-[var(--editor-ground)]`: the
+              // token is registered in the theme, which is what makes the `/55`
+              // opacity modifier resolve at all.
+              "bg-editor-ground/55 backdrop-blur-[1px]",
+              // The load veil is opaque enough to hide a blank document that is
+              // about to be replaced; the save veil only has to stop the hands.
+              loading && "bg-editor-ground/80"
+            )}
+          >
+            <span
+              className={cn(
+                "flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-[13px] text-text",
+                "bg-[var(--editor-float)] shadow-[var(--editor-shadow-pop)]"
+              )}
+            >
+              <Loader2 className="size-4 shrink-0 animate-spin text-accent-violet" strokeWidth={2} />
+              {loading ? t("editor.loading") : t("editor.saving")}
+            </span>
+          </div>
+        )}
       </div>
 
       <SettingsDialog
@@ -298,10 +520,8 @@ export function PhotoEditor({
       <ResetSequenceDialog
         variable={resetTarget}
         onOpenChange={(open) => !open && setResetTarget(null)}
-        onConfirm={() => {
-          setResetTarget(null)
-          notify(t("editor.sequenceReset"), "bad")
-        }}
+        busy={resetSequences.isPending}
+        onConfirm={resetSequence}
       />
     </TooltipProvider>
   )

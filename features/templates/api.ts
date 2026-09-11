@@ -22,12 +22,18 @@ import type {
  *
  * ### What `GET /template` actually filters on
  *
- * `page`, `per_page`, `search` and `organization_id` — verified against
- * docs/identities-api.postman_collection.json, which is the authority for this
- * endpoint's query surface. Nothing else. Sending an invented field name is
- * the silent failure docs/filtering-sorting-pagination.md §6 describes: it
- * becomes a real query parameter, raises no error, and leaves the list quietly
- * unfiltered.
+ * `page`, `per_page`, `search`, `type` and `organization_id` — verified
+ * against docs/identities-api.postman_collection.json, which is the authority
+ * for this endpoint's query surface. Nothing else. Sending an invented field
+ * name is the silent failure docs/filtering-sorting-pagination.md §6
+ * describes: it becomes a real query parameter, raises no error, and leaves
+ * the list quietly unfiltered.
+ *
+ * `type` is the ownership split (`TemplateScope` in ./types.ts):
+ * `organization` returns templates owned by an organization — the caller's
+ * own for an organization user, everyone's for an admin, who may narrow with
+ * `organization_id` — and `global` returns the public catalogue, which has no
+ * owner and ignores `organization_id`. See docs/CARD-CREATE-ASSIGN-GALLERY.md.
  *
  * ### Documented but not built
  *

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -251,13 +252,25 @@ export function ResetSequenceDialog({
   variable,
   onOpenChange,
   onConfirm,
+  busy = false,
 }: {
   variable: EditorVariable | null
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
+  /** The request is in flight — the dialog stays open and stops taking input. */
+  busy?: boolean
 }) {
   return (
-    <Dialog open={variable !== null} onOpenChange={onOpenChange}>
+    <Dialog
+      open={variable !== null}
+      onOpenChange={(next) => {
+        // Closing mid-request would leave the operator with no sign of whether
+        // the reset landed — and it deletes identities, so "probably" is not a
+        // state to leave them in.
+        if (busy) return
+        onOpenChange(next)
+      }}
+    >
       {/* Same pattern as the settings form: mounted only while a variable is
           targeted, so the confirmation box starts empty every time rather than
           being cleared by an effect. Keyed by name so re-targeting a different
@@ -266,6 +279,7 @@ export function ResetSequenceDialog({
         <ResetForm
           key={variable.name}
           variable={variable}
+          busy={busy}
           onCancel={() => onOpenChange(false)}
           onConfirm={onConfirm}
         />
@@ -276,10 +290,12 @@ export function ResetSequenceDialog({
 
 function ResetForm({
   variable,
+  busy,
   onCancel,
   onConfirm,
 }: {
   variable: EditorVariable
+  busy: boolean
   onCancel: () => void
   onConfirm: () => void
 }) {
@@ -336,15 +352,18 @@ function ResetForm({
         </DialogBody>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onCancel}>
+          <Button variant="ghost" disabled={busy} onClick={onCancel}>
             {t("common.cancel")}
           </Button>
           <Button
             variant="destructive"
-            disabled={!saved || typed.trim() !== RESET_CONFIRM_WORD}
+            disabled={busy || !saved || typed.trim() !== RESET_CONFIRM_WORD}
             onClick={onConfirm}
           >
-            {t("editor.reset.confirm")}
+            {busy && (
+              <Loader2 data-icon="inline-start" className="animate-spin" strokeWidth={1.75} />
+            )}
+            {busy ? t("editor.reset.resetting") : t("editor.reset.confirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

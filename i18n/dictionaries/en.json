@@ -398,6 +398,28 @@
     "loadFailed": "Couldn't load templates",
     "noneYet": "No templates yet",
     "noneYetHint": "A template is the card design plus the variables collected when one is issued. Start one and the editor opens on a blank CR-80 card.",
+    "tabsLabel": "Template scope",
+    "tabs": {
+      "organization": "My organization",
+      "organizations": "Organizations",
+      "global": "Public"
+    },
+    "publicCountBefore": "",
+    "publicCountAfter": " public designs an organization can copy.",
+    "noneYetPublicHint": "Public templates appear here too — copy one into your organization instead of starting from a blank card.",
+    "browsePublic": "Browse public templates",
+    "noPublic": "No public templates are available yet",
+    "noPublicHint": "Public templates are shared blueprints, owned by no organization. One is copied into an organization before an identity can be issued from it.",
+    "noPublicHintAdmin": "Templates you create in the editor land here. Assign one to an organization to make it usable there.",
+    "useForOrganization": "Use for my organization",
+    "assignToOrganization": "Assign to organization",
+    "adoptTitle": "Use this template",
+    "adoptBefore": "Copies the design of",
+    "adoptAfter": "into your organization as a new template you can edit and issue from. The public template stays as it is.",
+    "assignTitle": "Assign to an organization",
+    "assignAfter": "into the organization you choose, as a new template that organization can edit and issue from. The public template stays as it is.",
+    "adopting": "Copying…",
+    "publicBadge": "Public",
     "columns": {
       "id": "ID",
       "design": "Design",
@@ -458,7 +480,9 @@
       "description": "Description",
       "descriptionPlaceholder": "What this card is issued for",
       "minChars": "At least {n} characters.",
-      "priceInvalid": "Enter a price of 0 or more."
+      "priceInvalid": "Enter a price of 0 or more.",
+      "organization": "Organization",
+      "organizationRequired": "Choose an organization."
     },
     "months": {
       "one": "1 month",
@@ -580,13 +604,17 @@
       "presetsHint": "Presets are 200 wide, Arial, black, left-aligned. Each one lands clear of whatever is already on the face rather than on top of it."
     },
     "image": {
-      "uploadNotWired": "Upload is not wired yet — see the note below",
       "dropHint": "Drop, paste or browse",
-      "storageBefore": "Images store as",
-      "storageEmphasis": "data URIs",
-      "storageMiddle": "not object URLs, so the template survives a reload. Anything over",
-      "storageSize": "300px",
-      "storageAfter": "on either side is scaled down proportionally on insert."
+      "dropNow": "Drop to add",
+      "reading": "Reading…",
+      "added": {
+        "one": "Image added",
+        "other": "{count} images added"
+      },
+      "rejectedType": "{name} is not a PNG, JPEG, WEBP or SVG",
+      "rejectedSize": "{name} is larger than 10 MB",
+      "rejectedUnreadable": "{name} could not be read",
+      "storageHint": "Up to 10 MB per file. The full image is stored inside the template itself, and anything larger than 300px is placed scaled down to fit."
     },
     "qr": {
       "presentBefore": "This template has a QR element.",
@@ -656,7 +684,8 @@
       "mustSaveFirst": "The template has to be saved once before a sequence can be reset.",
       "typeToConfirm": "Type {word} to confirm",
       "callsEndpoint": "Calls",
-      "confirm": "Reset and delete"
+      "confirm": "Reset and delete",
+      "resetting": "Resetting…"
     },
     "variableGroups": {
       "typed": "Typed",
@@ -714,7 +743,7 @@
       "finalBefore": "A definition is",
       "finalEmphasis": "final",
       "finalAfter": "— changing a type, name or label later means delete and re-create.",
-      "needsExpiry": "{type} — needs an expiry duration",
+      "needsExpiry": "needs expiry",
       "reservedName": "\"{key}\" belongs to the member record. Use the {key} type instead.",
       "duplicateName": "A variable named \"{key}\" already exists.",
       "emptyKey": "That name normalizes to an empty key. Use letters or digits.",
@@ -784,10 +813,18 @@
         "other": "{count} more properties"
       }
     },
-    "savedLocally": {
-      "one": "Saved locally · {count} variable — no API wired yet",
-      "other": "Saved locally · {count} variables — no API wired yet"
-    }
+    "loading": "Loading template…",
+    "loadFailed": "Could not load this template",
+    "saving": "Saving…",
+    "saveCreated": {
+      "one": "Template created · {count} variable",
+      "other": "Template created · {count} variables"
+    },
+    "saveUpdated": "Changes saved",
+    "saveFailed": "The template was not saved",
+    "exported": "Downloaded {file}",
+    "exportFailed": "The design could not be exported",
+    "resetFailed": "The sequence was not reset"
   },
   "settings": {
     "metaTitle": "Settings · Bajat",

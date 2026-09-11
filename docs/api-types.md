@@ -615,6 +615,8 @@ export type CloneTemplateInput = {
 
 > `price` is a **string**; `is_enabled` is a **number on the entity but a string on input**. Both are deliberate — match them exactly or the backend rejects the write.
 
+**`GET /template` filters:** `page`, `per_page`, `search`, `type`, `organization_id`. `type` is the ownership split — `organization` (rows with an `organization`; an organization user's own, every organization's for an admin) or `global` (the public catalogue, no `organization`). `organization_id` is an admin's narrowing of the `organization` set and does nothing on `global`. A template becomes an organization's through `POST /template/clone` with `organization_id` (admin) or with none (the token's organization); `POST /template` itself never carries an owner — the server infers it from the token. See [CARD-CREATE-ASSIGN-GALLERY.md](./CARD-CREATE-ASSIGN-GALLERY.md).
+
 The shape of `template` (the design document) is documented in [photo-editor.md §8](./photo-editor.md#8-serialization--helperts).
 
 ---

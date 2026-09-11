@@ -298,7 +298,7 @@ export type ApiFactoryConfig = {
 | --- | --- | --- |
 | `QueryKeys` | — | `all()`, `list(filter)`, `byId(id)` |
 | `useGetList(filter, options?)` | `GET /endpoint?…` | full response → `GetResponse<TEntity[]>` |
-| `useGetById(id, options?)` | `GET /endpoint/:id` | `response.data` → `TEntity` |
+| `useGetById(id, options?)` | `GET /endpoint/:id` | the entity → `TEntity`, unwrapped from a `data` envelope if it arrived in one |
 | `useCreate(options?)` | `POST /endpoint` | `TEntity` |
 | `useUpdate(options?)` | `PUT /endpoint/:id` (or `POST` + `_method=PUT` when `isFormData`) | `TEntity` |
 | `useDelete(options?)` | `DELETE /endpoint/:id` | `void` |
@@ -681,7 +681,7 @@ new QueryClient({
 
 ### Gotchas
 
-- `useGetList` returns the **whole Axios response**; `useGetById` returns `response.data`. Rows are at `query.data.data.data`.
+- `useGetList` returns the **whole Axios response**, so rows are at `query.data.data.data`. `useGetById`, `useCreate` and `useUpdate` return the **entity**: this API sends a single resource inside a `data` envelope, like the list endpoints, so the factory unwraps it. Guessing wrong here fails silently — every field reads as `undefined`, nothing throws, and the screen comes up blank.
 - Any `PUT` carrying FormData must be sent as `POST` with `_method=PUT`. The factory does this for you; hand-written hooks must do it themselves.
 - Reach for `options.skipRequestKeyConversion` when your payload keys are already snake_case — double conversion silently mangles them.
 - Don't handle 401 locally; the response interceptor already logs out and redirects.

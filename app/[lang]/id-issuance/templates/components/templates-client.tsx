@@ -1,16 +1,18 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { keepPreviousData } from "@tanstack/react-query"
 import {
   useTable,
   type ColumnVisibilityState,
   type SortingState,
 } from "@tanstack/react-table"
-import { Link } from "@/i18n/navigation"
+import { Link, useLocalePathname } from "@/i18n/navigation"
 import {
   AlertCircle,
   Building2,
+  Globe,
   LayoutGrid,
   LayoutTemplate,
   Plus,
@@ -26,15 +28,21 @@ import {
   TextFilter,
   type ActiveFilter,
 } from "@/components/filters"
+import { Permission } from "@/components/permission"
 import { EmptyState } from "@/components/table/empty-state"
 import { LoadFailed, LoadingRows } from "@/components/table/load-states"
 import { TableView } from "@/components/table/table-view"
 import { Button } from "@/components/ui/button"
 import { Pagination } from "@/components/ui/pagination"
 import { ViewMenu } from "@/components/ui/view-menu"
+import { useAuthStore } from "@/features/auth/store"
 import { useGetOrganizations } from "@/features/organizations/api"
 import { useGetTemplates } from "@/features/templates/api"
-import type { Template } from "@/features/templates/types"
+import {
+  readTemplateScope,
+  type Template,
+  type TemplateScope,
+} from "@/features/templates/types"
 import { useT } from "@/i18n/context"
 import type { TranslationKey } from "@/i18n/translate"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -64,6 +72,26 @@ import { GalleryView, LoadingGallery } from "./view-gallery"
  * as top-level query params, `useListQuery` owning the page, `keepPreviousData`
  * so paging doesn't blink. See docs/filtering-sorting-pagination.md.
  *
+ * ### Two tabs, because there are two populations of template
+ *
+ * docs/CARD-CREATE-ASSIGN-GALLERY.md is the reference. `GET /template` splits
+ * its rows with `type`:
+ *
+ * - **`organization`** — cards owned by an organization: an organization
+ *   user's own, or for an admin every organization's. These are the ones an
+ *   identity is issued from, and the tab a bare URL opens on.
+ * - **`global`** — the public catalogue, owned by nobody. Blueprints, adopted
+ *   into an organization with `POST /template/clone` before they can be used.
+ *
+ * The tab is **URL state** (`?type=`), not component state. Switching is a
+ * navigation: the URL changes, `useSearchParams` re-renders, the filter set
+ * gains a new `type` clause, and React Query sees a new key. Browser back
+ * moves between tabs, `?type=global` deep-links to one, and a link from the
+ * editor can land on the tab a freshly saved card is actually on. An unknown
+ * value is read as the default rather than forwarded — `type=foo` would go out
+ * as a real parameter and come back as an unfiltered list under a tab that
+ * claims otherwise.
+ *
  * ### The gallery is the default, and that is the point of the screen
  *
  * Every other list here opens as a table. This one opens as a grid of card
@@ -73,36 +101,25 @@ import { GalleryView, LoadingGallery } from "./view-gallery"
  *
  * ### Two filters, because the endpoint has two
  *
- * `GET /template` accepts `page`, `per_page`, `search` and `organization_id`,
- * verified against docs/identities-api.postman_collection.json. **There is no
- * status filter**, and adding an `is_enabled` control would be the silent
- * failure docs/filtering-sorting-pagination.md §6 describes: the parameter goes
- * out, nothing rejects it, and the list comes back unfiltered while the chip
- * above it claims otherwise. Filtering the current page in the browser instead
- * is worse — the pager would still count the rows the server sent, so "10 of
- * 120" would sit under six cards.
+ * Beyond `type`, `GET /template` accepts `page`, `per_page`, `search` and
+ * `organization_id`, verified against docs/identities-api.postman_collection.json.
+ * **There is no status filter**, and adding an `is_enabled` control would be
+ * the silent failure docs/filtering-sorting-pagination.md §6 describes: the
+ * parameter goes out, nothing rejects it, and the list comes back unfiltered
+ * while the chip above it claims otherwise. Filtering the current page in the
+ * browser instead is worse — the pager would still count the rows the server
+ * sent, so "10 of 120" would sit under six cards.
  *
  * `organizationId` is **singular** here, like the printer screen and unlike
- * `/member`: the endpoint reads one id, so this is a single-select.
+ * `/member`: the endpoint reads one id, so this is a single-select. It is an
+ * **admin's control on the organization tab only**: an organization user's
+ * tab holds one organization by construction, and the public tab holds none,
+ * so on either the filter would be a control that changes nothing. The
+ * organization list behind it is likewise only fetched for an admin.
  */
 
 /** Typing shouldn't fire a request per keystroke. */
 const SEARCH_DEBOUNCE_MS = 300
-
-/**
- * The page-header count. Deliberately the **unfiltered** total, and pinned to
- * the default query so it shares the list's first cache entry instead of firing
- * a second request: a page title should say how much exists, not how much
- * survived the current filter — the pagination bar covers that.
- */
-const COUNT_QUERY: BaseQuery = {
-  page: 1,
-  pageSize: DEFAULT_PAGE_SIZE,
-  // `filter: []` is not decoration. `useListQuery` always puts a `filter` key
-  // on its query, and React Query hashes the whole object — so a count query
-  // without one is a *different* key and a second request, not a shared entry.
-  filter: [],
-}
 
 /**
  * The organization facet's source list. Module-level and frozen so it is one
@@ -111,12 +128,94 @@ const COUNT_QUERY: BaseQuery = {
  */
 const ORGANIZATIONS_QUERY = { page: 1, pageSize: 100 } as const
 
+/** The `?type=` param — the one piece of this screen's state that lives in the URL. */
+const SCOPE_PARAM = "type"
+
+/** The screen's own path, for the tab links. */
+const TEMPLATES_PATH = "/id-issuance/templates"
+
+/** Which tab the current URL is on. */
+function useTemplateScope(): TemplateScope {
+  const searchParams = useSearchParams()
+  return readTemplateScope(searchParams.get(SCOPE_PARAM))
+}
+
+/**
+ * The page-header count for the current tab. Deliberately the **unfiltered**
+ * total for that tab, and pinned to the tab's default query so it shares the
+ * list's first cache entry instead of firing a second request: a page title
+ * should say how much exists, not how much survived the current filter — the
+ * pagination bar covers that.
+ *
+ * `buildFilter` rather than a literal clause array, so this key is
+ * byte-for-byte the one `TemplatesClient` builds for an unfiltered tab.
+ */
+function countQuery(scope: TemplateScope): BaseQuery {
+  return {
+    page: 1,
+    pageSize: DEFAULT_PAGE_SIZE,
+    filter: buildFilter({ [SCOPE_PARAM]: scope }),
+  }
+}
+
 export function TemplatesCount() {
-  const query = useGetTemplates(COUNT_QUERY)
+  const scope = useTemplateScope()
+  const query = useGetTemplates(React.useMemo(() => countQuery(scope), [scope]))
   const total = readPageInfo(query.data?.data).total
 
   if (query.isPending) return <span className="text-text-placeholder">—</span>
   return <>{total ?? query.data?.data.data?.length ?? 0}</>
+}
+
+/**
+ * The sentence under the title, count included.
+ *
+ * Client-side because the count and the wording both follow the tab: "N card
+ * designs an identity can be issued from" is true of the organization tab and
+ * false of the public one, whose cards are copied first. The split around the
+ * count is the same convention as the other list pages.
+ */
+export function TemplatesSubtitle() {
+  const t = useT()
+  const scope = useTemplateScope()
+  const isPublic = scope === "global"
+
+  return (
+    <>
+      {t(isPublic ? "templates.publicCountBefore" : "templates.countBefore")}
+      <TemplatesCount />
+      {t(isPublic ? "templates.publicCountAfter" : "templates.countAfter")}
+    </>
+  )
+}
+
+/**
+ * The title block's primary action.
+ *
+ * Gated by `create-template` (docs/CARD-CREATE-ASSIGN-GALLERY.md §3.1) — the
+ * only way in is the editor, and a reader without the grant has no reason to
+ * know it exists. A link, not a dialog: a new template is authored in the
+ * editor, which is a full-viewport tool.
+ *
+ * Client-side only for the gate; `page.tsx` is a Server Component and cannot
+ * read the auth store.
+ */
+export function NewTemplateButton() {
+  const t = useT()
+
+  return (
+    <Permission can="create-template">
+      <Button
+        size="lg"
+        className="h-11 w-full sm:h-9 sm:w-auto"
+        nativeButton={false}
+        render={<Link href={`${TEMPLATES_PATH}/new`} />}
+      >
+        <Plus data-icon="inline-start" strokeWidth={1.75} />
+        {t("templates.new")}
+      </Button>
+    </Permission>
+  )
 }
 
 type ViewMode = "gallery" | "table"
@@ -135,10 +234,82 @@ const VIEWS: {
 const STORAGE_KEY = "bajat-templates-view"
 
 /**
- * The screen before it has ever had a template on it.
+ * The two tabs — DESIGN.md §6.5's underline variant.
  *
- * A CTA rather than a shrug: the only thing anyone can do here is open the
- * editor, so the panel says what a template *is* and points at it.
+ * Underlines rather than the chip style the view switcher below already uses,
+ * so the two rows cannot be mistaken for one another: this row picks *which
+ * templates*, that one picks *how they are drawn*. Real links, so a tab
+ * middle-clicks into a new window and the URL is the state (see the note on
+ * the screen).
+ *
+ * The organization tab is worded for the reader: an admin is looking across
+ * organizations, an organization user at their own.
+ */
+function ScopeTabs({ scope }: { scope: TemplateScope }) {
+  const t = useT()
+  const pathname = useLocalePathname()
+  const isAdmin = useAuthStore((s) => s.user?.type === "admin")
+
+  const tabs: {
+    id: TemplateScope
+    label: string
+    icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
+  }[] = [
+    {
+      id: "organization",
+      label: t(isAdmin ? "templates.tabs.organizations" : "templates.tabs.organization"),
+      icon: Building2,
+    },
+    { id: "global", label: t("templates.tabs.global"), icon: Globe },
+  ]
+
+  return (
+    <nav
+      aria-label={t("templates.tabsLabel")}
+      className="-mt-2 flex items-end gap-1 border-b border-border"
+    >
+      {tabs.map((tab) => {
+        const Icon = tab.icon
+        const active = tab.id === scope
+        return (
+          <Link
+            key={tab.id}
+            href={{ pathname, query: { [SCOPE_PARAM]: tab.id } }}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              // The 2px underline sits on the row's own hairline; `-mb-px`
+              // pulls it down over the border so the two do not stack.
+              "-mb-px inline-flex h-11 items-center gap-2 border-b-2 px-3 text-sm font-medium lg:h-10",
+              "transition-colors duration-120 outline-none",
+              "focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring",
+              active
+                ? "border-text text-text"
+                : "border-transparent text-text-secondary hover:text-text"
+            )}
+          >
+            <Icon
+              className={cn(
+                "size-4 shrink-0",
+                active ? "text-text" : "text-text-muted"
+              )}
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            {tab.label}
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}
+
+/**
+ * The organization tab before it has ever had a template on it.
+ *
+ * A CTA rather than a shrug: the way in is the editor, so the panel says what
+ * a template *is* and points at it. The second way in — copying a public
+ * template — gets a quieter link, because it depends on the catalogue having
+ * something in it.
  */
 function FirstRun() {
   const t = useT()
@@ -154,21 +325,60 @@ function FirstRun() {
         title={t("templates.noneYet")}
         hint={t("templates.noneYetHint")}
       />
-      <Button
-        variant="outline"
-        className="mt-5"
-        nativeButton={false}
-        render={<Link href="/id-issuance/templates/new" />}
-      >
-        <Plus data-icon="inline-start" strokeWidth={1.75} />
-        {t("templates.new")}
-      </Button>
+      <div className="mt-5 flex flex-col items-center gap-3">
+        <Permission can="create-template">
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href={`${TEMPLATES_PATH}/new`} />}
+          >
+            <Plus data-icon="inline-start" strokeWidth={1.75} />
+            {t("templates.new")}
+          </Button>
+        </Permission>
+        <Link
+          href={{ pathname: TEMPLATES_PATH, query: { [SCOPE_PARAM]: "global" } }}
+          className="rounded-sm text-[13px] font-medium text-text-muted underline-offset-4 outline-none hover:text-text hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {t("templates.browsePublic")}
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The public tab with nothing in it.
+ *
+ * No create button: a card is not created *as* public, it becomes public by
+ * being saved by an admin (docs/CARD-CREATE-ASSIGN-GALLERY.md §3.6). The hint
+ * says that to an admin, and to everyone else says what would appear here.
+ */
+function NoPublic() {
+  const t = useT()
+  const isAdmin = useAuthStore((s) => s.user?.type === "admin")
+
+  return (
+    <div className="flex min-h-[340px] flex-col items-center justify-center rounded-xl border border-border bg-surface px-6 py-16">
+      <Globe
+        className="mb-4 size-6 text-text-placeholder"
+        strokeWidth={1.4}
+        aria-hidden
+      />
+      <EmptyState
+        title={t("templates.noPublic")}
+        hint={t(isAdmin ? "templates.noPublicHintAdmin" : "templates.noPublicHint")}
+      />
     </div>
   )
 }
 
 export function TemplatesClient() {
   const t = useT()
+  const scope = useTemplateScope()
+  const isAdmin = useAuthStore((s) => s.user?.type === "admin")
+  const onOrganizationTab = scope === "organization"
+
   // Lazy initialiser rather than an effect: the saved view is read once, and
   // reading it during the first render avoids a flash of the default layout.
   // Guarded for SSR, where `localStorage` does not exist.
@@ -187,8 +397,16 @@ export function TemplatesClient() {
   const [columnVisibility, setColumnVisibility] =
     React.useState<ColumnVisibilityState>({})
 
-  /** One organization id, as a string. `""` means every organization. */
+  /**
+   * One organization id, as a string. `""` means every organization.
+   *
+   * Kept across a tab switch rather than reset: it is simply not *applied* off
+   * the organization tab (see `filter`), so an admin who narrowed to one
+   * organization, looked at the catalogue and came back is still looking at
+   * that organization.
+   */
   const [organizationId, setOrganizationId] = React.useState("")
+  const organizationFilterShown = isAdmin && onOrganizationTab
 
   // "What the field shows" and "what the server is asked for" — the second
   // trailing the first by a debounce.
@@ -220,7 +438,12 @@ export function TemplatesClient() {
     }
   }
 
-  const organizationsQuery = useGetOrganizations(ORGANIZATIONS_QUERY)
+  // Only an admin ever sees the organization facet, so only an admin pays for
+  // the list behind it (spec §9 trap 5 is exactly this request firing for
+  // everyone).
+  const organizationsQuery = useGetOrganizations(ORGANIZATIONS_QUERY, {
+    enabled: isAdmin,
+  })
   const organizations = React.useMemo(
     () => organizationsQuery.data?.data.data ?? [],
     [organizationsQuery.data]
@@ -232,9 +455,17 @@ export function TemplatesClient() {
     [organizations]
   )
 
+  // `type` travels as a filter clause like the others, so it is part of the
+  // query key and of what the page number is valid for — switching tabs is a
+  // new list on page 1, with nothing here having to say so.
   const filter = React.useMemo(
-    () => buildFilter({ search, organizationId }),
-    [search, organizationId]
+    () =>
+      buildFilter({
+        [SCOPE_PARAM]: scope,
+        search,
+        organizationId: organizationFilterShown ? organizationId : "",
+      }),
+    [scope, search, organizationFilterShown, organizationId]
   )
 
   const effectiveView: ViewMode = view === "table" && !isDesktop ? "gallery" : view
@@ -316,10 +547,11 @@ export function TemplatesClient() {
   )
 
   // Keyed on `t` too: the headers and the View menu's column names are
-  // translated, so the list is language-dependent.
+  // translated, so the list is language-dependent. And on the tab, which
+  // decides both the verbs and whether the issued column exists.
   const columns = React.useMemo(
-    () => createColumns(t, handlers),
-    [t, handlers]
+    () => createColumns(t, scope, handlers),
+    [t, scope, handlers]
   )
 
   const table = useTable({
@@ -355,7 +587,7 @@ export function TemplatesClient() {
   )
 
   const clearSheetFilters = () => setOrganizationId("")
-  const sheetFilterCount = organizationId ? 1 : 0
+  const sheetFilterCount = organizationFilterShown && organizationId ? 1 : 0
 
   const clearFilters = () => {
     clearSheetFilters()
@@ -365,28 +597,30 @@ export function TemplatesClient() {
   /**
    * The controls that collapse into the sheet below `lg`. One definition
    * rendered into two layouts rather than two copies — the only difference
-   * between them is how wide the trigger is.
+   * between them is how wide the trigger is. Empty off the organization tab
+   * and for non-admins, where there is nothing to collapse.
    */
-  const collapsibleFilters = (inSheet: boolean) => (
-    <SelectFilter
-      label={t("filters.attributes.organization")}
-      icon={Building2}
-      options={organizationOptions}
-      value={organizationId}
-      onChange={setOrganizationId}
-      allLabel={t("printer.allOrganizations")}
-      emptyLabel={t("members.noOrganizations")}
-      loading={organizationsQuery.isPending}
-      className={inSheet ? SHEET_CONTROL : undefined}
-    />
-  )
+  const collapsibleFilters = (inSheet: boolean) =>
+    organizationFilterShown ? (
+      <SelectFilter
+        label={t("filters.attributes.organization")}
+        icon={Building2}
+        options={organizationOptions}
+        value={organizationId}
+        onChange={setOrganizationId}
+        allLabel={t("printer.allOrganizations")}
+        emptyLabel={t("members.noOrganizations")}
+        loading={organizationsQuery.isPending}
+        className={inSheet ? SHEET_CONTROL : undefined}
+      />
+    ) : null
 
   /**
    * The applied-filter row. Built from the *debounced* values, not the raw
    * inputs, so a chip never claims a filter the server has not been asked for.
    */
   const activeFilters: ActiveFilter[] = [
-    ...(organizationId
+    ...(organizationFilterShown && organizationId
       ? [
           {
             key: "organization",
@@ -412,6 +646,8 @@ export function TemplatesClient() {
 
   return (
     <div className="flex flex-col gap-4">
+      <ScopeTabs scope={scope} />
+
       {/* Toolbar — left group is the view switcher, right group the controls
           (§6.1). Below `lg` that single row becomes two: the switcher and one
           Filters button, then search across the full width, per §18.3. */}
@@ -455,14 +691,17 @@ export function TemplatesClient() {
           </div>
 
           {/* The collapsed toolbar. Holds the same control component the
-              desktop cluster does — passed in, not duplicated. */}
-          <FilterSheet
-            className="lg:hidden"
-            count={sheetFilterCount}
-            onClear={clearSheetFilters}
-          >
-            {collapsibleFilters(true)}
-          </FilterSheet>
+              desktop cluster does — passed in, not duplicated. Absent when
+              there is nothing to put in it. */}
+          {organizationFilterShown && (
+            <FilterSheet
+              className="lg:hidden"
+              count={sheetFilterCount}
+              onClear={clearSheetFilters}
+            >
+              {collapsibleFilters(true)}
+            </FilterSheet>
+          )}
         </div>
 
         {/* Search stays on the bar at every width — it is the control people
@@ -532,8 +771,13 @@ export function TemplatesClient() {
         // "Nothing here yet" and "nothing matched" are different states and
         // want different words. §8.10's empty state assumes a filter to clear;
         // an organization with no templates has nothing to clear and needs the
-        // way in instead.
-        <FirstRun />
+        // way in instead — and the public tab's way in is not a button on this
+        // screen at all (spec §5.5).
+        onOrganizationTab ? (
+          <FirstRun />
+        ) : (
+          <NoPublic />
+        )
       ) : (
         <>
           {effectiveView === "table" && (
@@ -550,7 +794,7 @@ export function TemplatesClient() {
 
           {effectiveView === "gallery" && (
             <>
-              <GalleryView table={table} handlers={handlers} />
+              <GalleryView table={table} scope={scope} handlers={handlers} />
 
               {/* The grid has no container of its own, so the bar gets one —
                   minus the top border it would double up on. */}
@@ -566,6 +810,7 @@ export function TemplatesClient() {
           thirty portals waiting to be opened. */}
       <TemplatePreviewDialog
         template={liveRow(previewed)}
+        scope={scope}
         open={previewed !== null}
         onOpenChange={(open) => !open && setPreviewed(null)}
         onRefresh={() => templatesQuery.refetch()}
@@ -581,6 +826,7 @@ export function TemplatesClient() {
       />
       <CloneTemplateDialog
         template={liveRow(cloning)}
+        scope={scope}
         open={cloning !== null}
         onOpenChange={(open) => !open && setCloning(null)}
       />

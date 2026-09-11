@@ -4,6 +4,7 @@ import * as React from "react"
 import {
   FlipHorizontal,
   Image as ImageIcon,
+  Loader2,
   Plus,
   QrCode,
   Type as TypeIcon,
@@ -20,10 +21,19 @@ import {
   EDITOR_SWATCHES,
   ID_CARD_HEIGHT,
   ID_CARD_WIDTH,
+  IMAGE_MAX_EDGE,
   SIZE_PRESETS,
   TEXT_PRESETS,
   pxToUnit,
 } from "@/features/templates/editor-constants"
+import {
+  IMAGE_ACCEPT,
+  ImageRejected,
+  filesFrom,
+  fitImageBox,
+  readImageFile,
+  type ImageRejection,
+} from "@/features/templates/image-intake"
 import { newId, placeElement, useEditorStore } from "@/features/templates/editor-store"
 import type {
   CanvasElement,
@@ -240,47 +250,199 @@ function TextPanel({ onNotify }: { onNotify: (m: string, t?: "ok" | "bad") => vo
 
 /* ── Image — §9.2 ─────────────────────────────────────────────────────── */
 
+/**
+ * Why one file did not make it, in the operator's words.
+ *
+ * A lookup rather than a computed key so every string is a literal the
+ * `TranslationKey` union can check — a template literal would type as `string`
+ * and a missing translation would reach the UI as a raw dotted path.
+ */
+const REJECTION_KEYS: Record<ImageRejection, TranslationKey> = {
+  type: "editor.image.rejectedType",
+  size: "editor.image.rejectedSize",
+  unreadable: "editor.image.rejectedUnreadable",
+}
+
+/**
+ * Three ways in — the picker, a drop, a paste — and one way through.
+ *
+ * The rules about *what* is accepted live in features/templates/image-intake.ts;
+ * what is here is only the wiring. An upload is entirely local (there is no
+ * upload endpoint — see that module), so a picture is on the canvas the moment
+ * it is read and travels to the server with the next Save, inside the document.
+ *
+ * Files are inserted **one at a time in sequence**, not with `Promise.all`, for
+ * a reason that shows up immediately with a multi-file drop: `placeElement`
+ * looks at what is already on the page to find a free spot, so two elements
+ * placed against the same snapshot of the document land exactly on top of each
+ * other. Awaiting each insert means the next one sees the last one.
+ *
+ * A file that is turned away does not stop the batch. Four photos and a PDF
+ * dropped together add the four and say what happened to the PDF.
+ */
 function ImagePanel({ onNotify }: { onNotify: (m: string, t?: "ok" | "bad") => void }) {
   const t = useT()
+  const addElement = useEditorStore((s) => s.addElement)
+  const picker = React.useRef<HTMLInputElement>(null)
+  const [over, setOver] = React.useState(false)
+  const [busy, setBusy] = React.useState(false)
+
+  const insert = React.useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return
+      setBusy(true)
+
+      let added = 0
+      try {
+        for (const file of files) {
+          try {
+            const picture = await readImageFile(file)
+            // Re-read per file: the previous insert changed the document, and
+            // `placeElement` needs to see it to find the next free spot.
+            const { doc, activePage } = useEditorStore.getState()
+            const size = fitImageBox(picture, {
+              width: Math.min(IMAGE_MAX_EDGE, doc.width),
+              height: Math.min(IMAGE_MAX_EDGE, doc.height),
+            })
+            const spot = placeElement(doc, activePage, size)
+
+            addElement({
+              id: newId("i"),
+              kind: "image",
+              name: file.name,
+              x: spot.x,
+              y: spot.y,
+              width: size.width,
+              height: size.height,
+              rotation: 0,
+              opacity: 1,
+              cornerRadius: 0,
+              src: picture.src,
+            })
+            added += 1
+          } catch (error) {
+            const reason = error instanceof ImageRejected ? error.reason : "unreadable"
+            onNotify(
+              t(REJECTION_KEYS[reason], { name: file.name }),
+              "bad"
+            )
+          }
+        }
+      } finally {
+        setBusy(false)
+      }
+
+      if (added > 0) onNotify(t("editor.image.added", { count: added }), "ok")
+    },
+    [addElement, onNotify, t]
+  )
+
+  /**
+   * Paste, while this panel is open.
+   *
+   * Window-level because a paste has no meaningful target until it happens —
+   * the operator has just copied a screenshot and pressed Ctrl+V, and nothing
+   * on the panel was focused. Scoped to the panel's lifetime rather than the
+   * editor's so pasting is not quietly intercepted on every other screen, and
+   * skipped when a field has focus, where the paste is text and belongs to it.
+   */
+  React.useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target && /input|textarea|select/i.test(target.tagName)) return
+      if (target?.isContentEditable) return
+
+      const files = filesFrom(event.clipboardData)
+      if (files.length === 0) return
+      event.preventDefault()
+      void insert(files)
+    }
+
+    window.addEventListener("paste", onPaste)
+    return () => window.removeEventListener("paste", onPaste)
+  }, [insert])
 
   return (
     <>
       <PanelHead title={t("editor.panels.image")} />
       <PanelBody>
+        <input
+          ref={picker}
+          type="file"
+          accept={IMAGE_ACCEPT}
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            const files = Array.from(event.target.files ?? [])
+            // Cleared before the insert so picking the *same* file twice in a
+            // row still fires `change` the second time.
+            event.target.value = ""
+            void insert(files)
+          }}
+        />
+
         <button
           type="button"
-          onClick={() => onNotify(t("editor.image.uploadNotWired"))}
+          disabled={busy}
+          onClick={() => picker.current?.click()}
+          // `dragover` has to be cancelled on every tick or the browser keeps
+          // its own "no drop here" cursor and never fires `drop`.
+          onDragOver={(event) => {
+            event.preventDefault()
+            if (!over) setOver(true)
+          }}
+          onDragLeave={(event) => {
+            // A drag crossing a child fires `dragleave` on the parent; only a
+            // pointer that has actually left the box should clear the state.
+            if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+              setOver(false)
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            setOver(false)
+            void insert(filesFrom(event.dataTransfer))
+          }}
           className={cn(
-            "w-full rounded-xl bg-[var(--editor-well)] px-3.5 py-5 text-center",
+            "flex w-full flex-col items-center gap-1 rounded-xl bg-[var(--editor-well)] px-3 py-4",
             "shadow-[inset_0_0_0_1.5px_var(--editor-line)]",
             "transition-[box-shadow,background-color] duration-120",
-            "hover:bg-accent-soft hover:shadow-[inset_0_0_0_1.5px_var(--color-accent-border)]",
-            "outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            busy
+              ? "cursor-wait"
+              : "hover:bg-accent-soft hover:shadow-[inset_0_0_0_1.5px_var(--color-accent-border)]",
+            // The drag state is the hover state made louder — a solid ring, so
+            // there is no doubt which surface is going to take the file.
+            over && "bg-accent-soft shadow-[inset_0_0_0_2px_var(--color-accent)]"
           )}
         >
-          <Upload className="mx-auto mb-1.5 size-5 text-text-placeholder" strokeWidth={1.6} />
-          <span className="block text-[12.5px] font-medium text-text-secondary">
-            {t("editor.image.dropHint")}
+          {busy ? (
+            <Loader2 className="size-5 animate-spin text-accent-violet" strokeWidth={1.8} />
+          ) : (
+            <Upload className="size-5 text-text-placeholder" strokeWidth={1.6} />
+          )}
+          <span className="text-[12.5px] font-medium text-text-secondary">
+            {busy
+              ? t("editor.image.reading")
+              : over
+                ? t("editor.image.dropNow")
+                : t("editor.image.dropHint")}
           </span>
-          <span className="mt-0.5 block font-mono text-[11px] text-text-placeholder">
-            PNG · JPEG · WEBP · SVG · max 10 MB
+          {/* A run of Latin tokens. Left in the RTL flow the bidi algorithm
+              reorders it and the line wraps mid-phrase — "· max" ends up
+              trailing the first line and "10 MB" alone on the second. Pinned
+              to LTR and kept to one line; the size cap moved to the hint,
+              where it can be translated instead of sitting here in English. */}
+          <span
+            dir="ltr"
+            className="whitespace-nowrap font-mono text-[10.5px] tracking-tight text-text-placeholder"
+          >
+            PNG · JPEG · WEBP · SVG
           </span>
         </button>
 
-        <div className="mt-3">
-          {/* Split around the two emphasised tokens: `t()` returns a string
-              and cannot carry the <strong>s. */}
-          <Callout>
-            {t("editor.image.storageBefore")}{" "}
-            <strong className="font-medium text-text">
-              {t("editor.image.storageEmphasis")}
-            </strong>{" "}
-            {t("editor.image.storageMiddle")}{" "}
-            <strong className="font-medium text-text">
-              {t("editor.image.storageSize")}
-            </strong>{" "}
-            {t("editor.image.storageAfter")}
-          </Callout>
+        <div className="mt-1.5">
+          <Hint>{t("editor.image.storageHint")}</Hint>
         </div>
       </PanelBody>
     </>
@@ -394,7 +556,7 @@ function QrPanel({ onNotify }: { onNotify: (m: string, t?: "ok" | "bad") => void
               {t("editor.qr.contrastBefore")}{" "}
               <strong className="font-medium text-danger">
                 {t("editor.qr.contrastEmphasis")}
-              </strong>{" "}
+              </strong>
               {t("editor.qr.contrastAfter")}
             </Callout>
           </div>

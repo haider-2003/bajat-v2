@@ -1133,7 +1133,8 @@
                 { "key": "page", "value": "1" },
                 { "key": "per_page", "value": "10" },
                 { "key": "search", "value": "", "disabled": true },
-                { "key": "organization_id", "value": "{{organizationId}}", "disabled": true }
+                { "key": "type", "value": "organization", "description": "`organization` = owned by an organization (the caller's own, or every organization's for an admin); `global` = the public catalogue, owned by nobody. Drives the two tabs of the templates screen.", "disabled": true },
+                { "key": "organization_id", "value": "{{organizationId}}", "description": "Admin only, and only meaningful with `type=organization`.", "disabled": true }
               ]
             }
           },

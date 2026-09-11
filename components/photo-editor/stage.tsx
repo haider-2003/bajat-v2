@@ -460,7 +460,20 @@ function PageFace({
       <div
         data-page-ground={active ? "" : undefined}
         onPointerDown={active ? undefined : onActivate}
-        style={{ width, height, background: page.background }}
+        style={{
+          width,
+          height,
+          background: page.background,
+          // Preserved, never authored (§19.2): no panel writes a page image, but
+          // a template imported from the legacy tool can carry one, and drawing
+          // it is the difference between seeing that design and seeing a blank
+          // face with elements floating on it.
+          ...(page.backgroundImage && {
+            backgroundImage: cssUrl(page.backgroundImage),
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }),
+        }}
         className={cn(
           "relative overflow-hidden rounded-lg text-[#171717]",
           "shadow-[var(--editor-shadow-card)]",
@@ -506,6 +519,17 @@ function PageFace({
       </div>
     </div>
   )
+}
+
+/**
+ * A `url()` whose argument cannot escape the quotes it is wrapped in.
+ *
+ * Not `CSS.escape`: that escapes an *identifier*, so it would mangle every
+ * `:`, `/` and `,` in a data URI — and it does not exist on the server, where
+ * this component still renders once.
+ */
+function cssUrl(src: string) {
+  return `url("${src.replace(/[\\"]/g, "\\$&").replace(/\r?\n/g, "")}")`
 }
 
 function ElementNode({
@@ -594,10 +618,70 @@ function ElementNode({
 
   if (element.isQR) return <QrNode element={element} common={common} />
 
-  // A variable-bound image slot with no upload yet — §10.5's placeholder.
-  const meta = element.variable ? null : null
-  void meta
-  const signature = element.variable === "signature"
+  // A picture the operator added — §9.2. It is not a slot and must not wear a
+  // slot's chrome: the grey box and dashed ring say "a photo goes here at issue
+  // time", which is the opposite of what this element is.
+  if (!element.variable) return <PictureNode element={element} style={style} common={common} />
+
+  // A variable-bound image slot with no upload yet — §10.5's placeholder. The
+  // two kinds are told apart by the *definition's* type, not by the variable's
+  // name: a signature variable called `sig` is still a signature, and the
+  // amber box is what the serializer writes into the document for it
+  // (features/templates/editor-io.ts), so the canvas has to agree.
+  return <SlotNode element={element} style={style} common={common} />
+}
+
+/**
+ * An uploaded picture.
+ *
+ * `objectFit: "fill"` rather than `cover`, to agree with the document: §5.2's
+ * `stretch_enabled` is written `true` on every image the editor emits, which
+ * tells the server-side renderer to stretch the source into the element box.
+ * Showing a cropped `cover` preview of a picture that is going to print
+ * stretched is the canvas lying about the output.
+ *
+ * The element is inserted at the image's own aspect ratio, so the two agree
+ * until the operator resizes it — at which point the distortion on screen is
+ * exactly the distortion that will print, which is the point.
+ */
+function PictureNode({
+  element,
+  style,
+  common,
+}: {
+  element: CanvasElement
+  style: React.CSSProperties
+  common: React.ComponentProps<"div">
+}) {
+  return (
+    <div
+      {...common}
+      style={{ ...style, borderRadius: element.cornerRadius, overflow: "hidden" }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={element.src}
+        alt=""
+        draggable={false}
+        style={{ width: "100%", height: "100%", objectFit: "fill" }}
+      />
+    </div>
+  )
+}
+
+function SlotNode({
+  element,
+  style,
+  common,
+}: {
+  element: CanvasElement
+  style: React.CSSProperties
+  common: React.ComponentProps<"div">
+}) {
+  const signature = useEditorStore(
+    (s) => s.variables.find((v) => v.name === element.variable)?.type === "signature"
+  )
+
   return (
     <div
       {...common}
