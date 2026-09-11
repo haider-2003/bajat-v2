@@ -22,6 +22,11 @@ import { cn } from "@/lib/utils"
  * motion the global clamp collapses it to one instant iteration, leaving the
  * card face up at rest.
  *
+ * The animation starts 1.45s in (a negative delay), so the first turn comes
+ * ~0.6s after the page appears instead of after the full 2.05s hold. Only the
+ * phase moves: the card is already at rest anywhere inside that opening hold,
+ * so there is no jump, and every hold after the first keeps its full length.
+ *
  * Shadows are `box-shadow` on each face rather than a `filter` on the
  * flipper: a filter flattens the 3D context of whatever it sits on, which
  * would stop the faces hiding their backs.
@@ -140,7 +145,7 @@ export function IdCardFlip({ className }: { className?: string }) {
   return (
     <div aria-hidden className={cn("w-56 perspective-[1000px] sm:w-64", className)}>
       <div
-        className="relative aspect-[60/38] transform-3d animate-[card-flip_5s_infinite]"
+        className="relative aspect-[60/38] transform-3d animate-[card-flip_5s_-1.45s_infinite]"
         style={{ transform: REST }}
       >
         <Face>

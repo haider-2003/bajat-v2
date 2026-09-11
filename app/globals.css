@@ -1035,7 +1035,9 @@
    rather than a bare `rotateY`, so the tilt is part of the turn: the card
    spins about its own tilted axis rather than a screen-vertical one.
    `0%` must equal the inline rest transform in the component so the loop
-   closes without a step; `100%` is the same pose one full turn on. */
+   closes without a step; `100%` is the same pose one full turn on. The
+   component runs it with a negative delay that lands inside the opening
+   hold, so keep that hold long enough (the `0%`–`41%` span) to absorb it. */
 @keyframes card-flip {
   0%,
   41% {
