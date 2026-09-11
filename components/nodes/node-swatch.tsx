@@ -1,9 +1,11 @@
 "use client"
 
+import { CircleDot } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 
 /**
- * A node's colour, in the three shapes the app draws it in.
+ * A node's colour, in the four shapes the app draws it in.
  *
  * ### Nothing here paints raw hex
  *
@@ -23,6 +25,65 @@ import { cn } from "@/lib/utils"
 /** Hands the raw value to `.node-tone`, which derives the rest from it. */
 function toneVars(color: string | null | undefined) {
   return { "--node": color ?? "var(--text-muted)" } as React.CSSProperties
+}
+
+/**
+ * The node as a **pill** — an outlined chip in its own hue.
+ *
+ * ### Why this exists next to `NodeSwatch`
+ *
+ * A dot beside plain text is the right weight in a table column, where the
+ * name is the content and the colour is a hint you glance at. It is the wrong
+ * weight everywhere the node *is* the content — on a flow card, in a picker of
+ * nothing but nodes — because there the colour is the thing being chosen and a
+ * 10px dot is a footnote attached to it.
+ *
+ * So the pill puts the hue on all three of the border, the wash and the text.
+ * That is what makes a wall of them read as a set of distinct things rather
+ * than as a list with a coloured margin, and it survives the two hard cases
+ * `.node-tone` exists for: a `#000000` node is a legible dark-grey chip and a
+ * pale one keeps a visible rim.
+ *
+ * ### The icon is generic, and deliberately
+ *
+ * There is nothing on a node to derive a glyph from — a name and a hex is all
+ * the row carries. A per-node icon would have to be guessed from the name,
+ * which is wrong the first time somebody renames one. The same mark on every
+ * pill is honest, and it is what stops a short name from rendering as a bare
+ * word in a coloured outline.
+ */
+export function NodePill({
+  color,
+  name,
+  size = "default",
+  className,
+}: {
+  color: string | null | undefined
+  name: string
+  /** `sm` is the picker density; `default` is the flow card. */
+  size?: "sm" | "default"
+  className?: string
+}) {
+  return (
+    <span
+      title={name}
+      style={toneVars(color)}
+      className={cn(
+        "node-tone inline-flex max-w-full items-center rounded-full border",
+        "border-(--node-edge) bg-(--node-wash) text-(--node-ink)",
+        "font-medium whitespace-nowrap",
+        size === "sm" ? "h-6 gap-1 ps-1.5 pe-2 text-[12px]" : "h-7 gap-1.5 ps-2 pe-2.5 text-[13px]",
+        className
+      )}
+    >
+      <CircleDot
+        aria-hidden
+        strokeWidth={2}
+        className={cn("shrink-0", size === "sm" ? "size-3" : "size-3.5")}
+      />
+      <span className="truncate">{name}</span>
+    </span>
+  )
 }
 
 /**

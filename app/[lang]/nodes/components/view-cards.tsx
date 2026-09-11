@@ -11,7 +11,7 @@ import type { Features } from "@/lib/table-features"
 import { EMPTY_VALUE, formatText } from "@/utils/format"
 
 import { NodeActions } from "./columns"
-import { NodeRail } from "./node-swatch"
+import { NodeRail } from "@/components/nodes/node-swatch"
 
 /**
  * Card view — DESIGN.md §8.12 and §9.

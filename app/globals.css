@@ -1277,6 +1277,10 @@ html[data-intro="playing"] [data-await-intro] {
     --node-ink: color-mix(in oklab, var(--node), var(--text) 12%);
     --node-wash: color-mix(in oklab, var(--node) 10%, var(--surface));
     --node-halo: color-mix(in oklab, var(--node) 22%, var(--surface));
+    /* A rim that can actually be seen. `--node-halo` is tuned to sit *under*
+       a filled dot as a soft ring, which is far too faint to draw the edge of
+       a pill — a chip needs a border you read as a border. */
+    --node-edge: color-mix(in oklab, var(--node) 40%, var(--surface));
   }
 
   /* The wash is mixed from the *ink* here, not from the raw hue. §2.3 makes a
@@ -1288,6 +1292,69 @@ html[data-intro="playing"] [data-await-intro] {
     --node-ink: color-mix(in oklab, var(--node), var(--text) 42%);
     --node-wash: color-mix(in oklab, var(--node-ink) 18%, var(--surface));
     --node-halo: color-mix(in oklab, var(--node) 30%, var(--surface));
+    /* Mixed from the *ink*, like the wash above it and for the same reason:
+       a rim mixed from a raw `#000000` would darken the card's edge into the
+       ground instead of drawing a chip on it. */
+    --node-edge: color-mix(in oklab, var(--node-ink) 45%, var(--surface));
+  }
+
+  /**
+   * The template flow canvas —
+   * app/[lang]/id-issuance/templates/[id]/flow.
+   *
+   * Four values the canvas draws its own furniture from: the grid dots, the
+   * wire at rest, the wire when a gap is armed or being dropped into, and the
+   * wash behind a landing pad. Declared here rather than inline because the
+   * canvas is the only place in the app where a *background texture* carries
+   * meaning, and all four have to move together when the theme flips —
+   * `--border-strong` on `#0a0a0a` is a different job from the same token on
+   * `#f4f4f5`.
+   *
+   * The dot is deliberately softer than a hairline border. A grid at full
+   * `--border-strong` reads as graph paper the cards are sitting on top of;
+   * at 70% it reads as depth behind them, which is the whole point of drawing
+   * it — it is what makes a pan legible.
+   */
+  .flow-canvas {
+    --flow-dot: color-mix(in oklab, var(--border-strong) 70%, transparent);
+    --flow-wire: var(--border-strong);
+    --flow-wire-live: var(--accent-violet);
+    --flow-wire-glow: color-mix(in oklab, var(--accent-violet) 10%, transparent);
+  }
+
+  /* Dark mode lightens the wire rather than darkening it: §16.1's rule that a
+     border lightens the ground applies to a wire drawn on that ground too, and
+     `--border-strong` alone disappears between two elevated cards. */
+  .dark .flow-canvas {
+    --flow-dot: color-mix(in oklab, var(--border-strong) 85%, transparent);
+    --flow-wire: color-mix(in oklab, var(--border-strong) 80%, var(--text) 8%);
+    --flow-wire-glow: color-mix(in oklab, var(--accent-violet) 16%, transparent);
+  }
+
+  /**
+   * The travelling dash that gives a wire its direction.
+   *
+   * Purely decorative — it says "downstream", which the layout already says —
+   * so it is the first thing to go under reduced motion. Hidden rather than
+   * paused: a frozen dashed line beside solid ones reads as a broken
+   * connection rather than as a still frame.
+   */
+  @keyframes flow-wire-travel {
+    to {
+      stroke-dashoffset: -28;
+    }
+  }
+
+  .flow-wire-pulse {
+    stroke-dasharray: 4 10;
+    animation: flow-wire-travel 1.2s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flow-wire-pulse {
+      animation: none;
+      opacity: 0;
+    }
   }
 
   /**

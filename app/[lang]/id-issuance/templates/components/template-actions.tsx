@@ -1,10 +1,11 @@
 "use client"
 
-import { Copy, RotateCcw, Trash2 } from "lucide-react"
+import { Copy, RotateCcw, Trash2, Workflow } from "lucide-react"
 
 import { RowActions } from "@/components/table/row-actions"
 import type { Template } from "@/features/templates/types"
 import { useT } from "@/i18n/context"
+import { useLocaleRouter } from "@/i18n/navigation"
 
 /**
  * What can be done to one template.
@@ -41,6 +42,14 @@ import { useT } from "@/i18n/context"
  * Handlers are passed in rather than owned here: the dialogs are mounted once
  * by the client, not once per row. Thirty rows each holding a mounted `Dialog`
  * is thirty portals waiting to be opened.
+ *
+ * ### Manage flow is the exception that pushes instead
+ *
+ * It is a navigation, like Edit, and it would rather be a real `Link` for the
+ * same reason — middle-click, open in a new tab. `RowActionItem` only carries
+ * an `onSelect`, because every other menu entry in the app opens a dialog, so
+ * this one routes by hand. Worth widening that type the second a screen needs
+ * two of these; one is not yet a pattern.
  */
 export type TemplateActionHandlers = {
   onPreview: (template: Template) => void
@@ -59,6 +68,7 @@ export function TemplateActions({
   className?: string
 }) {
   const t = useT()
+  const router = useLocaleRouter()
 
   return (
     <RowActions
@@ -66,6 +76,13 @@ export function TemplateActions({
       editHref={`/id-issuance/templates/${template.id}/edit`}
       editLabel={t("common.edit")}
       items={[
+        {
+          key: "flow",
+          label: t("templates.manageFlow"),
+          icon: Workflow,
+          onSelect: () =>
+            router.push(`/id-issuance/templates/${template.id}/flow`),
+        },
         {
           key: "duplicate",
           label: t("templates.duplicate"),

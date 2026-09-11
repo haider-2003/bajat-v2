@@ -25,6 +25,8 @@ import {
   TextFilter,
   type ActiveFilter,
 } from "@/components/filters"
+import { EditNodeDialog } from "@/components/nodes/node-dialog"
+import { NodeSwatch } from "@/components/nodes/node-swatch"
 import { LoadFailed, LoadingRows } from "@/components/table/load-states"
 import {
   TableRecordSheet,
@@ -50,8 +52,6 @@ import { toInstantRange } from "@/utils/date"
 
 import { createColumns, NodeActions } from "./columns"
 import { DeleteNodeDialog } from "./delete-node-dialog"
-import { EditNodeDialog } from "./node-dialog"
-import { NodeSwatch } from "./node-swatch"
 import { CardView } from "./view-cards"
 
 /**

@@ -17,7 +17,7 @@ import { useT } from "@/i18n/context"
 import type { Translator } from "@/i18n/translate"
 import type { Features } from "@/lib/table-features"
 
-import { NodeChip } from "./node-swatch"
+import { NodeChip } from "@/components/nodes/node-swatch"
 
 /**
  * Column definitions — DESIGN.md §8.3 / §8.6.

@@ -102,8 +102,29 @@ const WIRE_NAMES: Record<string, FieldName> = {
   organizationId: "organizationId",
 }
 
-/** The Add button in the page header, and the dialog behind it. */
-export function CreateNodeDialog() {
+/**
+ * The Add button, and the dialog behind it.
+ *
+ * ### The trigger is a prop, the form is not
+ *
+ * Two screens open this: the `/nodes` page header, where it is the screen's
+ * primary action and takes §7.1's solid button, and the flow builder's step
+ * library, where it is a quiet dashed row at the foot of a rail. Those are
+ * genuinely different controls, and forcing one shape on both would put a
+ * black 36px button inside a 288px sidebar.
+ *
+ * What is *not* per-caller is anything below the trigger. A second create form
+ * would be a second copy of this endpoint's field rules — the hex
+ * normalisation, the admin-only organization select, the wire-name error map —
+ * drifting from the day it was written. So the trigger is passed in and
+ * everything else is fixed.
+ */
+export function CreateNodeDialog({
+  trigger,
+}: {
+  /** Overrides the default button. Must accept a click — it is the trigger. */
+  trigger?: React.ReactElement
+} = {}) {
   const t = useT()
   const [open, setOpen] = React.useState(false)
 
@@ -112,10 +133,12 @@ export function CreateNodeDialog() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger
           render={
-            <Button size="lg" className="h-11 w-full sm:h-9 sm:w-auto">
-              <Workflow data-icon="inline-start" strokeWidth={1.75} />
-              {t("nodes.createTitle")}
-            </Button>
+            trigger ?? (
+              <Button size="lg" className="h-11 w-full sm:h-9 sm:w-auto">
+                <Workflow data-icon="inline-start" strokeWidth={1.75} />
+                {t("nodes.createTitle")}
+              </Button>
+            )
           }
         />
         {/* Mounted per opening, so a cancelled draft never comes back on the

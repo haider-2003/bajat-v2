@@ -4,7 +4,7 @@ import { AppShell } from "@/components/layout/app-shell"
 import { SidebarTrigger } from "@/components/layout/sidebar"
 import { getTranslations } from "@/i18n/server"
 
-import { CreateNodeDialog } from "./components/node-dialog"
+import { CreateNodeDialog } from "@/components/nodes/node-dialog"
 import { NodesClient, NodesCount } from "./components/nodes-client"
 
 export async function generateMetadata(): Promise<Metadata> {
