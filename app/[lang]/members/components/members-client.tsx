@@ -10,6 +10,7 @@ import {
 import {
   AlertCircle,
   Building2,
+  CalendarDays,
   LayoutGrid,
   Phone,
   Rows3,
@@ -17,13 +18,15 @@ import {
 } from "lucide-react"
 
 import {
-  FacetFilter,
-  FilterChips,
-  FilterSheet,
-  SHEET_CONTROL,
+  AppliedFilters,
+  DateEditor,
+  describeFacet,
+  FacetEditor,
+  type FilterDefinition,
+  FilterMenu,
+  TextEditor,
   TextFilter,
   toggleKey,
-  type ActiveFilter,
 } from "@/components/filters"
 import { LoadFailed, LoadingRows } from "@/components/table/load-states"
 import {
@@ -31,7 +34,7 @@ import {
   useRecordSheet,
 } from "@/components/table/record-sheet"
 import { TableView } from "@/components/table/table-view"
-import { DatePicker, formatDateValue } from "@/components/ui/date-picker"
+import { formatDateValue } from "@/components/ui/date-picker"
 import { Pagination } from "@/components/ui/pagination"
 import { ViewMenu } from "@/components/ui/view-menu"
 import { useGetMembers } from "@/features/members/api"
@@ -299,7 +302,7 @@ export function MembersClient() {
     />
   )
 
-  /** `{ key, label }` is the shape `FacetFilter` ticks through. */
+  /** `{ key, label }` is the shape `FacetEditor` ticks through. */
   const organizationOptions = React.useMemo(
     () => organizations.map((o) => ({ key: String(o.id), label: o.name })),
     [organizations]
@@ -310,117 +313,79 @@ export function MembersClient() {
    * search, which stays on the toolbar at every width because it is the one
    * people reach for first (§6.7).
    */
-  const clearSheetFilters = () => {
+  const clearFilters = () => {
+    setQuery("")
     setOrganizationIds([])
     setCreatedAt("")
     setPhoneQuery("")
   }
 
-  /** The badge on the collapsed trigger — the typed phone, not the debounced. */
-  const sheetFilterCount =
-    organizationIds.length + (createdAt ? 1 : 0) + (phoneQuery.trim() ? 1 : 0)
-
-  const clearFilters = () => {
-    clearSheetFilters()
-    setQuery("")
-  }
-
   /**
-   * The three controls that collapse into the sheet below `lg`.
-   *
-   * One definition rendered into two layouts rather than two copies: the only
-   * difference between them is how wide each trigger is.
+   * Every filter this screen offers, described once: the Filter menu lists
+   * them, the chip row shows the set ones, and both open the same editor
+   * (components/filters/filter-builder.tsx). Chip text is the *typed* value —
+   * the chip is the editor's own label, so it moves with the keystroke.
    */
-  const collapsibleFilters = (inSheet: boolean) => (
-    <>
-      {/* Phone is its own field rather than part of search: it matches one
-          column, and the input is punctuation-tolerant because the stored
-          number is bare digits. */}
-      <TextFilter
-        icon={Phone}
-        type="tel"
-        inputMode="tel"
-        value={phoneQuery}
-        onChange={setPhoneQuery}
-        placeholder={t("members.phonePlaceholder")}
-        label={t("members.phoneFilterLabel")}
-        className={inSheet ? "w-full" : "w-44"}
-      />
-
-      <FacetFilter
-        label={t("filters.attributes.organization")}
-        icon={Building2}
-        options={organizationOptions}
-        selected={organizationIds}
-        onToggle={(key) =>
-          setOrganizationIds((current) => toggleKey(current, key))
-        }
-        emptyLabel={t("members.noOrganizations")}
-        loading={organizationsQuery.isPending}
-        className={inSheet ? SHEET_CONTROL : undefined}
-      />
-
-      <DatePicker
-        label={t("filters.attributes.added")}
-        value={createdAt}
-        onChange={setCreatedAt}
-        className={inSheet ? SHEET_CONTROL : undefined}
-      />
-    </>
-  )
-
-  /**
-   * The applied-filter row. One entry per *applied* filter — the debounced
-   * values, not the raw inputs, so a chip never claims a filter the server has
-   * not been asked for yet.
-   */
-  const activeFilters: ActiveFilter[] = [
-    // One chip per ticked organization, so each can be removed on its own —
-    // a single "Organization (2)" chip can only ever clear both.
-    ...organizationIds.map((id) => ({
-      key: `organization-${id}`,
-      attribute: t("filters.attributes.organization"),
-      value: organizationOptions.find((o) => o.key === id)?.label ?? id,
-      onRemove: () =>
-        setOrganizationIds((current) => toggleKey(current, id)),
-    })),
-    ...(createdAt
-      ? [
-          {
-            key: "created",
-            attribute: t("filters.attributes.added"),
-            value: formatDateValue(createdAt, locale),
-            onRemove: () => setCreatedAt(""),
-          },
-        ]
-      : []),
-    ...(search
-      ? [
-          {
-            key: "search",
-            attribute: t("filters.attributes.search"),
-            value: search,
-            onRemove: () => setQuery(""),
-          },
-        ]
-      : []),
-    ...(phone
-      ? [
-          {
-            key: "phone",
-            attribute: t("filters.attributes.phone"),
-            value: phone,
-            onRemove: () => setPhoneQuery(""),
-          },
-        ]
-      : []),
+  const filters: FilterDefinition[] = [
+    {
+      // Punctuation-tolerant, because the stored number is bare digits.
+      key: "phone",
+      label: t("filters.attributes.phone"),
+      icon: Phone,
+      value: phoneQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          type="tel"
+          inputMode="tel"
+          value={phoneQuery}
+          onChange={setPhoneQuery}
+          placeholder={t("members.phonePlaceholder")}
+          label={t("members.phoneFilterLabel")}
+        />
+      ),
+      onClear: () => setPhoneQuery(""),
+    },
+    {
+      // Plural — `organization_ids[]`, any number ticked.
+      key: "organization",
+      label: t("filters.attributes.organization"),
+      icon: Building2,
+      value: describeFacet(t, organizationOptions, organizationIds),
+      editor: (
+        <FacetEditor
+          options={organizationOptions}
+          selected={organizationIds}
+          onToggle={(key) =>
+            setOrganizationIds((current) => toggleKey(current, key))
+          }
+          emptyLabel={t("members.noOrganizations")}
+          loading={organizationsQuery.isPending}
+        />
+      ),
+      onClear: () => setOrganizationIds([]),
+    },
+    {
+      // One day, not a window — `created_at` is an exact-date match.
+      key: "created",
+      label: t("filters.attributes.added"),
+      icon: CalendarDays,
+      value: createdAt ? formatDateValue(createdAt, locale) : undefined,
+      editor: (
+        <DateEditor
+          value={createdAt}
+          onChange={setCreatedAt}
+          label={t("filters.attributes.added")}
+        />
+      ),
+      onClear: () => setCreatedAt(""),
+    },
   ]
 
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar — left group is the view switcher, right group the controls
-          (§6.1). Below `lg` that single row becomes two: the switcher and one
-          Filters button, then search across the full width, per §18.3. */}
+          (§6.1). Below `lg` that single row becomes two: the switcher and the
+          Filter button, then search across the full width, per §18.3. */}
       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
         <div className="flex items-center justify-between gap-2">
           {/* View switcher — active tab is a surface chip (§6.5) */}
@@ -459,16 +424,10 @@ export function MembersClient() {
               )
             })}
           </div>
-
-          {/* The collapsed toolbar. Holds the same control components the
-              desktop cluster does — passed in, not duplicated. */}
-          <FilterSheet
-            className="lg:hidden"
-            count={sheetFilterCount}
-            onClear={clearSheetFilters}
-          >
-            {collapsibleFilters(true)}
-          </FilterSheet>
+          {/* Below `lg` the Filter button sits beside the switcher; at
+              `lg` it moves onto the search row. One button either way —
+              the popover is the same at every width, so no sheet. */}
+          <FilterMenu filters={filters} className="lg:hidden" />
         </div>
 
         {/* Search stays on the bar at every width — it is the control people
@@ -485,8 +444,8 @@ export function MembersClient() {
             className="w-full lg:w-56"
           />
 
-          <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {collapsibleFilters(false)}
+          <div className="hidden items-center gap-2 lg:flex">
+            <FilterMenu filters={filters} />
 
             {/* View — column visibility + reordering (table only) */}
             {effectiveView === "table" && <ViewMenu table={table} />}
@@ -494,7 +453,7 @@ export function MembersClient() {
         </div>
       </div>
 
-      <FilterChips filters={activeFilters} onClear={clearFilters} />
+      <AppliedFilters filters={filters} onClear={clearFilters} />
 
       {/* A failure only takes over the screen when there is nothing to show.
           Once rows are on screen — paging away from a page that loaded — an

@@ -23,7 +23,9 @@ export {
 } from "./filter-builder"
 export {
   ChoiceEditor,
+  DateEditor,
   DateRangeEditor,
+  describeFacet,
   FacetEditor,
   RangeEditor,
   TextEditor,

@@ -6,6 +6,7 @@ import { Check, Search } from "lucide-react"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { useT } from "@/i18n/context"
+import type { Translator } from "@/i18n/translate"
 import { cn } from "@/lib/utils"
 
 import { useFilterEditor } from "./filter-builder"
@@ -22,6 +23,7 @@ import { useFilterEditor } from "./filter-builder"
  * | `SelectFilter`    | `ChoiceEditor`    | `string`, `""` for none     |
  * | `TextFilter`      | `TextEditor`      | `string`                    |
  * | price pair        | `RangeEditor`     | two `string`s               |
+ * | `DatePicker`      | `DateEditor`      | one `yyyy-mm-dd`            |
  * | `DateRangeFilter` | `DateRangeEditor` | two `yyyy-mm-dd`            |
  *
  * All controlled, none owning state — the screen still debounces what it
@@ -125,6 +127,27 @@ function ListNote({
           : t("common.noMatches")}
     </p>
   )
+}
+
+/**
+ * A facet's chip text: one tick names the thing itself, more than one gives
+ * a count — "Baghdad, Basra, Erbil…" truncated in a chip names neither how
+ * many nor which. `undefined` when nothing is ticked, which is the kit's cue
+ * for "unset".
+ *
+ * Takes `t` because it is a plain function the screens call while building
+ * their definitions array, not a component.
+ */
+export function describeFacet(
+  t: Translator,
+  options: { key: string; label: string }[],
+  selected: string[]
+): string | undefined {
+  if (selected.length === 0) return undefined
+  if (selected.length === 1) {
+    return options.find((option) => option.key === selected[0])?.label ?? selected[0]
+  }
+  return t("common.selectedCount", { count: selected.length })
 }
 
 /** Multi-select: one repeated parameter, any number ticked. Stays open. */
@@ -310,6 +333,38 @@ export function RangeEditor({
           className="text-base lg:text-sm"
         />
       </label>
+    </div>
+  )
+}
+
+/**
+ * One day. The pick is the whole answer, so it closes the popover — the
+ * calendar's own `Clear` is still there for emptying it.
+ */
+export function DateEditor({
+  value,
+  onChange,
+  label,
+}: {
+  /** `yyyy-mm-dd`, or `""` for none. */
+  value: string
+  onChange: (value: string) => void
+  /** The accessible name — the popover header shows the visible one. */
+  label: string
+}) {
+  const { close } = useFilterEditor()
+
+  return (
+    <div className="p-1">
+      <DatePicker
+        variant="field"
+        label={label}
+        value={value}
+        onChange={(next) => {
+          onChange(next)
+          if (next) close()
+        }}
+      />
     </div>
   )
 }

@@ -7,15 +7,23 @@ import {
   type ColumnVisibilityState,
   type SortingState,
 } from "@tanstack/react-table"
-import { AlertCircle, LayoutGrid, Phone, Rows3, Search } from "lucide-react"
+import {
+  AlertCircle,
+  CalendarDays,
+  LayoutGrid,
+  Phone,
+  Rows3,
+  Search,
+} from "lucide-react"
 
 import {
-  DateRangeFilter,
+  AppliedFilters,
+  DateRangeEditor,
   describeRange,
-  FilterChips,
-  FilterSheet,
+  type FilterDefinition,
+  FilterMenu,
+  TextEditor,
   TextFilter,
-  type ActiveFilter,
 } from "@/components/filters"
 import { LoadFailed, LoadingRows } from "@/components/table/load-states"
 import {
@@ -304,104 +312,65 @@ export function BlackListClient() {
    * search, which stays on the toolbar at every width because it is the one
    * people reach for first (§6.7).
    */
-  const clearSheetFilters = () => {
+  const clearFilters = () => {
+    setQuery("")
     setPhoneQuery("")
     setBlockedFrom("")
     setBlockedTo("")
-  }
-
-  /** The badge on the collapsed trigger — the typed phone, not the debounced. */
-  const sheetFilterCount =
-    (phoneQuery.trim() ? 1 : 0) +
-    // The window counts once, however many of its two ends are set.
-    (blockedFrom || blockedTo ? 1 : 0)
-
-  const clearFilters = () => {
-    clearSheetFilters()
-    setQuery("")
   }
 
   /** Whether the server was asked for anything narrower than "everything". */
   const filtered = filter.length > 0
 
   /**
-   * The two controls that collapse into the sheet below `lg`.
-   *
-   * One definition rendered into two layouts rather than two copies: the only
-   * difference between them is how wide each trigger is.
+   * Every filter this screen offers, described once: the Filter menu lists
+   * them, the chip row shows the set ones, and both open the same editor
+   * (components/filters/filter-builder.tsx). Chip text is the *typed* value —
+   * the chip is the editor's own label, so it moves with the keystroke.
    */
-  const collapsibleFilters = (inSheet: boolean) => (
-    <>
-      {/* Phone is its own field rather than part of search, and it is the one
-          that matters most on this screen: checking whether a specific number
-          is barred is the question this list gets asked. Punctuation-tolerant,
-          because the stored number is bare digits. */}
-      <TextFilter
-        icon={Phone}
-        type="tel"
-        inputMode="tel"
-        value={phoneQuery}
-        onChange={setPhoneQuery}
-        placeholder={t("members.phonePlaceholder")}
-        label={t("members.phoneFilterLabel")}
-        className={inSheet ? "w-full" : "w-44"}
-      />
-
-      {/* Either end alone is a question somebody asks of this list: "blocked
-          since Monday" is the recent additions, "blocked before January" is
-          what has been sitting here long enough to be worth reviewing. */}
-      <DateRangeFilter
-        label={t("filters.attributes.blocked")}
-        from={blockedFrom}
-        to={blockedTo}
-        onFromChange={setBlockedFrom}
-        onToChange={setBlockedTo}
-        inSheet={inSheet}
-      />
-    </>
-  )
-
-  /**
-   * The applied-filter row. One entry per *applied* filter — the debounced
-   * values, not the raw inputs, so a chip never claims a filter the server has
-   * not been asked for yet.
-   */
-  const activeFilters: ActiveFilter[] = [
-    ...(phone
-      ? [
-          {
-            key: "phone",
-            attribute: t("filters.attributes.phone"),
-            value: phone,
-            onRemove: () => setPhoneQuery(""),
-          },
-        ]
-      : []),
-    // One chip per window, not per end: the pair is a single filter, so it
-    // clears as one.
-    ...(blockedFrom || blockedTo
-      ? [
-          {
-            key: "blocked",
-            attribute: t("filters.attributes.blocked"),
-            value: describeRange(t, blockedFrom, blockedTo),
-            onRemove: () => {
-              setBlockedFrom("")
-              setBlockedTo("")
-            },
-          },
-        ]
-      : []),
-    ...(search
-      ? [
-          {
-            key: "search",
-            attribute: t("filters.attributes.search"),
-            value: search,
-            onRemove: () => setQuery(""),
-          },
-        ]
-      : []),
+  const filters: FilterDefinition[] = [
+    {
+      // Phone is its own field rather than part of search, and it is the one
+      // that matters most on this screen: checking whether a specific number
+      // is barred is the question this list gets asked. Punctuation-tolerant,
+      // because the stored number is bare digits.
+      key: "phone",
+      label: t("filters.attributes.phone"),
+      icon: Phone,
+      value: phoneQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          type="tel"
+          inputMode="tel"
+          value={phoneQuery}
+          onChange={setPhoneQuery}
+          placeholder={t("members.phonePlaceholder")}
+          label={t("members.phoneFilterLabel")}
+        />
+      ),
+      onClear: () => setPhoneQuery(""),
+    },
+    {
+      // Either end alone is a question somebody asks of this list: "blocked
+      // since Monday" is the recent additions, "blocked before January" is
+      // what has been sitting here long enough to be worth reviewing.
+      key: "blocked",
+      label: t("filters.attributes.blocked"),
+      icon: CalendarDays,
+      value: describeRange(t, blockedFrom, blockedTo) || undefined,
+      editor: (
+        <DateRangeEditor
+          from={blockedFrom}
+          to={blockedTo}
+          onFromChange={setBlockedFrom}
+          onToChange={setBlockedTo}
+        />
+      ),
+      onClear: () => {
+        setBlockedFrom("")
+        setBlockedTo("")
+      },
+    },
   ]
 
   /**
@@ -417,8 +386,8 @@ export function BlackListClient() {
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar — left group is the view switcher, right group the controls
-          (§6.1). Below `lg` that single row becomes two: the switcher and one
-          Filters button, then search across the full width, per §18.3. */}
+          (§6.1). Below `lg` that single row becomes two: the switcher and the
+          Filter button, then search across the full width, per §18.3. */}
       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
         <div className="flex items-center justify-between gap-2">
           {/* View switcher — active tab is a surface chip (§6.5) */}
@@ -457,16 +426,10 @@ export function BlackListClient() {
               )
             })}
           </div>
-
-          {/* The collapsed toolbar. Holds the same control components the
-              desktop cluster does — passed in, not duplicated. */}
-          <FilterSheet
-            className="lg:hidden"
-            count={sheetFilterCount}
-            onClear={clearSheetFilters}
-          >
-            {collapsibleFilters(true)}
-          </FilterSheet>
+          {/* Below `lg` the Filter button sits beside the switcher; at
+              `lg` it moves onto the search row. One button either way —
+              the popover is the same at every width, so no sheet. */}
+          <FilterMenu filters={filters} className="lg:hidden" />
         </div>
 
         {/* Search stays on the bar at every width — it is the control people
@@ -483,8 +446,8 @@ export function BlackListClient() {
             className="w-full lg:w-56"
           />
 
-          <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {collapsibleFilters(false)}
+          <div className="hidden items-center gap-2 lg:flex">
+            <FilterMenu filters={filters} />
 
             {/* View — column visibility + reordering (table only) */}
             {effectiveView === "table" && <ViewMenu table={table} />}
@@ -492,7 +455,7 @@ export function BlackListClient() {
         </div>
       </div>
 
-      <FilterChips filters={activeFilters} onClear={clearFilters} />
+      <AppliedFilters filters={filters} onClear={clearFilters} />
 
       {/* A failure only takes over the screen when there is nothing to show.
           Once rows are on screen — paging away from a page that loaded — an

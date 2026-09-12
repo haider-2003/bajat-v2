@@ -27,6 +27,7 @@ import {
   AppliedFilters,
   ChoiceEditor,
   DateRangeEditor,
+  describeFacet,
   describeRange,
   FacetEditor,
   FilterMenu,
@@ -300,7 +301,7 @@ export function RequestsClient() {
   } = useListQuery(filter, { pageSize: DEFAULT_PAGE_SIZE })
 
   const organizationsQuery = useGetOrganizations(ORGANIZATIONS_QUERY)
-  /** `{ value, label }` is the shape `SelectFilter` reads a label out of. */
+  /** `{ value, label }` is the shape `ChoiceEditor` reads a label out of. */
   const organizationOptions = React.useMemo(
     () =>
       (organizationsQuery.data?.data.data ?? []).map((organization) => ({
@@ -410,13 +411,7 @@ export function RequestsClient() {
       key: "status",
       label: t("common.status"),
       icon: Tag,
-      value:
-        statusFilter.length === 0
-          ? undefined
-          : statusFilter.length === 1
-            ? (statusOptions.find((option) => option.key === statusFilter[0])
-                ?.label ?? statusFilter[0])
-            : t("common.selectedCount", { count: statusFilter.length }),
+      value: describeFacet(t, statusOptions, statusFilter),
       editor: (
         <FacetEditor
           options={statusOptions}

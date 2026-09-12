@@ -10,19 +10,20 @@ import {
 import {
   AlertCircle,
   Building2,
+  CalendarDays,
   LayoutGrid,
   Rows3,
   Search,
 } from "lucide-react"
 
 import {
-  DateRangeFilter,
+  AppliedFilters,
+  ChoiceEditor,
+  DateRangeEditor,
   describeRange,
-  FilterChips,
-  FilterSheet,
-  SelectFilter,
+  type FilterDefinition,
+  FilterMenu,
   TextFilter,
-  type ActiveFilter,
 } from "@/components/filters"
 import { LoadFailed, LoadingRows } from "@/components/table/load-states"
 import {
@@ -239,79 +240,60 @@ export function BranchesClient() {
     />
   )
 
-  const clearSheetFilters = () => {
+  const clearFilters = () => {
+    setQuery("")
     setOrganization("")
     setCreatedFrom("")
     setCreatedTo("")
   }
-  const sheetFilterCount =
-    (organization ? 1 : 0) + (createdFrom || createdTo ? 1 : 0)
 
-  const clearFilters = () => {
-    clearSheetFilters()
-    setQuery("")
-  }
-
+  /** Whether the server was asked for anything narrower than "everything". */
   const filtered = filter.length > 0
 
-  const collapsibleFilters = (inSheet: boolean) => (
-    <>
-      {isAdmin && (
-        <SelectFilter
-          icon={Building2}
-          label={t("filters.attributes.organization")}
-          options={organizationOptions}
-          value={organization}
-          onChange={setOrganization}
-          loading={organizationsQuery.isPending}
-          className={inSheet ? "w-full" : undefined}
-        />
-      )}
-      <DateRangeFilter
-        label={t("filters.attributes.created")}
-        from={createdFrom}
-        to={createdTo}
-        onFromChange={setCreatedFrom}
-        onToChange={setCreatedTo}
-        inSheet={inSheet}
-      />
-    </>
-  )
-
-  const activeFilters: ActiveFilter[] = [
-    ...(organization
+  /**
+   * Every filter this screen offers, described once: the Filter menu lists
+   * them, the chip row shows the set ones, and both open the same editor
+   * (components/filters/filter-builder.tsx). Chip text is the *typed* value —
+   * the chip is the editor's own label, so it moves with the keystroke.
+   */
+  const filters: FilterDefinition[] = [
+    ...(isAdmin
       ? [
           {
             key: "organization",
-            attribute: t("filters.attributes.organization"),
-            value: organization,
-            onRemove: () => setOrganization(""),
+            label: t("filters.attributes.organization"),
+            icon: Building2,
+            value: organization || undefined,
+            editor: (
+              <ChoiceEditor
+                options={organizationOptions}
+                value={organization}
+                onChange={setOrganization}
+                loading={organizationsQuery.isPending}
+              />
+            ),
+            onClear: () => setOrganization(""),
           },
         ]
       : []),
-    ...(createdFrom || createdTo
-      ? [
-          {
-            key: "created",
-            attribute: t("filters.attributes.created"),
-            value: describeRange(t, createdFrom, createdTo),
-            onRemove: () => {
-              setCreatedFrom("")
-              setCreatedTo("")
-            },
-          },
-        ]
-      : []),
-    ...(search
-      ? [
-          {
-            key: "search",
-            attribute: t("filters.attributes.search"),
-            value: search,
-            onRemove: () => setQuery(""),
-          },
-        ]
-      : []),
+    {
+      key: "created",
+      label: t("filters.attributes.created"),
+      icon: CalendarDays,
+      value: describeRange(t, createdFrom, createdTo) || undefined,
+      editor: (
+        <DateRangeEditor
+          from={createdFrom}
+          to={createdTo}
+          onFromChange={setCreatedFrom}
+          onToChange={setCreatedTo}
+        />
+      ),
+      onClear: () => {
+        setCreatedFrom("")
+        setCreatedTo("")
+      },
+    },
   ]
 
   const emptyTitle = filtered
@@ -357,14 +339,10 @@ export function BranchesClient() {
               )
             })}
           </div>
-
-          <FilterSheet
-            className="lg:hidden"
-            count={sheetFilterCount}
-            onClear={clearSheetFilters}
-          >
-            {collapsibleFilters(true)}
-          </FilterSheet>
+          {/* Below `lg` the Filter button sits beside the switcher; at
+              `lg` it moves onto the search row. One button either way —
+              the popover is the same at every width, so no sheet. */}
+          <FilterMenu filters={filters} className="lg:hidden" />
         </div>
 
         <div className="flex w-full flex-wrap items-center gap-2 lg:ms-auto lg:w-auto">
@@ -377,14 +355,14 @@ export function BranchesClient() {
             className="w-full lg:w-56"
           />
 
-          <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {collapsibleFilters(false)}
+          <div className="hidden items-center gap-2 lg:flex">
+            <FilterMenu filters={filters} />
             {effectiveView === "table" && <ViewMenu table={table} />}
           </div>
         </div>
       </div>
 
-      <FilterChips filters={activeFilters} onClear={clearFilters} />
+      <AppliedFilters filters={filters} onClear={clearFilters} />
 
       {branchesQuery.isError && hasRows && (
         <div

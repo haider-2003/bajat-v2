@@ -10,6 +10,7 @@ import {
 import {
   AlertCircle,
   Banknote,
+  CalendarDays,
   LayoutGrid,
   LayoutTemplate,
   Rows3,
@@ -18,12 +19,13 @@ import {
 } from "lucide-react"
 
 import {
-  DateRangeFilter,
+  AppliedFilters,
+  DateRangeEditor,
   describeRange,
-  FilterChips,
-  FilterSheet,
+  type FilterDefinition,
+  FilterMenu,
+  TextEditor,
   TextFilter,
-  type ActiveFilter,
 } from "@/components/filters"
 import { LoadFailed, LoadingRows } from "@/components/table/load-states"
 import {
@@ -269,7 +271,8 @@ export function PaymentsClient() {
     />
   )
 
-  const clearSheetFilters = () => {
+  const clearFilters = () => {
+    setQuery("")
     setAmountQuery("")
     setMemberQuery("")
     setTemplateQuery("")
@@ -277,134 +280,85 @@ export function PaymentsClient() {
     setUpdatedTo("")
   }
 
-  /** The badge on the collapsed trigger — the typed values, not the debounced. */
-  const sheetFilterCount =
-    (amountQuery.trim() ? 1 : 0) +
-    (memberQuery.trim() ? 1 : 0) +
-    (templateQuery.trim() ? 1 : 0) +
-    // The window counts once, however many of its two ends are set.
-    (updatedFrom || updatedTo ? 1 : 0)
-
-  const clearFilters = () => {
-    clearSheetFilters()
-    setQuery("")
-  }
-
   /** Whether the server was asked for anything narrower than "everything". */
   const filtered = filter.length > 0
 
   /**
-   * The controls that collapse into the sheet below `lg`.
-   *
-   * One definition rendered into two layouts rather than two copies: the only
-   * difference between them is how wide each trigger is.
+   * Every filter this screen offers, described once: the Filter menu lists
+   * them, the chip row shows the set ones, and both open the same editor
+   * (components/filters/filter-builder.tsx). Chip text is the *typed* value —
+   * the chip is the editor's own label, so it moves with the keystroke.
    */
-  const collapsibleFilters = (inSheet: boolean) => (
-    <>
-      {/* An exact figure rather than a range: the question this answers is
-          "find the charge for 25,000", which is how a disputed amount is
-          located when the reference is not to hand. */}
-      <TextFilter
-        icon={Banknote}
-        inputMode="decimal"
-        value={amountQuery}
-        onChange={setAmountQuery}
-        placeholder={t("payments.amountPlaceholder")}
-        label={t("payments.amountFilterLabel")}
-        className={inSheet ? "w-full" : "w-32"}
-      />
-
-      <TextFilter
-        icon={User}
-        value={memberQuery}
-        onChange={setMemberQuery}
-        placeholder={t("payments.memberPlaceholder")}
-        label={t("payments.memberFilterLabel")}
-        className={inSheet ? "w-full" : "w-40"}
-      />
-
-      <TextFilter
-        icon={LayoutTemplate}
-        value={templateQuery}
-        onChange={setTemplateQuery}
-        placeholder={t("payments.templatePlaceholder")}
-        label={t("payments.templateFilterLabel")}
-        className={inSheet ? "w-full" : "w-40"}
-      />
-
-      {/* Labelled Updated, because that is the field the endpoint filters —
-          see the note at the top of this file. */}
-      <DateRangeFilter
-        label={t("filters.attributes.updated")}
-        from={updatedFrom}
-        to={updatedTo}
-        onFromChange={setUpdatedFrom}
-        onToChange={setUpdatedTo}
-        inSheet={inSheet}
-      />
-    </>
-  )
-
-  /**
-   * The applied-filter row. One entry per *applied* filter — the debounced
-   * values, not the raw inputs, so a chip never claims a filter the server has
-   * not been asked for yet.
-   */
-  const activeFilters: ActiveFilter[] = [
-    ...(amount
-      ? [
-          {
-            key: "amount",
-            attribute: t("filters.attributes.amount"),
-            value: amount,
-            onRemove: () => setAmountQuery(""),
-          },
-        ]
-      : []),
-    ...(memberName
-      ? [
-          {
-            key: "member",
-            attribute: t("filters.attributes.member"),
-            value: memberName,
-            onRemove: () => setMemberQuery(""),
-          },
-        ]
-      : []),
-    ...(templateTitle
-      ? [
-          {
-            key: "template",
-            attribute: t("filters.attributes.template"),
-            value: templateTitle,
-            onRemove: () => setTemplateQuery(""),
-          },
-        ]
-      : []),
-    // One chip per window, not per end: the pair is a single filter.
-    ...(updatedFrom || updatedTo
-      ? [
-          {
-            key: "updated",
-            attribute: t("filters.attributes.updated"),
-            value: describeRange(t, updatedFrom, updatedTo),
-            onRemove: () => {
-              setUpdatedFrom("")
-              setUpdatedTo("")
-            },
-          },
-        ]
-      : []),
-    ...(search
-      ? [
-          {
-            key: "search",
-            attribute: t("filters.attributes.search"),
-            value: search,
-            onRemove: () => setQuery(""),
-          },
-        ]
-      : []),
+  const filters: FilterDefinition[] = [
+    {
+      // An exact figure rather than a range: the question this answers is
+      // "find the charge for 25,000", which is how a disputed amount is
+      // located when the reference is not to hand.
+      key: "amount",
+      label: t("filters.attributes.amount"),
+      icon: Banknote,
+      value: amountQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          inputMode="decimal"
+          value={amountQuery}
+          onChange={setAmountQuery}
+          placeholder={t("payments.amountPlaceholder")}
+          label={t("payments.amountFilterLabel")}
+        />
+      ),
+      onClear: () => setAmountQuery(""),
+    },
+    {
+      key: "member",
+      label: t("filters.attributes.member"),
+      icon: User,
+      value: memberQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          value={memberQuery}
+          onChange={setMemberQuery}
+          placeholder={t("payments.memberPlaceholder")}
+          label={t("payments.memberFilterLabel")}
+        />
+      ),
+      onClear: () => setMemberQuery(""),
+    },
+    {
+      key: "template",
+      label: t("templates.singular"),
+      icon: LayoutTemplate,
+      value: templateQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          value={templateQuery}
+          onChange={setTemplateQuery}
+          placeholder={t("payments.templatePlaceholder")}
+          label={t("payments.templateFilterLabel")}
+        />
+      ),
+      onClear: () => setTemplateQuery(""),
+    },
+    // Labelled Updated, because that is the field the endpoint filters —
+    // see the note at the top of this file.
+    {
+      key: "updated",
+      label: t("filters.attributes.updated"),
+      icon: CalendarDays,
+      value: describeRange(t, updatedFrom, updatedTo) || undefined,
+      editor: (
+        <DateRangeEditor
+          from={updatedFrom}
+          to={updatedTo}
+          onFromChange={setUpdatedFrom}
+          onToChange={setUpdatedTo}
+        />
+      ),
+      onClear: () => {
+        setUpdatedFrom("")
+        setUpdatedTo("")
+      },
+    },
   ]
 
   /**
@@ -420,8 +374,8 @@ export function PaymentsClient() {
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar — left group is the view switcher, right group the controls
-          (§6.1). Below `lg` that single row becomes two: the switcher and one
-          Filters button, then search across the full width, per §18.3. */}
+          (§6.1). Below `lg` that single row becomes two: the switcher and the
+          Filter button, then search across the full width, per §18.3. */}
       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
         <div className="flex items-center justify-between gap-2">
           {/* View switcher — active tab is a surface chip (§6.5) */}
@@ -460,16 +414,10 @@ export function PaymentsClient() {
               )
             })}
           </div>
-
-          {/* The collapsed toolbar. Holds the same control components the
-              desktop cluster does — passed in, not duplicated. */}
-          <FilterSheet
-            className="lg:hidden"
-            count={sheetFilterCount}
-            onClear={clearSheetFilters}
-          >
-            {collapsibleFilters(true)}
-          </FilterSheet>
+          {/* Below `lg` the Filter button sits beside the switcher; at
+              `lg` it moves onto the search row. One button either way —
+              the popover is the same at every width, so no sheet. */}
+          <FilterMenu filters={filters} className="lg:hidden" />
         </div>
 
         {/* Search stays on the bar at every width — it is the control people
@@ -484,8 +432,8 @@ export function PaymentsClient() {
             className="w-full lg:w-56"
           />
 
-          <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {collapsibleFilters(false)}
+          <div className="hidden items-center gap-2 lg:flex">
+            <FilterMenu filters={filters} />
 
             {/* View — column visibility + reordering (table only) */}
             {effectiveView === "table" && <ViewMenu table={table} />}
@@ -493,7 +441,7 @@ export function PaymentsClient() {
         </div>
       </div>
 
-      <FilterChips filters={activeFilters} onClear={clearFilters} />
+      <AppliedFilters filters={filters} onClear={clearFilters} />
 
       {/* A failure only takes over the screen when there is nothing to show.
           Once rows are on screen an error becomes a strip above them, so the

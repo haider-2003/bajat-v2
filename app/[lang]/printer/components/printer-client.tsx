@@ -10,6 +10,8 @@ import {
 import {
   AlertCircle,
   Building2,
+  CalendarDays,
+  History,
   LayoutGrid,
   LayoutTemplate,
   Phone,
@@ -19,16 +21,17 @@ import {
 } from "lucide-react"
 
 import {
-  DateRangeFilter,
+  AppliedFilters,
+  ChoiceEditor,
+  DateRangeEditor,
+  describeFacet,
   describeRange,
-  FacetFilter,
-  FilterChips,
-  FilterSheet,
-  SelectFilter,
-  SHEET_CONTROL,
+  FacetEditor,
+  type FilterDefinition,
+  FilterMenu,
+  TextEditor,
   TextFilter,
   toggleKey,
-  type ActiveFilter,
 } from "@/components/filters"
 import { LoadFailed, LoadingRows } from "@/components/table/load-states"
 import { TableView } from "@/components/table/table-view"
@@ -81,8 +84,8 @@ import { CardView } from "./view-cards"
  * ### Organization is singular here
  *
  * `/identity` filters on `organization_id` — **one** value — where `/member`
- * takes `organization_ids[]`. So this screen uses `SelectFilter` and the App
- * Users screen uses `FacetFilter`, and swapping either for the other produces a
+ * takes `organization_ids[]`. So this screen uses `ChoiceEditor` and the App
+ * Users screen uses `FacetEditor`, and swapping either for the other produces a
  * real query parameter that the backend ignores without erroring
  * (docs/filtering-sorting-pagination.md §6). Every field name here is the one
  * the endpoint documents in docs/identities-api.postman_collection.json.
@@ -285,7 +288,7 @@ export function PrinterClient() {
   // query key, so without it `data` would be undefined for the whole trip and
   // the row count, the total and the page range would all blink to zero.
   const organizationsQuery = useGetOrganizations(ORGANIZATIONS_QUERY)
-  /** `{ value, label }` is the shape `SelectFilter` reads a label out of. */
+  /** `{ value, label }` is the shape `ChoiceEditor` reads a label out of. */
   const organizationOptions = React.useMemo(
     () =>
       (organizationsQuery.data?.data.data ?? []).map((organization) => ({
@@ -382,7 +385,8 @@ export function PrinterClient() {
    * search, which stays on the toolbar at every width because it is the one
    * people reach for first (§6.7).
    */
-  const clearSheetFilters = () => {
+  const clearFilters = () => {
+    setQuery("")
     setStatusFilter([])
     setOrganizationId("")
     setPhoneQuery("")
@@ -393,190 +397,132 @@ export function PrinterClient() {
     setMovedTo("")
   }
 
-  /** The badge on the collapsed trigger — the typed values, not the debounced. */
-  const sheetFilterCount =
-    statusFilter.length +
-    (organizationId ? 1 : 0) +
-    (phoneQuery.trim() ? 1 : 0) +
-    (templateQuery.trim() ? 1 : 0) +
-    // Each window counts once, however many of its two ends are set.
-    (createdFrom || createdTo ? 1 : 0) +
-    (movedFrom || movedTo ? 1 : 0)
-
-  const clearFilters = () => {
-    clearSheetFilters()
-    setQuery("")
-  }
-
   /**
-   * The controls that collapse into the sheet below `lg`.
-   *
-   * One definition rendered into two layouts rather than two copies: the only
-   * difference between them is how wide each trigger is.
+   * Every filter this screen offers, described once: the Filter menu lists
+   * them, the chip row shows the set ones, and both open the same editor
+   * (components/filters/filter-builder.tsx). Chip text is the *typed* value —
+   * the chip is the editor's own label, so it moves with the keystroke.
    */
-  const collapsibleFilters = (inSheet: boolean) => (
-    <>
-      <FacetFilter
-        label={t("printer.stage")}
-        icon={Printer}
-        options={statusOptions}
-        selected={statusFilter}
-        onToggle={(key) => setStatusFilter((current) => toggleKey(current, key))}
-        className={inSheet ? SHEET_CONTROL : undefined}
-      />
-
-      {/* Singular — see the note at the top of this file. */}
-      <SelectFilter
-        label={t("filters.attributes.organization")}
-        icon={Building2}
-        options={organizationOptions}
-        value={organizationId}
-        onChange={setOrganizationId}
-        allLabel={t("printer.allOrganizations")}
-        emptyLabel={t("members.noOrganizations")}
-        loading={organizationsQuery.isPending}
-        className={inSheet ? SHEET_CONTROL : undefined}
-      />
-
-      {/* The batch a printer operator actually works in: one template is one
-          load of stock, so this is how a run gets grouped. Free text because
-          that is what the endpoint takes — `template_title`, not an id. */}
-      <TextFilter
-        icon={LayoutTemplate}
-        value={templateQuery}
-        onChange={setTemplateQuery}
-        placeholder={t("templates.singular")}
-        label={t("printer.templateFilterLabel")}
-        className={inSheet ? "w-full" : "w-40"}
-      />
-
-      {/* Punctuation-tolerant, because the stored number is bare digits. */}
-      <TextFilter
-        icon={Phone}
-        type="tel"
-        inputMode="tel"
-        value={phoneQuery}
-        onChange={setPhoneQuery}
-        placeholder={t("members.phonePlaceholder")}
-        label={t("members.phoneFilterLabel")}
-        className={inSheet ? "w-full" : "w-40"}
-      />
-
-      {/* When the card was issued. Useful on its own — "everything from the
-          intake day that is still sitting here". */}
-      <DateRangeFilter
-        label={t("filters.attributes.created")}
-        from={createdFrom}
-        to={createdTo}
-        onFromChange={setCreatedFrom}
-        onToChange={setCreatedTo}
-        inSheet={inSheet}
-      />
-
-      {/* When it last changed hands. Either end alone is a question an
-          operator asks: "moved since Monday" is the current run, "moved before
-          Monday" is what has stalled. */}
-      <DateRangeFilter
-        label={t("printer.columns.lastMoved")}
-        from={movedFrom}
-        to={movedTo}
-        onFromChange={setMovedFrom}
-        onToChange={setMovedTo}
-        inSheet={inSheet}
-      />
-    </>
-  )
-
-  /**
-   * The applied-filter row. One entry per *applied* filter — the debounced
-   * search, not the raw input, so a chip never claims a filter the server has
-   * not been asked for yet.
-   */
-  const activeFilters: ActiveFilter[] = [
-    ...statusFilter.map((key) => ({
-      key: "status-" + key,
-      attribute: t("printer.stage"),
-      value: statusOptions.find((option) => option.key === key)?.label ?? key,
-      onRemove: () => setStatusFilter((current) => toggleKey(current, key)),
-    })),
-    ...(organizationId
-      ? [
-          {
-            key: "organization",
-            attribute: t("filters.attributes.organization"),
-            value:
-              organizationOptions.find(
-                (option) => option.value === organizationId
-              )?.label ?? organizationId,
-            onRemove: () => setOrganizationId(""),
-          },
-        ]
-      : []),
-    ...(templateTitle
-      ? [
-          {
-            key: "template",
-            attribute: t("templates.singular"),
-            value: templateTitle,
-            onRemove: () => setTemplateQuery(""),
-          },
-        ]
-      : []),
-    ...(memberPhone
-      ? [
-          {
-            key: "phone",
-            attribute: t("filters.attributes.phone"),
-            value: memberPhone,
-            onRemove: () => setPhoneQuery(""),
-          },
-        ]
-      : []),
-    // One chip per window, not per end: the pair is a single filter, so it
-    // clears as one.
-    ...(createdFrom || createdTo
-      ? [
-          {
-            key: "created",
-            attribute: t("filters.attributes.created"),
-            value: describeRange(t, createdFrom, createdTo),
-            onRemove: () => {
-              setCreatedFrom("")
-              setCreatedTo("")
-            },
-          },
-        ]
-      : []),
-    ...(movedFrom || movedTo
-      ? [
-          {
-            key: "moved",
-            attribute: t("printer.columns.lastMoved"),
-            value: describeRange(t, movedFrom, movedTo),
-            onRemove: () => {
-              setMovedFrom("")
-              setMovedTo("")
-            },
-          },
-        ]
-      : []),
-    ...(search
-      ? [
-          {
-            key: "search",
-            attribute: t("filters.attributes.search"),
-            value: search,
-            onRemove: () => setQuery(""),
-          },
-        ]
-      : []),
+  const filters: FilterDefinition[] = [
+    {
+      key: "stage",
+      label: t("printer.stage"),
+      icon: Printer,
+      value: describeFacet(t, statusOptions, statusFilter),
+      editor: (
+        <FacetEditor
+          options={statusOptions}
+          selected={statusFilter}
+          onToggle={(key) =>
+            setStatusFilter((current) => toggleKey(current, key))
+          }
+        />
+      ),
+      onClear: () => setStatusFilter([]),
+    },
+    {
+      // Singular — see the note at the top of this file.
+      key: "organization",
+      label: t("filters.attributes.organization"),
+      icon: Building2,
+      value: organizationId
+        ? (organizationOptions.find((option) => option.value === organizationId)
+            ?.label ?? organizationId)
+        : undefined,
+      editor: (
+        <ChoiceEditor
+          options={organizationOptions}
+          value={organizationId}
+          onChange={setOrganizationId}
+          emptyLabel={t("members.noOrganizations")}
+          loading={organizationsQuery.isPending}
+        />
+      ),
+      onClear: () => setOrganizationId(""),
+    },
+    {
+      // The batch a printer operator actually works in: one template is one
+      // load of stock, so this is how a run gets grouped. Free text because
+      // that is what the endpoint takes — `template_title`, not an id.
+      key: "template",
+      label: t("templates.singular"),
+      icon: LayoutTemplate,
+      value: templateQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          value={templateQuery}
+          onChange={setTemplateQuery}
+          label={t("printer.templateFilterLabel")}
+        />
+      ),
+      onClear: () => setTemplateQuery(""),
+    },
+    {
+      // Punctuation-tolerant, because the stored number is bare digits.
+      key: "phone",
+      label: t("filters.attributes.phone"),
+      icon: Phone,
+      value: phoneQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          type="tel"
+          inputMode="tel"
+          value={phoneQuery}
+          onChange={setPhoneQuery}
+          placeholder={t("members.phonePlaceholder")}
+          label={t("members.phoneFilterLabel")}
+        />
+      ),
+      onClear: () => setPhoneQuery(""),
+    },
+    // When the card was issued. Useful on its own — "everything from the
+    // intake day that is still sitting here".
+    {
+      key: "created",
+      label: t("filters.attributes.created"),
+      icon: CalendarDays,
+      value: describeRange(t, createdFrom, createdTo) || undefined,
+      editor: (
+        <DateRangeEditor
+          from={createdFrom}
+          to={createdTo}
+          onFromChange={setCreatedFrom}
+          onToChange={setCreatedTo}
+        />
+      ),
+      onClear: () => {
+        setCreatedFrom("")
+        setCreatedTo("")
+      },
+    },
+    // When it last changed hands. Either end alone is a question an operator
+    // asks: "moved since Monday" is the current run, "moved before Monday" is
+    // what has stalled.
+    {
+      key: "moved",
+      label: t("printer.columns.lastMoved"),
+      icon: History,
+      value: describeRange(t, movedFrom, movedTo) || undefined,
+      editor: (
+        <DateRangeEditor
+          from={movedFrom}
+          to={movedTo}
+          onFromChange={setMovedFrom}
+          onToChange={setMovedTo}
+        />
+      ),
+      onClear: () => {
+        setMovedFrom("")
+        setMovedTo("")
+      },
+    },
   ]
 
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar — left group is the view switcher, right group the controls
-          (§6.1). Below `lg` that single row becomes two: the switcher and one
-          Filters button, then search across the full width, per §18.3. */}
+          (§6.1). Below `lg` that single row becomes two: the switcher and the
+          Filter button, then search across the full width, per §18.3. */}
       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
         <div className="flex items-center justify-between gap-2">
           {/* View switcher — active tab is a surface chip (§6.5) */}
@@ -615,16 +561,10 @@ export function PrinterClient() {
               )
             })}
           </div>
-
-          {/* The collapsed toolbar. Holds the same control component the
-              desktop cluster does — passed in, not duplicated. */}
-          <FilterSheet
-            className="lg:hidden"
-            count={sheetFilterCount}
-            onClear={clearSheetFilters}
-          >
-            {collapsibleFilters(true)}
-          </FilterSheet>
+          {/* Below `lg` the Filter button sits beside the switcher; at
+              `lg` it moves onto the search row. One button either way —
+              the popover is the same at every width, so no sheet. */}
+          <FilterMenu filters={filters} className="lg:hidden" />
         </div>
 
         {/* Search stays on the bar at every width — it is the control people
@@ -639,8 +579,8 @@ export function PrinterClient() {
             className="w-full lg:w-56"
           />
 
-          <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {collapsibleFilters(false)}
+          <div className="hidden items-center gap-2 lg:flex">
+            <FilterMenu filters={filters} />
 
             {/* View — column visibility + reordering (table only) */}
             {effectiveView === "table" && <ViewMenu table={table} />}
@@ -648,7 +588,7 @@ export function PrinterClient() {
         </div>
       </div>
 
-      <FilterChips filters={activeFilters} onClear={clearFilters} />
+      <AppliedFilters filters={filters} onClear={clearFilters} />
 
       {/* A failure only takes over the screen when there is nothing to show.
           Once rows are on screen — paging away from a page that loaded — an

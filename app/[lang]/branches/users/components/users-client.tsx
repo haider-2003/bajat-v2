@@ -7,15 +7,23 @@ import {
   type ColumnVisibilityState,
   type SortingState,
 } from "@tanstack/react-table"
-import { AlertCircle, LayoutGrid, Phone, Rows3, Search } from "lucide-react"
+import {
+  AlertCircle,
+  CalendarDays,
+  LayoutGrid,
+  Phone,
+  Rows3,
+  Search,
+} from "lucide-react"
 
 import {
-  DateRangeFilter,
+  AppliedFilters,
+  DateRangeEditor,
   describeRange,
-  FilterChips,
-  FilterSheet,
+  type FilterDefinition,
+  FilterMenu,
+  TextEditor,
   TextFilter,
-  type ActiveFilter,
 } from "@/components/filters"
 import { LoadFailed, LoadingRows } from "@/components/table/load-states"
 import {
@@ -231,78 +239,59 @@ export function BranchUsersClient() {
     />
   )
 
-  const clearSheetFilters = () => {
+  const clearFilters = () => {
+    setQuery("")
     setPhoneQuery("")
     setCreatedFrom("")
     setCreatedTo("")
   }
-  const sheetFilterCount =
-    (phoneQuery.trim() ? 1 : 0) + (createdFrom || createdTo ? 1 : 0)
 
-  const clearFilters = () => {
-    clearSheetFilters()
-    setQuery("")
-  }
-
+  /** Whether the server was asked for anything narrower than "everything". */
   const filtered = filter.length > 0
 
-  const collapsibleFilters = (inSheet: boolean) => (
-    <>
-      <TextFilter
-        icon={Phone}
-        type="tel"
-        inputMode="tel"
-        value={phoneQuery}
-        onChange={setPhoneQuery}
-        placeholder={t("members.phonePlaceholder")}
-        label={t("members.phoneFilterLabel")}
-        className={inSheet ? "w-full" : "w-44"}
-      />
-      <DateRangeFilter
-        label={t("filters.attributes.created")}
-        from={createdFrom}
-        to={createdTo}
-        onFromChange={setCreatedFrom}
-        onToChange={setCreatedTo}
-        inSheet={inSheet}
-      />
-    </>
-  )
-
-  const activeFilters: ActiveFilter[] = [
-    ...(createdFrom || createdTo
-      ? [
-          {
-            key: "created",
-            attribute: t("filters.attributes.created"),
-            value: describeRange(t, createdFrom, createdTo),
-            onRemove: () => {
-              setCreatedFrom("")
-              setCreatedTo("")
-            },
-          },
-        ]
-      : []),
-    ...(search
-      ? [
-          {
-            key: "search",
-            attribute: t("filters.attributes.search"),
-            value: search,
-            onRemove: () => setQuery(""),
-          },
-        ]
-      : []),
-    ...(phone
-      ? [
-          {
-            key: "phone",
-            attribute: t("filters.attributes.phone"),
-            value: phone,
-            onRemove: () => setPhoneQuery(""),
-          },
-        ]
-      : []),
+  /**
+   * Every filter this screen offers, described once: the Filter menu lists
+   * them, the chip row shows the set ones, and both open the same editor
+   * (components/filters/filter-builder.tsx). Chip text is the *typed* value —
+   * the chip is the editor's own label, so it moves with the keystroke.
+   */
+  const filters: FilterDefinition[] = [
+    {
+      // Punctuation-tolerant, because the stored number is bare digits.
+      key: "phone",
+      label: t("filters.attributes.phone"),
+      icon: Phone,
+      value: phoneQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          type="tel"
+          inputMode="tel"
+          value={phoneQuery}
+          onChange={setPhoneQuery}
+          placeholder={t("members.phonePlaceholder")}
+          label={t("members.phoneFilterLabel")}
+        />
+      ),
+      onClear: () => setPhoneQuery(""),
+    },
+    {
+      key: "created",
+      label: t("filters.attributes.created"),
+      icon: CalendarDays,
+      value: describeRange(t, createdFrom, createdTo) || undefined,
+      editor: (
+        <DateRangeEditor
+          from={createdFrom}
+          to={createdTo}
+          onFromChange={setCreatedFrom}
+          onToChange={setCreatedTo}
+        />
+      ),
+      onClear: () => {
+        setCreatedFrom("")
+        setCreatedTo("")
+      },
+    },
   ]
 
   const emptyTitle = filtered
@@ -348,14 +337,10 @@ export function BranchUsersClient() {
               )
             })}
           </div>
-
-          <FilterSheet
-            className="lg:hidden"
-            count={sheetFilterCount}
-            onClear={clearSheetFilters}
-          >
-            {collapsibleFilters(true)}
-          </FilterSheet>
+          {/* Below `lg` the Filter button sits beside the switcher; at
+              `lg` it moves onto the search row. One button either way —
+              the popover is the same at every width, so no sheet. */}
+          <FilterMenu filters={filters} className="lg:hidden" />
         </div>
 
         <div className="flex w-full flex-wrap items-center gap-2 lg:ms-auto lg:w-auto">
@@ -368,14 +353,14 @@ export function BranchUsersClient() {
             className="w-full lg:w-56"
           />
 
-          <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {collapsibleFilters(false)}
+          <div className="hidden items-center gap-2 lg:flex">
+            <FilterMenu filters={filters} />
             {effectiveView === "table" && <ViewMenu table={table} />}
           </div>
         </div>
       </div>
 
-      <FilterChips filters={activeFilters} onClear={clearFilters} />
+      <AppliedFilters filters={filters} onClear={clearFilters} />
 
       {usersQuery.isError && hasRows && (
         <div

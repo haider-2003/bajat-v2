@@ -10,6 +10,7 @@ import {
 import {
   AlertCircle,
   Building2,
+  CalendarDays,
   FileStack,
   LayoutGrid,
   LayoutTemplate,
@@ -19,14 +20,14 @@ import {
 } from "lucide-react"
 
 import {
-  DateRangeFilter,
+  AppliedFilters,
+  ChoiceEditor,
+  DateRangeEditor,
   describeRange,
-  FilterChips,
-  FilterSheet,
-  SelectFilter,
-  SHEET_CONTROL,
+  type FilterDefinition,
+  FilterMenu,
+  TextEditor,
   TextFilter,
-  type ActiveFilter,
 } from "@/components/filters"
 import { EmptyState } from "@/components/table/empty-state"
 import { LoadFailed, LoadingRows } from "@/components/table/load-states"
@@ -255,104 +256,75 @@ export function ExportsClient() {
     />
   )
 
-  const clearSheetFilters = () => {
+  const clearFilters = () => {
+    setQuery("")
     setOrganizationId("")
     setTemplateQuery("")
     setCreatedFrom("")
     setCreatedTo("")
   }
 
-  const sheetFilterCount =
-    (organizationId ? 1 : 0) +
-    (templateQuery.trim() ? 1 : 0) +
-    (createdFrom || createdTo ? 1 : 0)
+  /** Whether the server was asked for anything narrower than "everything". */
+  const filtered = filter.length > 0
 
-  const clearFilters = () => {
-    clearSheetFilters()
-    setQuery("")
-  }
-
-  const collapsibleFilters = (inSheet: boolean) => (
-    <>
-      <SelectFilter
-        label={t("filters.attributes.organization")}
-        icon={Building2}
-        options={organizationOptions}
-        value={organizationId}
-        onChange={setOrganizationId}
-        allLabel={t("printer.allOrganizations")}
-        emptyLabel={t("members.noOrganizations")}
-        loading={organizationsQuery.isPending}
-        className={inSheet ? SHEET_CONTROL : undefined}
-      />
-
-      <TextFilter
-        icon={LayoutTemplate}
-        value={templateQuery}
-        onChange={setTemplateQuery}
-        placeholder={t("templates.singular")}
-        label={t("printer.templateFilterLabel")}
-        className={inSheet ? "w-full" : "w-40"}
-      />
-
-      <DateRangeFilter
-        label={t("exports.columns.created")}
-        from={createdFrom}
-        to={createdTo}
-        onFromChange={setCreatedFrom}
-        onToChange={setCreatedTo}
-        inSheet={inSheet}
-      />
-    </>
-  )
-
-  const activeFilters: ActiveFilter[] = [
-    ...(organizationId
-      ? [
-          {
-            key: "organization",
-            attribute: t("filters.attributes.organization"),
-            value:
-              organizationOptions.find(
-                (option) => option.value === organizationId
-              )?.label ?? organizationId,
-            onRemove: () => setOrganizationId(""),
-          },
-        ]
-      : []),
-    ...(templateTitle
-      ? [
-          {
-            key: "template",
-            attribute: t("templates.singular"),
-            value: templateTitle,
-            onRemove: () => setTemplateQuery(""),
-          },
-        ]
-      : []),
-    ...(createdFrom || createdTo
-      ? [
-          {
-            key: "created",
-            attribute: t("exports.columns.created"),
-            value: describeRange(t, createdFrom, createdTo),
-            onRemove: () => {
-              setCreatedFrom("")
-              setCreatedTo("")
-            },
-          },
-        ]
-      : []),
-    ...(search
-      ? [
-          {
-            key: "search",
-            attribute: t("filters.attributes.search"),
-            value: search,
-            onRemove: () => setQuery(""),
-          },
-        ]
-      : []),
+  /**
+   * Every filter this screen offers, described once: the Filter menu lists
+   * them, the chip row shows the set ones, and both open the same editor
+   * (components/filters/filter-builder.tsx). Chip text is the *typed* value —
+   * the chip is the editor's own label, so it moves with the keystroke.
+   */
+  const filters: FilterDefinition[] = [
+    {
+      key: "organization",
+      label: t("filters.attributes.organization"),
+      icon: Building2,
+      value: organizationId
+        ? (organizationOptions.find((option) => option.value === organizationId)
+            ?.label ?? organizationId)
+        : undefined,
+      editor: (
+        <ChoiceEditor
+          options={organizationOptions}
+          value={organizationId}
+          onChange={setOrganizationId}
+          emptyLabel={t("members.noOrganizations")}
+          loading={organizationsQuery.isPending}
+        />
+      ),
+      onClear: () => setOrganizationId(""),
+    },
+    {
+      key: "template",
+      label: t("templates.singular"),
+      icon: LayoutTemplate,
+      value: templateQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          value={templateQuery}
+          onChange={setTemplateQuery}
+          label={t("printer.templateFilterLabel")}
+        />
+      ),
+      onClear: () => setTemplateQuery(""),
+    },
+    {
+      key: "created",
+      label: t("exports.columns.created"),
+      icon: CalendarDays,
+      value: describeRange(t, createdFrom, createdTo) || undefined,
+      editor: (
+        <DateRangeEditor
+          from={createdFrom}
+          to={createdTo}
+          onFromChange={setCreatedFrom}
+          onToChange={setCreatedTo}
+        />
+      ),
+      onClear: () => {
+        setCreatedFrom("")
+        setCreatedTo("")
+      },
+    },
   ]
 
   return (
@@ -393,14 +365,10 @@ export function ExportsClient() {
               )
             })}
           </div>
-
-          <FilterSheet
-            className="lg:hidden"
-            count={sheetFilterCount}
-            onClear={clearSheetFilters}
-          >
-            {collapsibleFilters(true)}
-          </FilterSheet>
+          {/* Below `lg` the Filter button sits beside the switcher; at
+              `lg` it moves onto the search row. One button either way —
+              the popover is the same at every width, so no sheet. */}
+          <FilterMenu filters={filters} className="lg:hidden" />
         </div>
 
         <div className="flex w-full flex-wrap items-center gap-2 lg:ms-auto lg:w-auto">
@@ -413,8 +381,8 @@ export function ExportsClient() {
             className="w-full lg:w-56"
           />
 
-          <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {collapsibleFilters(false)}
+          <div className="hidden items-center gap-2 lg:flex">
+            <FilterMenu filters={filters} />
 
             {/* Nothing polls, so a job that finishes while this is open is
                 one click away rather than one focus change away. */}
@@ -442,7 +410,7 @@ export function ExportsClient() {
         </div>
       </div>
 
-      <FilterChips filters={activeFilters} onClear={clearFilters} />
+      <AppliedFilters filters={filters} onClear={clearFilters} />
 
       {exportsQuery.isError && hasRows && (
         <div
@@ -471,7 +439,7 @@ export function ExportsClient() {
           onRetry={() => exportsQuery.refetch()}
           retrying={exportsQuery.isFetching}
         />
-      ) : !hasRows && activeFilters.length === 0 ? (
+      ) : !hasRows && !filtered ? (
         // "Nothing here yet" points at where exports come from, which is
         // not a button on this screen.
         <div className="flex min-h-[340px] flex-col items-center justify-center rounded-xl border border-border bg-surface px-6 py-16">

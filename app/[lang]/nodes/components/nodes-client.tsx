@@ -10,6 +10,7 @@ import {
 import {
   AlertCircle,
   Building2,
+  CalendarDays,
   LayoutGrid,
   Palette,
   Rows3,
@@ -17,13 +18,14 @@ import {
 } from "lucide-react"
 
 import {
-  DateRangeFilter,
+  AppliedFilters,
+  ChoiceEditor,
+  DateRangeEditor,
   describeRange,
-  FilterChips,
-  FilterSheet,
-  SelectFilter,
+  type FilterDefinition,
+  FilterMenu,
+  TextEditor,
   TextFilter,
-  type ActiveFilter,
 } from "@/components/filters"
 import { EditNodeDialog } from "@/components/nodes/node-dialog"
 import { NodeSwatch } from "@/components/nodes/node-swatch"
@@ -345,125 +347,82 @@ export function NodesClient() {
    * search, which stays on the toolbar at every width because it is the one
    * people reach for first (§6.7).
    */
-  const clearSheetFilters = () => {
+  const clearFilters = () => {
+    setQuery("")
     setColorQuery("")
     setOrganization("")
     setCreatedFrom("")
     setCreatedTo("")
   }
 
-  /** The badge on the collapsed trigger — the typed value, not the debounced. */
-  const sheetFilterCount =
-    (colorQuery.trim() ? 1 : 0) +
-    (organization ? 1 : 0) +
-    // The window counts once, however many of its two ends are set.
-    (createdFrom || createdTo ? 1 : 0)
-
-  const clearFilters = () => {
-    clearSheetFilters()
-    setQuery("")
-  }
-
   /** Whether the server was asked for anything narrower than "everything". */
   const filtered = filter.length > 0
 
   /**
-   * The controls that collapse into the sheet below `lg`.
-   *
-   * One definition rendered into two layouts rather than two copies: the only
-   * difference between them is how wide each trigger is.
+   * Every filter this screen offers, described once: the Filter menu lists
+   * them, the chip row shows the set ones, and both open the same editor
+   * (components/filters/filter-builder.tsx). Chip text is the *typed* value —
+   * the chip is the editor's own label, so it moves with the keystroke.
    */
-  const collapsibleFilters = (inSheet: boolean) => (
-    <>
-      {/* Its own field rather than part of search, because it is looked up
-          exactly: the question is "is #2F9E44 already taken", and a hex
-          matched loosely against names would answer something else. */}
-      <TextFilter
-        icon={Palette}
-        value={colorQuery}
-        onChange={setColorQuery}
-        placeholder="#2F9E44"
-        label={t("nodes.columns.color")}
-        className={inSheet ? "w-full" : "w-36"}
-      />
-
-      {isAdmin && (
-        <SelectFilter
-          icon={Building2}
-          label={t("filters.attributes.organization")}
-          options={organizationOptions}
-          value={organization}
-          onChange={setOrganization}
-          loading={organizationsQuery.isPending}
-          className={inSheet ? "w-full" : undefined}
+  const filters: FilterDefinition[] = [
+    {
+      // Its own field rather than part of search, because it is looked up
+      // exactly: the question is "is #2F9E44 already taken", and a hex
+      // matched loosely against names would answer something else.
+      key: "color",
+      label: t("nodes.columns.color"),
+      icon: Palette,
+      value: colorQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          value={colorQuery}
+          onChange={setColorQuery}
+          placeholder="#2F9E44"
+          label={t("nodes.columns.color")}
         />
-      )}
-
-      {/* Either end alone is a question somebody asks of this list: "added
-          since Monday" is the recent steps, "added before January" is what has
-          been in the workflow long enough to be worth reviewing. */}
-      <DateRangeFilter
-        label={t("filters.attributes.created")}
-        from={createdFrom}
-        to={createdTo}
-        onFromChange={setCreatedFrom}
-        onToChange={setCreatedTo}
-        inSheet={inSheet}
-      />
-    </>
-  )
-
-  /**
-   * The applied-filter row. One entry per *applied* filter — the debounced
-   * values, not the raw inputs, so a chip never claims a filter the server has
-   * not been asked for yet.
-   */
-  const activeFilters: ActiveFilter[] = [
-    ...(color
-      ? [
-          {
-            key: "color",
-            attribute: t("filters.attributes.color"),
-            value: color.toUpperCase(),
-            onRemove: () => setColorQuery(""),
-          },
-        ]
-      : []),
-    ...(organization
+      ),
+      onClear: () => setColorQuery(""),
+    },
+    ...(isAdmin
       ? [
           {
             key: "organization",
-            attribute: t("filters.attributes.organization"),
-            value: organization,
-            onRemove: () => setOrganization(""),
+            label: t("filters.attributes.organization"),
+            icon: Building2,
+            value: organization || undefined,
+            editor: (
+              <ChoiceEditor
+                options={organizationOptions}
+                value={organization}
+                onChange={setOrganization}
+                loading={organizationsQuery.isPending}
+              />
+            ),
+            onClear: () => setOrganization(""),
           },
         ]
       : []),
-    // One chip per window, not per end: the pair is a single filter, so it
-    // clears as one.
-    ...(createdFrom || createdTo
-      ? [
-          {
-            key: "created",
-            attribute: t("filters.attributes.created"),
-            value: describeRange(t, createdFrom, createdTo),
-            onRemove: () => {
-              setCreatedFrom("")
-              setCreatedTo("")
-            },
-          },
-        ]
-      : []),
-    ...(search
-      ? [
-          {
-            key: "search",
-            attribute: t("filters.attributes.search"),
-            value: search,
-            onRemove: () => setQuery(""),
-          },
-        ]
-      : []),
+    // Either end alone is a question somebody asks of this list: "added
+    // since Monday" is the recent steps, "added before January" is what has
+    // been in the workflow long enough to be worth reviewing.
+    {
+      key: "created",
+      label: t("filters.attributes.created"),
+      icon: CalendarDays,
+      value: describeRange(t, createdFrom, createdTo) || undefined,
+      editor: (
+        <DateRangeEditor
+          from={createdFrom}
+          to={createdTo}
+          onFromChange={setCreatedFrom}
+          onToChange={setCreatedTo}
+        />
+      ),
+      onClear: () => {
+        setCreatedFrom("")
+        setCreatedTo("")
+      },
+    },
   ]
 
   /**
@@ -477,8 +436,8 @@ export function NodesClient() {
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar — left group is the view switcher, right group the controls
-          (§6.1). Below `lg` that single row becomes two: the switcher and one
-          Filters button, then search across the full width, per §18.3. */}
+          (§6.1). Below `lg` that single row becomes two: the switcher and the
+          Filter button, then search across the full width, per §18.3. */}
       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
         <div className="flex items-center justify-between gap-2">
           {/* View switcher — active tab is a surface chip (§6.5) */}
@@ -517,16 +476,10 @@ export function NodesClient() {
               )
             })}
           </div>
-
-          {/* The collapsed toolbar. Holds the same control components the
-              desktop cluster does — passed in, not duplicated. */}
-          <FilterSheet
-            className="lg:hidden"
-            count={sheetFilterCount}
-            onClear={clearSheetFilters}
-          >
-            {collapsibleFilters(true)}
-          </FilterSheet>
+          {/* Below `lg` the Filter button sits beside the switcher; at
+              `lg` it moves onto the search row. One button either way —
+              the popover is the same at every width, so no sheet. */}
+          <FilterMenu filters={filters} className="lg:hidden" />
         </div>
 
         {/* Search stays on the bar at every width — it is the control people
@@ -543,8 +496,8 @@ export function NodesClient() {
             className="w-full lg:w-56"
           />
 
-          <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {collapsibleFilters(false)}
+          <div className="hidden items-center gap-2 lg:flex">
+            <FilterMenu filters={filters} />
 
             {/* View — column visibility + reordering (table only) */}
             {effectiveView === "table" && <ViewMenu table={table} />}
@@ -552,7 +505,7 @@ export function NodesClient() {
         </div>
       </div>
 
-      <FilterChips filters={activeFilters} onClear={clearFilters} />
+      <AppliedFilters filters={filters} onClear={clearFilters} />
 
       {/* A failure only takes over the screen when there is nothing to show.
           Once rows are on screen — paging away from a page that loaded — an

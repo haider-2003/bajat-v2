@@ -11,6 +11,7 @@ import {
   AlertCircle,
   Banknote,
   Building2,
+  CalendarDays,
   LayoutGrid,
   LayoutTemplate,
   Phone,
@@ -21,14 +22,15 @@ import {
 } from "lucide-react"
 
 import {
-  DateRangeFilter,
+  AppliedFilters,
+  ChoiceEditor,
+  DateRangeEditor,
   describeRange,
-  FilterChips,
-  FilterSheet,
-  SelectFilter,
-  SHEET_CONTROL,
+  type FilterDefinition,
+  FilterMenu,
+  RangeEditor,
+  TextEditor,
   TextFilter,
-  type ActiveFilter,
 } from "@/components/filters"
 import { DeleteIdentityDialog } from "@/components/id-card/delete-identity-dialog"
 import { EmptyState } from "@/components/table/empty-state"
@@ -294,7 +296,8 @@ export function FlowClient() {
     />
   )
 
-  const clearSheetFilters = () => {
+  const clearFilters = () => {
+    setQuery("")
     setOrganizationId("")
     setNameQuery("")
     setPhoneQuery("")
@@ -305,177 +308,126 @@ export function FlowClient() {
     setCreatedTo("")
   }
 
-  const sheetFilterCount =
-    (organizationId ? 1 : 0) +
-    (nameQuery.trim() ? 1 : 0) +
-    (phoneQuery.trim() ? 1 : 0) +
-    (templateQuery.trim() ? 1 : 0) +
-    (priceMin.trim() || priceMax.trim() ? 1 : 0) +
-    (createdFrom || createdTo ? 1 : 0)
+  /** Whether the server was asked for anything narrower than "everything". */
+  const filtered = filter.length > 0
 
-  const clearFilters = () => {
-    clearSheetFilters()
-    setQuery("")
-  }
-
-  const collapsibleFilters = (inSheet: boolean) => (
-    <>
-      <SelectFilter
-        label={t("filters.attributes.organization")}
-        icon={Building2}
-        options={organizationOptions}
-        value={organizationId}
-        onChange={setOrganizationId}
-        allLabel={t("printer.allOrganizations")}
-        emptyLabel={t("members.noOrganizations")}
-        loading={organizationsQuery.isPending}
-        className={inSheet ? SHEET_CONTROL : undefined}
-      />
-
-      <TextFilter
-        icon={User}
-        value={nameQuery}
-        onChange={setNameQuery}
-        placeholder={t("ids.columns.cardholder")}
-        label={t("ids.nameFilterLabel")}
-        className={inSheet ? "w-full" : "w-40"}
-      />
-
-      <TextFilter
-        icon={Phone}
-        type="tel"
-        inputMode="tel"
-        value={phoneQuery}
-        onChange={setPhoneQuery}
-        placeholder={t("members.phonePlaceholder")}
-        label={t("members.phoneFilterLabel")}
-        className={inSheet ? "w-full" : "w-40"}
-      />
-
-      <TextFilter
-        icon={LayoutTemplate}
-        value={templateQuery}
-        onChange={setTemplateQuery}
-        placeholder={t("templates.singular")}
-        label={t("printer.templateFilterLabel")}
-        className={inSheet ? "w-full" : "w-40"}
-      />
-
-      <div className={cn("flex items-center gap-2", inSheet && "w-full")}>
-        <TextFilter
-          icon={Banknote}
-          inputMode="decimal"
-          value={priceMin}
-          onChange={setPriceMin}
-          placeholder={t("ids.priceFrom")}
-          label={t("ids.priceFrom")}
-          className={inSheet ? "flex-1" : "w-32"}
+  /**
+   * Every filter this screen offers, described once: the Filter menu lists
+   * them, the chip row shows the set ones, and both open the same editor
+   * (components/filters/filter-builder.tsx). Chip text is the *typed* value —
+   * the chip is the editor's own label, so it moves with the keystroke.
+   */
+  const typedPrice = priceRange(priceMin, priceMax)
+  const filters: FilterDefinition[] = [
+    {
+      // Singular — `/identity` reads one `organization_id`.
+      key: "organization",
+      label: t("filters.attributes.organization"),
+      icon: Building2,
+      value: organizationId
+        ? (organizationOptions.find((option) => option.value === organizationId)
+            ?.label ?? organizationId)
+        : undefined,
+      editor: (
+        <ChoiceEditor
+          options={organizationOptions}
+          value={organizationId}
+          onChange={setOrganizationId}
+          emptyLabel={t("members.noOrganizations")}
+          loading={organizationsQuery.isPending}
         />
-        <TextFilter
-          icon={Banknote}
-          inputMode="decimal"
-          value={priceMax}
-          onChange={setPriceMax}
-          placeholder={t("ids.priceTo")}
-          label={t("ids.priceTo")}
-          className={inSheet ? "flex-1" : "w-32"}
+      ),
+      onClear: () => setOrganizationId(""),
+    },
+    {
+      key: "name",
+      label: t("ids.columns.cardholder"),
+      icon: User,
+      value: nameQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          value={nameQuery}
+          onChange={setNameQuery}
+          label={t("ids.nameFilterLabel")}
         />
-      </div>
-
-      <DateRangeFilter
-        label={t("ids.columns.issued")}
-        from={createdFrom}
-        to={createdTo}
-        onFromChange={setCreatedFrom}
-        onToChange={setCreatedTo}
-        inSheet={inSheet}
-      />
-    </>
-  )
-
-  const activeFilters: ActiveFilter[] = [
-    ...(organizationId
-      ? [
-          {
-            key: "organization",
-            attribute: t("filters.attributes.organization"),
-            value:
-              organizationOptions.find(
-                (option) => option.value === organizationId
-              )?.label ?? organizationId,
-            onRemove: () => setOrganizationId(""),
-          },
-        ]
-      : []),
-    ...(memberName
-      ? [
-          {
-            key: "name",
-            attribute: t("ids.columns.cardholder"),
-            value: memberName,
-            onRemove: () => setNameQuery(""),
-          },
-        ]
-      : []),
-    ...(memberPhone
-      ? [
-          {
-            key: "phone",
-            attribute: t("filters.attributes.phone"),
-            value: memberPhone,
-            onRemove: () => setPhoneQuery(""),
-          },
-        ]
-      : []),
-    ...(templateTitle
-      ? [
-          {
-            key: "template",
-            attribute: t("templates.singular"),
-            value: templateTitle,
-            onRemove: () => setTemplateQuery(""),
-          },
-        ]
-      : []),
-    ...(price
-      ? [
-          {
-            key: "price",
-            attribute: t("filters.attributes.amount"),
-            value:
-              price.length === 1
-                ? t("filters.rangeFromOnly", { from: price[0] })
-                : t("filters.rangeBoth", { from: price[0], to: price[1] }),
-            onRemove: () => {
-              setPriceMin("")
-              setPriceMax("")
-            },
-          },
-        ]
-      : []),
-    ...(createdFrom || createdTo
-      ? [
-          {
-            key: "created",
-            attribute: t("ids.columns.issued"),
-            value: describeRange(t, createdFrom, createdTo),
-            onRemove: () => {
-              setCreatedFrom("")
-              setCreatedTo("")
-            },
-          },
-        ]
-      : []),
-    ...(search
-      ? [
-          {
-            key: "search",
-            attribute: t("filters.attributes.search"),
-            value: search,
-            onRemove: () => setQuery(""),
-          },
-        ]
-      : []),
+      ),
+      onClear: () => setNameQuery(""),
+    },
+    {
+      // Punctuation-tolerant, because the stored number is bare digits.
+      key: "phone",
+      label: t("filters.attributes.phone"),
+      icon: Phone,
+      value: phoneQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          type="tel"
+          inputMode="tel"
+          value={phoneQuery}
+          onChange={setPhoneQuery}
+          placeholder={t("members.phonePlaceholder")}
+          label={t("members.phoneFilterLabel")}
+        />
+      ),
+      onClear: () => setPhoneQuery(""),
+    },
+    {
+      // Free text because that is what the endpoint takes — `template_title`,
+      // not an id.
+      key: "template",
+      label: t("templates.singular"),
+      icon: LayoutTemplate,
+      value: templateQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          value={templateQuery}
+          onChange={setTemplateQuery}
+          label={t("printer.templateFilterLabel")}
+        />
+      ),
+      onClear: () => setTemplateQuery(""),
+    },
+    {
+      // `price[]` — a floor and a ceiling.
+      key: "price",
+      label: t("filters.attributes.amount"),
+      icon: Banknote,
+      value: typedPrice
+        ? typedPrice.length === 1
+          ? t("filters.rangeFromOnly", { from: typedPrice[0] })
+          : t("filters.rangeBoth", { from: typedPrice[0], to: typedPrice[1] })
+        : undefined,
+      editor: (
+        <RangeEditor
+          min={priceMin}
+          max={priceMax}
+          onMinChange={setPriceMin}
+          onMaxChange={setPriceMax}
+        />
+      ),
+      onClear: () => {
+        setPriceMin("")
+        setPriceMax("")
+      },
+    },
+    {
+      key: "created",
+      label: t("ids.columns.issued"),
+      icon: CalendarDays,
+      value: describeRange(t, createdFrom, createdTo) || undefined,
+      editor: (
+        <DateRangeEditor
+          from={createdFrom}
+          to={createdTo}
+          onFromChange={setCreatedFrom}
+          onToChange={setCreatedTo}
+        />
+      ),
+      onClear: () => {
+        setCreatedFrom("")
+        setCreatedTo("")
+      },
+    },
   ]
 
   return (
@@ -516,14 +468,10 @@ export function FlowClient() {
               )
             })}
           </div>
-
-          <FilterSheet
-            className="lg:hidden"
-            count={sheetFilterCount}
-            onClear={clearSheetFilters}
-          >
-            {collapsibleFilters(true)}
-          </FilterSheet>
+          {/* Below `lg` the Filter button sits beside the switcher; at
+              `lg` it moves onto the search row. One button either way —
+              the popover is the same at every width, so no sheet. */}
+          <FilterMenu filters={filters} className="lg:hidden" />
         </div>
 
         <div className="flex w-full flex-wrap items-center gap-2 lg:ms-auto lg:w-auto">
@@ -536,14 +484,14 @@ export function FlowClient() {
             className="w-full lg:w-56"
           />
 
-          <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {collapsibleFilters(false)}
+          <div className="hidden items-center gap-2 lg:flex">
+            <FilterMenu filters={filters} />
             {effectiveView === "table" && <ViewMenu table={table} />}
           </div>
         </div>
       </div>
 
-      <FilterChips filters={activeFilters} onClear={clearFilters} />
+      <AppliedFilters filters={filters} onClear={clearFilters} />
 
       {inboxQuery.isError && hasRows && (
         <div
@@ -572,7 +520,7 @@ export function FlowClient() {
           onRetry={() => inboxQuery.refetch()}
           retrying={inboxQuery.isFetching}
         />
-      ) : !hasRows && activeFilters.length === 0 ? (
+      ) : !hasRows && !filtered ? (
         // An empty inbox is a state worth a sentence: either nothing is
         // waiting on this reviewer, or they hold no nodes — and the page
         // cannot tell which, so it says both.

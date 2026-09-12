@@ -21,12 +21,11 @@ import {
 } from "lucide-react"
 
 import {
-  FilterChips,
-  FilterSheet,
-  SelectFilter,
-  SHEET_CONTROL,
+  AppliedFilters,
+  ChoiceEditor,
+  FilterMenu,
   TextFilter,
-  type ActiveFilter,
+  type FilterDefinition,
 } from "@/components/filters"
 import { Permission } from "@/components/permission"
 import { EmptyState } from "@/components/table/empty-state"
@@ -452,7 +451,7 @@ export function TemplatesClient() {
     [organizationsQuery.data]
   )
 
-  /** `{ value, label }` is the shape `SelectFilter` reads a label out of. */
+  /** `{ value, label }` is the shape `ChoiceEditor` reads a label out of. */
   const organizationOptions = React.useMemo(
     () => organizations.map((o) => ({ value: String(o.id), label: o.name })),
     [organizations]
@@ -590,63 +589,47 @@ export function TemplatesClient() {
     />
   )
 
-  const clearSheetFilters = () => setOrganizationId("")
-  const sheetFilterCount = organizationFilterShown && organizationId ? 1 : 0
-
   const clearFilters = () => {
-    clearSheetFilters()
     setQuery("")
+    setOrganizationId("")
   }
 
   /**
-   * The controls that collapse into the sheet below `lg`. One definition
-   * rendered into two layouts rather than two copies — the only difference
-   * between them is how wide the trigger is. Empty off the organization tab
-   * and for non-admins, where there is nothing to collapse.
+   * Every filter this screen offers, described once: the Filter menu lists
+   * them, the chip row shows the set ones, and both open the same editor
+   * (components/filters/filter-builder.tsx).
+   *
+   * Empty off the organization tab and for non-admins — there is exactly one
+   * filter here and it does not apply to the public list. `FilterMenu` and
+   * `AppliedFilters` both render nothing for an empty list, so the toolbar
+   * loses the button rather than offering an empty menu.
    */
-  const collapsibleFilters = (inSheet: boolean) =>
-    organizationFilterShown ? (
-      <SelectFilter
-        label={t("filters.attributes.organization")}
-        icon={Building2}
-        options={organizationOptions}
-        value={organizationId}
-        onChange={setOrganizationId}
-        allLabel={t("printer.allOrganizations")}
-        emptyLabel={t("members.noOrganizations")}
-        loading={organizationsQuery.isPending}
-        className={inSheet ? SHEET_CONTROL : undefined}
-      />
-    ) : null
+  const filters: FilterDefinition[] = organizationFilterShown
+    ? [
+        {
+          key: "organization",
+          label: t("filters.attributes.organization"),
+          icon: Building2,
+          value: organizationId
+            ? (organizationOptions.find((o) => o.value === organizationId)
+                ?.label ?? organizationId)
+            : undefined,
+          editor: (
+            <ChoiceEditor
+              options={organizationOptions}
+              value={organizationId}
+              onChange={setOrganizationId}
+              emptyLabel={t("members.noOrganizations")}
+              loading={organizationsQuery.isPending}
+            />
+          ),
+          onClear: () => setOrganizationId(""),
+        },
+      ]
+    : []
 
-  /**
-   * The applied-filter row. Built from the *debounced* values, not the raw
-   * inputs, so a chip never claims a filter the server has not been asked for.
-   */
-  const activeFilters: ActiveFilter[] = [
-    ...(organizationFilterShown && organizationId
-      ? [
-          {
-            key: "organization",
-            attribute: t("filters.attributes.organization"),
-            value:
-              organizationOptions.find((o) => o.value === organizationId)
-                ?.label ?? organizationId,
-            onRemove: () => setOrganizationId(""),
-          },
-        ]
-      : []),
-    ...(search
-      ? [
-          {
-            key: "search",
-            attribute: t("filters.attributes.search"),
-            value: search,
-            onRemove: () => setQuery(""),
-          },
-        ]
-      : []),
-  ]
+  /** Whether the empty state should blame the filters rather than the data. */
+  const filtered = filters.some((f) => f.value !== undefined) || search !== ""
 
   return (
     <div className="flex flex-col gap-4">
@@ -694,18 +677,10 @@ export function TemplatesClient() {
             })}
           </div>
 
-          {/* The collapsed toolbar. Holds the same control component the
-              desktop cluster does — passed in, not duplicated. Absent when
-              there is nothing to put in it. */}
-          {organizationFilterShown && (
-            <FilterSheet
-              className="lg:hidden"
-              count={sheetFilterCount}
-              onClear={clearSheetFilters}
-            >
-              {collapsibleFilters(true)}
-            </FilterSheet>
-          )}
+          {/* Below `lg` the Filter button sits beside the switcher; at `lg`
+              it moves onto the search row. Absent when there is nothing to
+              filter — `FilterMenu` renders nothing for an empty list. */}
+          <FilterMenu filters={filters} className="lg:hidden" />
         </div>
 
         {/* Search stays on the bar at every width — it is the control people
@@ -722,8 +697,8 @@ export function TemplatesClient() {
             className="w-full lg:w-56"
           />
 
-          <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {collapsibleFilters(false)}
+          <div className="hidden items-center gap-2 lg:flex">
+            <FilterMenu filters={filters} />
 
             {/* View — column visibility + reordering (table only) */}
             {effectiveView === "table" && <ViewMenu table={table} />}
@@ -738,7 +713,7 @@ export function TemplatesClient() {
         </div>
       </div>
 
-      <FilterChips filters={activeFilters} onClear={clearFilters} />
+      <AppliedFilters filters={filters} onClear={clearFilters} />
 
       {/* A failure only takes over the screen when there is nothing to show.
           Once rows are on screen — paging away from a page that loaded — an
@@ -778,7 +753,7 @@ export function TemplatesClient() {
           onRetry={() => templatesQuery.refetch()}
           retrying={templatesQuery.isFetching}
         />
-      ) : !hasRows && activeFilters.length === 0 ? (
+      ) : !hasRows && !filtered ? (
         // "Nothing here yet" and "nothing matched" are different states and
         // want different words. §8.10's empty state assumes a filter to clear;
         // an organization with no templates has nothing to clear and needs the

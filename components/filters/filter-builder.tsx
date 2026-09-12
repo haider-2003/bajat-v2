@@ -99,6 +99,10 @@ const ROW = cn(
 /**
  * The trigger — the toolbar's **Filter** button, or the chip row's ghost
  * **+ Add filter** — and the two-step popover behind it.
+ *
+ * Renders nothing when `filters` is empty, so a screen whose only filter is
+ * conditional (Templates offers one to admins, and only on the organization
+ * tab) can pass a list that goes empty rather than guarding the button.
  */
 export function FilterMenu({
   filters,
@@ -141,6 +145,9 @@ export function FilterMenu({
 
   const close = React.useCallback(() => setOpen(false), [])
   const editorApi = React.useMemo(() => ({ close }), [close])
+
+  // After the hooks, never before them.
+  if (filters.length === 0) return null
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>

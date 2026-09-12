@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
  * A form multi-select — DESIGN.md §10.3 for the trigger, §12.5 for the
  * searchable menu.
  *
- * ### Not `FacetFilter`, and not for the same job
+ * ### Not `FacetEditor`, and not for the same job
  *
  * `components/filters/facet-filter.tsx` is the *toolbar* multi-select: it wears
  * §6.6's compact filter chip, and a facet with nothing ticked means "do not
