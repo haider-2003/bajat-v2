@@ -48,6 +48,7 @@ import { useT } from "@/i18n/context"
 import type { TranslationKey } from "@/i18n/translate"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useListQuery } from "@/hooks/use-list-query"
+import { useStickyState } from "@/hooks/use-sticky-state"
 import { features } from "@/lib/table-features"
 import { cn } from "@/lib/utils"
 import { buildFilter } from "@/utils/api/filters"
@@ -96,6 +97,12 @@ const VIEWS: {
 
 const STORAGE_KEY = "bajat-organization-users-view"
 
+/**
+ * Filters, sort, page and page size, remembered for the tab — so opening a
+ * row and coming back lands on the list you left. See hooks/use-sticky-state.ts.
+ */
+const LIST_KEY = "bajat-organization-users"
+
 export function OrganizationUsersClient() {
   const t = useT()
   const authUser = useAuthStore((state) => state.user)
@@ -113,25 +120,38 @@ export function OrganizationUsersClient() {
     return "table"
   })
   const [isDesktop, setIsDesktop] = React.useState(true)
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useStickyState<SortingState>(
+    `${LIST_KEY}:sorting`,
+    []
+  )
   const [columnVisibility, setColumnVisibility] =
     React.useState<ColumnVisibilityState>(() =>
       isAdmin ? ({} as ColumnVisibilityState) : { organization: false }
     )
 
-  const [query, setQuery] = React.useState("")
+  const [query, setQuery] = useStickyState(`${LIST_KEY}:query`, "")
   const search = useDebounce(query.trim(), SEARCH_DEBOUNCE_MS)
 
-  const [phoneQuery, setPhoneQuery] = React.useState("")
+  const [phoneQuery, setPhoneQuery] = useStickyState(
+    `${LIST_KEY}:phoneQuery`,
+    ""
+  )
   const phone = useDebounce(phoneDigits(phoneQuery), SEARCH_DEBOUNCE_MS)
 
   // Seeded once from the URL — a link off the org screen lands here pre-filtered.
-  const [organizationId, setOrganizationId] = React.useState(
-    () => searchParams.get("organizationId") ?? ""
+  const [organizationId, setOrganizationId] = useStickyState(
+    `${LIST_KEY}:organizationId`,
+    "",
+    // The link off the org screen outranks the remembered filter; `|| undefined`
+    // so an absent parameter falls through to storage rather than clearing it.
+    { seed: searchParams.get("organizationId") || undefined }
   )
 
-  const [createdFrom, setCreatedFrom] = React.useState("")
-  const [createdTo, setCreatedTo] = React.useState("")
+  const [createdFrom, setCreatedFrom] = useStickyState(
+    `${LIST_KEY}:createdFrom`,
+    ""
+  )
+  const [createdTo, setCreatedTo] = useStickyState(`${LIST_KEY}:createdTo`, "")
 
   const [editing, setEditing] = React.useState<OrganizationUser | null>(null)
 
@@ -187,7 +207,10 @@ export function OrganizationUsersClient() {
     pageSize,
     setPage,
     setPageSize,
-  } = useListQuery(filter, { pageSize: DEFAULT_PAGE_SIZE })
+  } = useListQuery(filter, {
+    pageSize: DEFAULT_PAGE_SIZE,
+    storageKey: LIST_KEY,
+  })
 
   const usersQuery = useGetOrganizationUsers(listQuery, {
     placeholderData: keepPreviousData,

@@ -41,6 +41,7 @@ import { useLocale, useT } from "@/i18n/context"
 import type { TranslationKey } from "@/i18n/translate"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useListQuery } from "@/hooks/use-list-query"
+import { useStickyState } from "@/hooks/use-sticky-state"
 import { buildFilter } from "@/utils/api/filters"
 import { readPageInfo } from "@/utils/api/pagination"
 import { toInstant } from "@/utils/date"
@@ -115,6 +116,12 @@ const VIEWS: {
 
 const STORAGE_KEY = "bajat-requests-view"
 
+/**
+ * Filters, sort, page and page size, remembered for the tab — so opening a
+ * row and coming back lands on the list you left. See hooks/use-sticky-state.ts.
+ */
+const LIST_KEY = "bajat-member-requests"
+
 export function RequestsClient() {
   const t = useT()
   const locale = useLocale()
@@ -149,14 +156,20 @@ export function RequestsClient() {
     return "table"
   })
   const [isDesktop, setIsDesktop] = React.useState(true)
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useStickyState<SortingState>(
+    `${LIST_KEY}:sorting`,
+    []
+  )
   const [columnVisibility, setColumnVisibility] = React.useState<ColumnVisibilityState>(
     {}
   )
 
   // Server-driven: every one of these goes out as a query param, so changing
   // any of them refetches rather than re-filtering what is already on screen.
-  const [statusFilter, setStatusFilter] = React.useState<string[]>([])
+  const [statusFilter, setStatusFilter] = useStickyState<string[]>(
+    `${LIST_KEY}:statusFilter`,
+    []
+  )
   /**
    * Organization ids, as strings. Empty means every organization.
    *
@@ -164,18 +177,24 @@ export function RequestsClient() {
    * filters to several at once and a single id under the singular name is a
    * parameter the backend ignores.
    */
-  const [organizationIds, setOrganizationIds] = React.useState<string[]>([])
+  const [organizationIds, setOrganizationIds] = useStickyState<string[]>(
+    `${LIST_KEY}:organizationIds`,
+    []
+  )
   // The created-at day, held as `yyyy-mm-dd` — what the calendar selects, with
   // no timezone attached. It becomes an instant only on the way out.
-  const [createdAt, setCreatedAt] = React.useState("")
+  const [createdAt, setCreatedAt] = useStickyState(`${LIST_KEY}:createdAt`, "")
 
   // Each pair is "what the field shows" and "what the server is asked for" —
   // the second trailing the first by a debounce, so typing doesn't fire a
   // request per keystroke.
-  const [query, setQuery] = React.useState("")
+  const [query, setQuery] = useStickyState(`${LIST_KEY}:query`, "")
   const search = useDebounce(query.trim(), SEARCH_DEBOUNCE_MS)
 
-  const [phoneQuery, setPhoneQuery] = React.useState("")
+  const [phoneQuery, setPhoneQuery] = useStickyState(
+    `${LIST_KEY}:phoneQuery`,
+    ""
+  )
   const phone = useDebounce(phoneDigits(phoneQuery), SEARCH_DEBOUNCE_MS)
 
   // Track the lg breakpoint so the table can fall back to cards (§8.12).
@@ -234,7 +253,10 @@ export function RequestsClient() {
   // the filter set or the page size changes, so no control here has to
   // remember to reset it.
   const { query: listQuery, page, pageSize, setPage, setPageSize } =
-    useListQuery(filter, { pageSize: DEFAULT_PAGE_SIZE })
+    useListQuery(filter, {
+    pageSize: DEFAULT_PAGE_SIZE,
+    storageKey: LIST_KEY,
+  })
 
   // `useGetList` hands back the whole Axios response, so rows sit two `data`
   // levels down. Falls back to an empty list while loading or after an error.

@@ -43,6 +43,7 @@ import { useT } from "@/i18n/context"
 import type { TranslationKey } from "@/i18n/translate"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useListQuery } from "@/hooks/use-list-query"
+import { useStickyState } from "@/hooks/use-sticky-state"
 import { features } from "@/lib/table-features"
 import { cn } from "@/lib/utils"
 import { buildFilter } from "@/utils/api/filters"
@@ -113,6 +114,12 @@ const VIEWS: {
 
 const STORAGE_KEY = "bajat-api-keys-view"
 
+/**
+ * Filters, sort, page and page size, remembered for the tab — so opening a
+ * row and coming back lands on the list you left. See hooks/use-sticky-state.ts.
+ */
+const LIST_KEY = "bajat-api-keys"
+
 export function ApiKeysClient() {
   const t = useT()
   const user = useAuthStore((state) => state.user)
@@ -132,7 +139,10 @@ export function ApiKeysClient() {
     return "table"
   })
   const [isDesktop, setIsDesktop] = React.useState(true)
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useStickyState<SortingState>(
+    `${LIST_KEY}:sorting`,
+    []
+  )
   const [columnVisibility, setColumnVisibility] =
     React.useState<ColumnVisibilityState>(() =>
       // Hidden rather than dropped from the column list, so it stays in the
@@ -143,19 +153,25 @@ export function ApiKeysClient() {
 
   // Each pair is "what the field shows" and "what the server is asked for" —
   // the second trailing the first by a debounce.
-  const [query, setQuery] = React.useState("")
+  const [query, setQuery] = useStickyState(`${LIST_KEY}:query`, "")
   const search = useDebounce(query.trim(), SEARCH_DEBOUNCE_MS)
 
-  const [userQuery, setUserQuery] = React.useState("")
+  const [userQuery, setUserQuery] = useStickyState(`${LIST_KEY}:userQuery`, "")
   const createdBy = useDebounce(userQuery.trim(), SEARCH_DEBOUNCE_MS)
 
   /** The organization's *name* — `/access_key` filters by name, not by id. */
-  const [organization, setOrganization] = React.useState("")
+  const [organization, setOrganization] = useStickyState(
+    `${LIST_KEY}:organization`,
+    ""
+  )
 
   // The window the key was created in, held as two `yyyy-mm-dd` days — what
   // the calendar selects, with no timezone attached.
-  const [createdFrom, setCreatedFrom] = React.useState("")
-  const [createdTo, setCreatedTo] = React.useState("")
+  const [createdFrom, setCreatedFrom] = useStickyState(
+    `${LIST_KEY}:createdFrom`,
+    ""
+  )
+  const [createdTo, setCreatedTo] = useStickyState(`${LIST_KEY}:createdTo`, "")
 
   /** The row queued for each dialog, held as a row rather than an id. */
   const [renaming, setRenaming] = React.useState<ApiKey | null>(null)
@@ -218,7 +234,10 @@ export function ApiKeysClient() {
     pageSize,
     setPage,
     setPageSize,
-  } = useListQuery(filter, { pageSize: DEFAULT_PAGE_SIZE })
+  } = useListQuery(filter, {
+    pageSize: DEFAULT_PAGE_SIZE,
+    storageKey: LIST_KEY,
+  })
 
   // `useGetList` hands back the whole Axios response, so rows sit two `data`
   // levels down. `keepPreviousData` is what makes paging work at all.

@@ -46,6 +46,7 @@ import { useT } from "@/i18n/context"
 import type { TranslationKey } from "@/i18n/translate"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useListQuery } from "@/hooks/use-list-query"
+import { useStickyState } from "@/hooks/use-sticky-state"
 import { features } from "@/lib/table-features"
 import { cn } from "@/lib/utils"
 import type { BaseQuery } from "@/types/api"
@@ -380,6 +381,12 @@ export function TemplatesClient() {
   const isAdmin = useAuthStore((s) => s.user?.type === "admin")
   const onOrganizationTab = scope === "organization"
 
+  /**
+   * Filters, sort, page and page size, remembered for the tab — so opening a
+   * row and coming back lands on the list you left. See hooks/use-sticky-state.ts.
+   */
+  const listKey = `bajat-templates-${scope}`
+
   // Lazy initialiser rather than an effect: the saved view is read once, and
   // reading it during the first render avoids a flash of the default layout.
   // Guarded for SSR, where `localStorage` does not exist.
@@ -394,7 +401,10 @@ export function TemplatesClient() {
     return "gallery"
   })
   const [isDesktop, setIsDesktop] = React.useState(true)
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useStickyState<SortingState>(
+    `${listKey}:sorting`,
+    []
+  )
   const [columnVisibility, setColumnVisibility] =
     React.useState<ColumnVisibilityState>({})
 
@@ -406,12 +416,15 @@ export function TemplatesClient() {
    * organization, looked at the catalogue and came back is still looking at
    * that organization.
    */
-  const [organizationId, setOrganizationId] = React.useState("")
+  const [organizationId, setOrganizationId] = useStickyState(
+    `${listKey}:organizationId`,
+    ""
+  )
   const organizationFilterShown = isAdmin && onOrganizationTab
 
   // "What the field shows" and "what the server is asked for" — the second
   // trailing the first by a debounce.
-  const [query, setQuery] = React.useState("")
+  const [query, setQuery] = useStickyState(`${listKey}:query`, "")
   const search = useDebounce(query.trim(), SEARCH_DEBOUNCE_MS)
 
   /** Which template each dialog is about. `null` closes it. */
@@ -487,7 +500,10 @@ export function TemplatesClient() {
     pageSize,
     setPage,
     setPageSize,
-  } = useListQuery(filter, { pageSize: DEFAULT_PAGE_SIZE })
+  } = useListQuery(filter, {
+    pageSize: DEFAULT_PAGE_SIZE,
+    storageKey: listKey,
+  })
 
   // `useGetList` hands back the whole Axios response, so rows sit two `data`
   // levels down. `keepPreviousData` is what makes paging work at all: every

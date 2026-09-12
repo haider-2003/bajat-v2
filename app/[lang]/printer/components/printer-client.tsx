@@ -49,6 +49,7 @@ import { useT } from "@/i18n/context"
 import type { TranslationKey } from "@/i18n/translate"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useListQuery } from "@/hooks/use-list-query"
+import { useStickyState } from "@/hooks/use-sticky-state"
 import { features } from "@/lib/table-features"
 import { cn } from "@/lib/utils"
 import { buildFilter } from "@/utils/api/filters"
@@ -156,6 +157,12 @@ const ORGANIZATIONS_QUERY = { page: 1, pageSize: 100 } as const
 
 const STORAGE_KEY = "bajat-printer-view"
 
+/**
+ * Filters, sort, page and page size, remembered for the tab — so opening a
+ * row and coming back lands on the list you left. See hooks/use-sticky-state.ts.
+ */
+const LIST_KEY = "bajat-printer"
+
 export function PrinterClient() {
   const t = useT()
 
@@ -183,25 +190,40 @@ export function PrinterClient() {
     return "table"
   })
   const [isDesktop, setIsDesktop] = React.useState(true)
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useStickyState<SortingState>(
+    `${LIST_KEY}:sorting`,
+    []
+  )
   const [columnVisibility, setColumnVisibility] =
     React.useState<ColumnVisibilityState>({})
 
   // Server-driven: this goes out as a query param, so ticking a status
   // refetches rather than re-filtering what is already on screen.
-  const [statusFilter, setStatusFilter] = React.useState<string[]>([])
+  const [statusFilter, setStatusFilter] = useStickyState<string[]>(
+    `${LIST_KEY}:statusFilter`,
+    []
+  )
   /** One id, or `""` for every organization — the endpoint takes a single one. */
-  const [organizationId, setOrganizationId] = React.useState("")
+  const [organizationId, setOrganizationId] = useStickyState(
+    `${LIST_KEY}:organizationId`,
+    ""
+  )
 
   // Each pair is "what the field shows" and "what the server is asked for" —
   // the second trailing the first by a debounce.
-  const [query, setQuery] = React.useState("")
+  const [query, setQuery] = useStickyState(`${LIST_KEY}:query`, "")
   const search = useDebounce(query.trim(), SEARCH_DEBOUNCE_MS)
 
-  const [phoneQuery, setPhoneQuery] = React.useState("")
+  const [phoneQuery, setPhoneQuery] = useStickyState(
+    `${LIST_KEY}:phoneQuery`,
+    ""
+  )
   const memberPhone = useDebounce(phoneDigits(phoneQuery), SEARCH_DEBOUNCE_MS)
 
-  const [templateQuery, setTemplateQuery] = React.useState("")
+  const [templateQuery, setTemplateQuery] = useStickyState(
+    `${LIST_KEY}:templateQuery`,
+    ""
+  )
   const templateTitle = useDebounce(templateQuery.trim(), SEARCH_DEBOUNCE_MS)
 
   /**
@@ -214,11 +236,14 @@ export function PrinterClient() {
    * combination is the one an operator reaches for on a stalled job: issued
    * last month, untouched since.
    */
-  const [createdFrom, setCreatedFrom] = React.useState("")
-  const [createdTo, setCreatedTo] = React.useState("")
+  const [createdFrom, setCreatedFrom] = useStickyState(
+    `${LIST_KEY}:createdFrom`,
+    ""
+  )
+  const [createdTo, setCreatedTo] = useStickyState(`${LIST_KEY}:createdTo`, "")
 
-  const [movedFrom, setMovedFrom] = React.useState("")
-  const [movedTo, setMovedTo] = React.useState("")
+  const [movedFrom, setMovedFrom] = useStickyState(`${LIST_KEY}:movedFrom`, "")
+  const [movedTo, setMovedTo] = useStickyState(`${LIST_KEY}:movedTo`, "")
 
   /** The card open in the preview, held as a row rather than an id — see below. */
   const [previewed, setPreviewed] = React.useState<IDCard | null>(null)
@@ -282,7 +307,10 @@ export function PrinterClient() {
     pageSize,
     setPage,
     setPageSize,
-  } = useListQuery(filter, { pageSize: DEFAULT_PAGE_SIZE })
+  } = useListQuery(filter, {
+    pageSize: DEFAULT_PAGE_SIZE,
+    storageKey: LIST_KEY,
+  })
 
   // `keepPreviousData` is what makes paging work at all: every page is a new
   // query key, so without it `data` would be undefined for the whole trip and

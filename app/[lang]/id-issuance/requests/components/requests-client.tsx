@@ -52,6 +52,7 @@ import { useLocaleRouter } from "@/i18n/navigation"
 import type { TranslationKey } from "@/i18n/translate"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useListQuery } from "@/hooks/use-list-query"
+import { useStickyState } from "@/hooks/use-sticky-state"
 import { features } from "@/lib/table-features"
 import { cn } from "@/lib/utils"
 import { buildFilter } from "@/utils/api/filters"
@@ -151,6 +152,12 @@ const ORGANIZATIONS_QUERY = { page: 1, pageSize: 100 } as const
 
 const STORAGE_KEY = "bajat-requests-ledger-view"
 
+/**
+ * Filters, sort, page and page size, remembered for the tab — so opening a
+ * row and coming back lands on the list you left. See hooks/use-sticky-state.ts.
+ */
+const LIST_KEY = "bajat-requests-ledger"
+
 /** The `?organizationId=` deep link. */
 const ORGANIZATION_PARAM = "organizationId"
 
@@ -198,44 +205,78 @@ export function RequestsClient() {
     return "table"
   })
   const [isDesktop, setIsDesktop] = React.useState(true)
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useStickyState<SortingState>(
+    `${LIST_KEY}:sorting`,
+    []
+  )
   const [columnVisibility, setColumnVisibility] =
     React.useState<ColumnVisibilityState>({})
 
   // Server-driven: each of these goes out as a query param, so a change
   // refetches rather than re-filtering what is already on screen.
-  const [statusFilter, setStatusFilter] = React.useState<string[]>([])
-  /** One id, or `""` for every organization — seeded from the URL once. */
-  const [organizationId, setOrganizationId] = React.useState(
-    () => searchParams.get(ORGANIZATION_PARAM)?.trim() ?? ""
+  const [statusFilter, setStatusFilter] = useStickyState<string[]>(
+    `${LIST_KEY}:statusFilter`,
+    []
+  )
+  /** One id, or `""` for every organization. */
+  const [organizationId, setOrganizationId] = useStickyState(
+    `${LIST_KEY}:organizationId`,
+    "",
+    // An explicit `?organizationId=` is a fresh instruction from whoever made
+    // the link, so it outranks whatever this tab was filtered by before.
+    // `|| undefined` because an absent parameter reads as `""`, and "no
+    // parameter" must not be mistaken for "filter by no organization".
+    { seed: searchParams.get(ORGANIZATION_PARAM)?.trim() || undefined }
   )
 
   // Each pair is "what the field shows" and "what the server is asked for" —
   // the second trailing the first by a debounce.
-  const [query, setQuery] = React.useState("")
+  const [query, setQuery] = useStickyState(`${LIST_KEY}:query`, "")
   const search = useDebounce(query.trim(), SEARCH_DEBOUNCE_MS)
 
-  const [nameQuery, setNameQuery] = React.useState("")
+  const [nameQuery, setNameQuery] = useStickyState(`${LIST_KEY}:nameQuery`, "")
   const memberName = useDebounce(nameQuery.trim(), SEARCH_DEBOUNCE_MS)
 
-  const [phoneQuery, setPhoneQuery] = React.useState("")
+  const [phoneQuery, setPhoneQuery] = useStickyState(
+    `${LIST_KEY}:phoneQuery`,
+    ""
+  )
   const memberPhone = useDebounce(phoneDigits(phoneQuery), SEARCH_DEBOUNCE_MS)
 
-  const [templateQuery, setTemplateQuery] = React.useState("")
+  const [templateQuery, setTemplateQuery] = useStickyState(
+    `${LIST_KEY}:templateQuery`,
+    ""
+  )
   const templateTitle = useDebounce(templateQuery.trim(), SEARCH_DEBOUNCE_MS)
 
-  const [priceMin, setPriceMin] = React.useState("")
-  const [priceMax, setPriceMax] = React.useState("")
-  const price = useDebounce(priceRange(priceMin, priceMax), SEARCH_DEBOUNCE_MS)
+  const [priceMin, setPriceMin] = useStickyState(`${LIST_KEY}:priceMin`, "")
+  const [priceMax, setPriceMax] = useStickyState(`${LIST_KEY}:priceMax`, "")
+  // Memoized, not called inline: `priceRange` builds a fresh array every
+  // render, and `useDebounce` keys its timer on the value's *identity*. Passed
+  // inline, each render restarts the timer and each timer sets a
+  // reference-different array, which re-renders and restarts it again — a
+  // 300ms loop that never settles. Every other filter here is a string, which
+  // is why only this one needs it.
+  const priceInput = React.useMemo(
+    () => priceRange(priceMin, priceMax),
+    [priceMin, priceMax]
+  )
+  const price = useDebounce(priceInput, SEARCH_DEBOUNCE_MS)
 
   /**
    * The two date windows, each as a pair of `yyyy-mm-dd` values — `""` for an
    * open end. Neither is debounced: a date arrives in one click.
    */
-  const [createdFrom, setCreatedFrom] = React.useState("")
-  const [createdTo, setCreatedTo] = React.useState("")
-  const [updatedFrom, setUpdatedFrom] = React.useState("")
-  const [updatedTo, setUpdatedTo] = React.useState("")
+  const [createdFrom, setCreatedFrom] = useStickyState(
+    `${LIST_KEY}:createdFrom`,
+    ""
+  )
+  const [createdTo, setCreatedTo] = useStickyState(`${LIST_KEY}:createdTo`, "")
+  const [updatedFrom, setUpdatedFrom] = useStickyState(
+    `${LIST_KEY}:updatedFrom`,
+    ""
+  )
+  const [updatedTo, setUpdatedTo] = useStickyState(`${LIST_KEY}:updatedTo`, "")
 
   /** The card the delete confirmation is about. `null` closes it. */
   const [deleting, setDeleting] = React.useState<IDCard | null>(null)
@@ -298,7 +339,10 @@ export function RequestsClient() {
     pageSize,
     setPage,
     setPageSize,
-  } = useListQuery(filter, { pageSize: DEFAULT_PAGE_SIZE })
+  } = useListQuery(filter, {
+    pageSize: DEFAULT_PAGE_SIZE,
+    storageKey: LIST_KEY,
+  })
 
   const organizationsQuery = useGetOrganizations(ORGANIZATIONS_QUERY)
   /** `{ value, label }` is the shape `ChoiceEditor` reads a label out of. */
@@ -384,6 +428,7 @@ export function RequestsClient() {
   )
 
   const clearFilters = () => {
+    setQuery("")
     setStatusFilter([])
     setOrganizationId("")
     setNameQuery("")

@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { useStickyState } from "@/hooks/use-sticky-state"
 import type { BaseQuery, FilterQuery } from "@/types/api"
 import { DEFAULT_PAGE_SIZE } from "@/utils/constants"
 
@@ -28,12 +29,29 @@ import { DEFAULT_PAGE_SIZE } from "@/utils/constants"
  * render one frame asking for page 5 of a one-page result, fire that request,
  * and only then snap back — a wasted round trip and a flash of an empty table.
  * Every call site is also spared a `setPage(1)` it can forget to write.
+ *
+ * ### Both survive leaving the screen
+ *
+ * Given a `storageKey`, the page and the page size are held in
+ * `useStickyState`, so opening a row and coming back lands on the page you
+ * left at the size you chose.
+ *
+ * The scope check above is what makes that safe to restore. The stored page
+ * carries the scope it was valid for, so it comes back only if the filters
+ * and page size rebuilt on mount hash to the same thing — page 4 of a filter
+ * set you are no longer looking at reads as page 1, exactly as it does when
+ * you change a filter with the screen open.
  */
 export function useListQuery(
   filter: FilterQuery[],
   options?: {
     /** Rows per page to start on. Defaults to `DEFAULT_PAGE_SIZE`. */
     pageSize?: number
+    /**
+     * Remember the page and page size under this key, per tab. Omit and both
+     * reset every time the screen is mounted.
+     */
+    storageKey?: string
   }
 ): {
   /** Ready to pass straight to a list hook. */
@@ -43,7 +61,9 @@ export function useListQuery(
   setPage: (page: number) => void
   setPageSize: (pageSize: number) => void
 } {
-  const [pageSize, setPageSize] = React.useState(
+  const storageKey = options?.storageKey
+  const [pageSize, setPageSize] = useStickyState(
+    storageKey && `${storageKey}:size`,
     options?.pageSize ?? DEFAULT_PAGE_SIZE
   )
 
@@ -54,7 +74,10 @@ export function useListQuery(
     [pageSize, filter]
   )
 
-  const [paged, setPaged] = React.useState({ scope, page: 1 })
+  const [paged, setPaged] = useStickyState(
+    storageKey && `${storageKey}:page`,
+    { scope, page: 1 }
+  )
   const page = paged.scope === scope ? paged.page : 1
 
   const setPage = (next: number) => setPaged({ scope, page: Math.max(1, next) })

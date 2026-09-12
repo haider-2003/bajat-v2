@@ -39,6 +39,7 @@ import { useT } from "@/i18n/context"
 import type { TranslationKey } from "@/i18n/translate"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useListQuery } from "@/hooks/use-list-query"
+import { useStickyState } from "@/hooks/use-sticky-state"
 import { features } from "@/lib/table-features"
 import { cn } from "@/lib/utils"
 import { buildFilter } from "@/utils/api/filters"
@@ -122,6 +123,12 @@ const VIEWS: {
 
 const STORAGE_KEY = "bajat-black-list-view"
 
+/**
+ * Filters, sort, page and page size, remembered for the tab — so opening a
+ * row and coming back lands on the list you left. See hooks/use-sticky-state.ts.
+ */
+const LIST_KEY = "bajat-black-list"
+
 export function BlackListClient() {
   const t = useT()
   // Lazy initialiser rather than an effect: the saved view is read once, and
@@ -138,7 +145,10 @@ export function BlackListClient() {
     return "table"
   })
   const [isDesktop, setIsDesktop] = React.useState(true)
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useStickyState<SortingState>(
+    `${LIST_KEY}:sorting`,
+    []
+  )
   const [columnVisibility, setColumnVisibility] =
     React.useState<ColumnVisibilityState>({})
 
@@ -147,17 +157,23 @@ export function BlackListClient() {
 
   // Each pair is "what the field shows" and "what the server is asked for" —
   // the second trailing the first by a debounce.
-  const [query, setQuery] = React.useState("")
+  const [query, setQuery] = useStickyState(`${LIST_KEY}:query`, "")
   const search = useDebounce(query.trim(), SEARCH_DEBOUNCE_MS)
 
-  const [phoneQuery, setPhoneQuery] = React.useState("")
+  const [phoneQuery, setPhoneQuery] = useStickyState(
+    `${LIST_KEY}:phoneQuery`,
+    ""
+  )
   const phone = useDebounce(phoneDigits(phoneQuery), SEARCH_DEBOUNCE_MS)
 
   // The window the entry was blocked in, held as two `yyyy-mm-dd` days — what
   // the calendar selects, with no timezone attached. They become instants only
   // on the way out.
-  const [blockedFrom, setBlockedFrom] = React.useState("")
-  const [blockedTo, setBlockedTo] = React.useState("")
+  const [blockedFrom, setBlockedFrom] = useStickyState(
+    `${LIST_KEY}:blockedFrom`,
+    ""
+  )
+  const [blockedTo, setBlockedTo] = useStickyState(`${LIST_KEY}:blockedTo`, "")
 
   /** The entry queued for removal, held as a row rather than an id — see below. */
   const [removing, setRemoving] = React.useState<BlackList | null>(null)
@@ -214,7 +230,10 @@ export function BlackListClient() {
     pageSize,
     setPage,
     setPageSize,
-  } = useListQuery(filter, { pageSize: DEFAULT_PAGE_SIZE })
+  } = useListQuery(filter, {
+    pageSize: DEFAULT_PAGE_SIZE,
+    storageKey: LIST_KEY,
+  })
 
   // `useGetList` hands back the whole Axios response, so rows sit two `data`
   // levels down. `keepPreviousData` is what makes paging work at all: every

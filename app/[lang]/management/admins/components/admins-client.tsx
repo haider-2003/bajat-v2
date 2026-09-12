@@ -40,6 +40,7 @@ import { useT } from "@/i18n/context"
 import type { TranslationKey } from "@/i18n/translate"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useListQuery } from "@/hooks/use-list-query"
+import { useStickyState } from "@/hooks/use-sticky-state"
 import { features } from "@/lib/table-features"
 import { cn } from "@/lib/utils"
 import { buildFilter } from "@/utils/api/filters"
@@ -87,6 +88,12 @@ const VIEWS: {
 
 const STORAGE_KEY = "bajat-admins-view"
 
+/**
+ * Filters, sort, page and page size, remembered for the tab — so opening a
+ * row and coming back lands on the list you left. See hooks/use-sticky-state.ts.
+ */
+const LIST_KEY = "bajat-admins"
+
 export function AdminsClient() {
   const t = useT()
 
@@ -101,18 +108,27 @@ export function AdminsClient() {
     return "table"
   })
   const [isDesktop, setIsDesktop] = React.useState(true)
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = useStickyState<SortingState>(
+    `${LIST_KEY}:sorting`,
+    []
+  )
   const [columnVisibility, setColumnVisibility] =
     React.useState<ColumnVisibilityState>({})
 
-  const [query, setQuery] = React.useState("")
+  const [query, setQuery] = useStickyState(`${LIST_KEY}:query`, "")
   const search = useDebounce(query.trim(), SEARCH_DEBOUNCE_MS)
 
-  const [phoneQuery, setPhoneQuery] = React.useState("")
+  const [phoneQuery, setPhoneQuery] = useStickyState(
+    `${LIST_KEY}:phoneQuery`,
+    ""
+  )
   const phone = useDebounce(phoneDigits(phoneQuery), SEARCH_DEBOUNCE_MS)
 
-  const [createdFrom, setCreatedFrom] = React.useState("")
-  const [createdTo, setCreatedTo] = React.useState("")
+  const [createdFrom, setCreatedFrom] = useStickyState(
+    `${LIST_KEY}:createdFrom`,
+    ""
+  )
+  const [createdTo, setCreatedTo] = useStickyState(`${LIST_KEY}:createdTo`, "")
 
   const [editing, setEditing] = React.useState<User | null>(null)
 
@@ -155,7 +171,10 @@ export function AdminsClient() {
     pageSize,
     setPage,
     setPageSize,
-  } = useListQuery(filter, { pageSize: DEFAULT_PAGE_SIZE })
+  } = useListQuery(filter, {
+    pageSize: DEFAULT_PAGE_SIZE,
+    storageKey: LIST_KEY,
+  })
 
   const usersQuery = useGetUsers(listQuery, { placeholderData: keepPreviousData })
   const data = React.useMemo(
