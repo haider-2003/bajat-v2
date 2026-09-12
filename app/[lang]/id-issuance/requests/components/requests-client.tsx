@@ -12,6 +12,8 @@ import {
   AlertCircle,
   Banknote,
   Building2,
+  CalendarDays,
+  History,
   LayoutGrid,
   LayoutTemplate,
   Phone,
@@ -22,16 +24,17 @@ import {
 } from "lucide-react"
 
 import {
-  DateRangeFilter,
+  AppliedFilters,
+  ChoiceEditor,
+  DateRangeEditor,
   describeRange,
-  FacetFilter,
-  FilterChips,
-  FilterSheet,
-  SelectFilter,
-  SHEET_CONTROL,
+  FacetEditor,
+  FilterMenu,
+  RangeEditor,
+  TextEditor,
   TextFilter,
   toggleKey,
-  type ActiveFilter,
+  type FilterDefinition,
 } from "@/components/filters"
 import { DeleteIdentityDialog } from "@/components/id-card/delete-identity-dialog"
 import { LoadFailed, LoadingRows } from "@/components/table/load-states"
@@ -83,6 +86,15 @@ import { CardView } from "./view-cards"
  * stage the ID Flow screen is driven by. They are two views of the same rows
  * — a delete here removes the card from there — and this one never touches
  * `node`.
+ *
+ * ### Ten filters, one button
+ *
+ * This screen filters on more than a toolbar can carry inline — the two
+ * date windows alone were four chips — so it uses the add-a-filter kit
+ * (components/filters/filter-builder.tsx, DESIGN.md §12.8 / §14.5) rather
+ * than a control per filter: one **Filter** button lists the attributes,
+ * and what is set shows as chips that reopen their editor. The same kit
+ * serves every width, so there is no separate mobile sheet here.
  *
  * ### The organization can arrive in the URL
  *
@@ -370,11 +382,7 @@ export function RequestsClient() {
     />
   )
 
-  /**
-   * The filters that live behind the sheet below `lg` — everything except
-   * search, which stays on the toolbar at every width (§6.7).
-   */
-  const clearSheetFilters = () => {
+  const clearFilters = () => {
     setStatusFilter([])
     setOrganizationId("")
     setNameQuery("")
@@ -388,242 +396,174 @@ export function RequestsClient() {
     setUpdatedTo("")
   }
 
-  /** The badge on the collapsed trigger — the typed values, not the debounced. */
-  const sheetFilterCount =
-    statusFilter.length +
-    (organizationId ? 1 : 0) +
-    (nameQuery.trim() ? 1 : 0) +
-    (phoneQuery.trim() ? 1 : 0) +
-    (templateQuery.trim() ? 1 : 0) +
-    // Each range counts once, however many of its two ends are set.
-    (priceMin.trim() || priceMax.trim() ? 1 : 0) +
-    (createdFrom || createdTo ? 1 : 0) +
-    (updatedFrom || updatedTo ? 1 : 0)
-
-  const clearFilters = () => {
-    clearSheetFilters()
-    setQuery("")
-  }
-
   /**
-   * The controls that collapse into the sheet below `lg`. One definition
-   * rendered into two layouts rather than two copies.
+   * Every filter this screen offers, described once: the menu lists them,
+   * the chip row shows the set ones, and both open the same editor.
+   *
+   * Chip text comes from the *typed* values, not the debounced ones — the
+   * chip is the editor's own label, so it has to move with the keystroke.
+   * The 300ms the server trails by is covered by `keepPreviousData`.
    */
-  const collapsibleFilters = (inSheet: boolean) => (
-    <>
-      <FacetFilter
-        label={t("common.status")}
-        icon={Tag}
-        options={statusOptions}
-        selected={statusFilter}
-        onToggle={(key) => setStatusFilter((current) => toggleKey(current, key))}
-        className={inSheet ? SHEET_CONTROL : undefined}
-      />
-
-      {/* Singular — `/identity` reads one `organization_id`. */}
-      <SelectFilter
-        label={t("filters.attributes.organization")}
-        icon={Building2}
-        options={organizationOptions}
-        value={organizationId}
-        onChange={setOrganizationId}
-        allLabel={t("printer.allOrganizations")}
-        emptyLabel={t("members.noOrganizations")}
-        loading={organizationsQuery.isPending}
-        className={inSheet ? SHEET_CONTROL : undefined}
-      />
-
-      <TextFilter
-        icon={User}
-        value={nameQuery}
-        onChange={setNameQuery}
-        placeholder={t("ids.columns.cardholder")}
-        label={t("ids.nameFilterLabel")}
-        className={inSheet ? "w-full" : "w-40"}
-      />
-
-      {/* Punctuation-tolerant, because the stored number is bare digits. */}
-      <TextFilter
-        icon={Phone}
-        type="tel"
-        inputMode="tel"
-        value={phoneQuery}
-        onChange={setPhoneQuery}
-        placeholder={t("members.phonePlaceholder")}
-        label={t("members.phoneFilterLabel")}
-        className={inSheet ? "w-full" : "w-40"}
-      />
-
-      {/* Free text because that is what the endpoint takes — `template_title`,
-          not an id. */}
-      <TextFilter
-        icon={LayoutTemplate}
-        value={templateQuery}
-        onChange={setTemplateQuery}
-        placeholder={t("templates.singular")}
-        label={t("printer.templateFilterLabel")}
-        className={inSheet ? "w-full" : "w-40"}
-      />
-
-      {/* `price[]` — a floor and a ceiling. Two boxes rather than a range
-          slider: the amounts are dinars in the thousands, and a slider over
-          that range cannot land on the number somebody has in mind. */}
-      <div className={cn("flex items-center gap-2", inSheet && "w-full")}>
-        <TextFilter
-          icon={Banknote}
-          inputMode="decimal"
-          value={priceMin}
-          onChange={setPriceMin}
-          placeholder={t("ids.priceFrom")}
-          label={t("ids.priceFrom")}
-          className={inSheet ? "flex-1" : "w-32"}
+  const typedPrice = priceRange(priceMin, priceMax)
+  const filters: FilterDefinition[] = [
+    {
+      key: "status",
+      label: t("common.status"),
+      icon: Tag,
+      value:
+        statusFilter.length === 0
+          ? undefined
+          : statusFilter.length === 1
+            ? (statusOptions.find((option) => option.key === statusFilter[0])
+                ?.label ?? statusFilter[0])
+            : t("common.selectedCount", { count: statusFilter.length }),
+      editor: (
+        <FacetEditor
+          options={statusOptions}
+          selected={statusFilter}
+          onToggle={(key) =>
+            setStatusFilter((current) => toggleKey(current, key))
+          }
         />
-        <TextFilter
-          icon={Banknote}
-          inputMode="decimal"
-          value={priceMax}
-          onChange={setPriceMax}
-          placeholder={t("ids.priceTo")}
-          label={t("ids.priceTo")}
-          className={inSheet ? "flex-1" : "w-32"}
+      ),
+      onClear: () => setStatusFilter([]),
+    },
+    {
+      // Singular — `/identity` reads one `organization_id`.
+      key: "organization",
+      label: t("filters.attributes.organization"),
+      icon: Building2,
+      value: organizationId
+        ? (organizationOptions.find((option) => option.value === organizationId)
+            ?.label ?? organizationId)
+        : undefined,
+      editor: (
+        <ChoiceEditor
+          options={organizationOptions}
+          value={organizationId}
+          onChange={setOrganizationId}
+          emptyLabel={t("members.noOrganizations")}
+          loading={organizationsQuery.isPending}
         />
-      </div>
-
-      <DateRangeFilter
-        label={t("ids.columns.issued")}
-        from={createdFrom}
-        to={createdTo}
-        onFromChange={setCreatedFrom}
-        onToChange={setCreatedTo}
-        inSheet={inSheet}
-      />
-
-      <DateRangeFilter
-        label={t("filters.attributes.updated")}
-        from={updatedFrom}
-        to={updatedTo}
-        onFromChange={setUpdatedFrom}
-        onToChange={setUpdatedTo}
-        inSheet={inSheet}
-      />
-    </>
-  )
-
-  /**
-   * The applied-filter row. One entry per *applied* filter — the debounced
-   * values, not the raw inputs, so a chip never claims a filter the server has
-   * not been asked for yet.
-   */
-  const activeFilters: ActiveFilter[] = [
-    ...statusFilter.map((key) => ({
-      key: "status-" + key,
-      attribute: t("common.status"),
-      value: statusOptions.find((option) => option.key === key)?.label ?? key,
-      onRemove: () => setStatusFilter((current) => toggleKey(current, key)),
-    })),
-    ...(organizationId
-      ? [
-          {
-            key: "organization",
-            attribute: t("filters.attributes.organization"),
-            value:
-              organizationOptions.find(
-                (option) => option.value === organizationId
-              )?.label ?? organizationId,
-            onRemove: () => setOrganizationId(""),
-          },
-        ]
-      : []),
-    ...(memberName
-      ? [
-          {
-            key: "name",
-            attribute: t("ids.columns.cardholder"),
-            value: memberName,
-            onRemove: () => setNameQuery(""),
-          },
-        ]
-      : []),
-    ...(memberPhone
-      ? [
-          {
-            key: "phone",
-            attribute: t("filters.attributes.phone"),
-            value: memberPhone,
-            onRemove: () => setPhoneQuery(""),
-          },
-        ]
-      : []),
-    ...(templateTitle
-      ? [
-          {
-            key: "template",
-            attribute: t("templates.singular"),
-            value: templateTitle,
-            onRemove: () => setTemplateQuery(""),
-          },
-        ]
-      : []),
-    ...(price
-      ? [
-          {
-            key: "price",
-            attribute: t("filters.attributes.amount"),
-            value:
-              price.length === 1
-                ? t("filters.rangeFromOnly", { from: price[0] })
-                : t("filters.rangeBoth", { from: price[0], to: price[1] }),
-            onRemove: () => {
-              setPriceMin("")
-              setPriceMax("")
-            },
-          },
-        ]
-      : []),
-    // One chip per window, not per end: the pair is a single filter.
-    ...(createdFrom || createdTo
-      ? [
-          {
-            key: "created",
-            attribute: t("ids.columns.issued"),
-            value: describeRange(t, createdFrom, createdTo),
-            onRemove: () => {
-              setCreatedFrom("")
-              setCreatedTo("")
-            },
-          },
-        ]
-      : []),
-    ...(updatedFrom || updatedTo
-      ? [
-          {
-            key: "updated",
-            attribute: t("filters.attributes.updated"),
-            value: describeRange(t, updatedFrom, updatedTo),
-            onRemove: () => {
-              setUpdatedFrom("")
-              setUpdatedTo("")
-            },
-          },
-        ]
-      : []),
-    ...(search
-      ? [
-          {
-            key: "search",
-            attribute: t("filters.attributes.search"),
-            value: search,
-            onRemove: () => setQuery(""),
-          },
-        ]
-      : []),
+      ),
+      onClear: () => setOrganizationId(""),
+    },
+    {
+      key: "name",
+      label: t("ids.columns.cardholder"),
+      icon: User,
+      value: nameQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          value={nameQuery}
+          onChange={setNameQuery}
+          label={t("ids.nameFilterLabel")}
+        />
+      ),
+      onClear: () => setNameQuery(""),
+    },
+    {
+      // Punctuation-tolerant, because the stored number is bare digits.
+      key: "phone",
+      label: t("filters.attributes.phone"),
+      icon: Phone,
+      value: phoneQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          type="tel"
+          inputMode="tel"
+          value={phoneQuery}
+          onChange={setPhoneQuery}
+          placeholder={t("members.phonePlaceholder")}
+          label={t("members.phoneFilterLabel")}
+        />
+      ),
+      onClear: () => setPhoneQuery(""),
+    },
+    {
+      // Free text because that is what the endpoint takes — `template_title`,
+      // not an id.
+      key: "template",
+      label: t("templates.singular"),
+      icon: LayoutTemplate,
+      value: templateQuery.trim() || undefined,
+      editor: (
+        <TextEditor
+          value={templateQuery}
+          onChange={setTemplateQuery}
+          label={t("printer.templateFilterLabel")}
+        />
+      ),
+      onClear: () => setTemplateQuery(""),
+    },
+    {
+      key: "price",
+      label: t("filters.attributes.amount"),
+      icon: Banknote,
+      value: typedPrice
+        ? typedPrice.length === 1
+          ? t("filters.rangeFromOnly", { from: typedPrice[0] })
+          : t("filters.rangeBoth", { from: typedPrice[0], to: typedPrice[1] })
+        : undefined,
+      editor: (
+        <RangeEditor
+          min={priceMin}
+          max={priceMax}
+          onMinChange={setPriceMin}
+          onMaxChange={setPriceMax}
+        />
+      ),
+      onClear: () => {
+        setPriceMin("")
+        setPriceMax("")
+      },
+    },
+    {
+      key: "created",
+      label: t("ids.columns.issued"),
+      icon: CalendarDays,
+      value: describeRange(t, createdFrom, createdTo) || undefined,
+      editor: (
+        <DateRangeEditor
+          from={createdFrom}
+          to={createdTo}
+          onFromChange={setCreatedFrom}
+          onToChange={setCreatedTo}
+        />
+      ),
+      onClear: () => {
+        setCreatedFrom("")
+        setCreatedTo("")
+      },
+    },
+    {
+      key: "updated",
+      label: t("filters.attributes.updated"),
+      icon: History,
+      value: describeRange(t, updatedFrom, updatedTo) || undefined,
+      editor: (
+        <DateRangeEditor
+          from={updatedFrom}
+          to={updatedTo}
+          onFromChange={setUpdatedFrom}
+          onToChange={setUpdatedTo}
+        />
+      ),
+      onClear: () => {
+        setUpdatedFrom("")
+        setUpdatedTo("")
+      },
+    },
   ]
+
+  /** Whether the empty state should blame the filters rather than the data. */
+  const filtered = filters.some((f) => f.value !== undefined) || search !== ""
 
   return (
     <div className="flex flex-col gap-4">
       {/* Toolbar — left group is the view switcher, right group the controls
-          (§6.1). Below `lg` that single row becomes two: the switcher and one
-          Filters button, then search across the full width, per §18.3. */}
+          (§6.1). Below `lg` that single row becomes two: the switcher and the
+          Filter button, then search across the full width, per §18.3. */}
       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
         <div className="flex items-center justify-between gap-2">
           {/* View switcher — active tab is a surface chip (§6.5) */}
@@ -663,15 +603,10 @@ export function RequestsClient() {
             })}
           </div>
 
-          {/* The collapsed toolbar. Holds the same control component the
-              desktop cluster does — passed in, not duplicated. */}
-          <FilterSheet
-            className="lg:hidden"
-            count={sheetFilterCount}
-            onClear={clearSheetFilters}
-          >
-            {collapsibleFilters(true)}
-          </FilterSheet>
+          {/* Below `lg` the Filter button sits beside the switcher; at `lg`
+              it moves onto the search row. One button either way — the
+              popover is the same at every width, so no sheet. */}
+          <FilterMenu filters={filters} className="lg:hidden" />
         </div>
 
         {/* Search stays on the bar at every width — it is the control people
@@ -686,8 +621,8 @@ export function RequestsClient() {
             className="w-full lg:w-56"
           />
 
-          <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {collapsibleFilters(false)}
+          <div className="hidden items-center gap-2 lg:flex">
+            <FilterMenu filters={filters} />
 
             {/* View — column visibility + reordering (table only) */}
             {effectiveView === "table" && <ViewMenu table={table} />}
@@ -695,7 +630,7 @@ export function RequestsClient() {
         </div>
       </div>
 
-      <FilterChips filters={activeFilters} onClear={clearFilters} />
+      <AppliedFilters filters={filters} onClear={clearFilters} />
 
       {/* A failure only takes over the screen when there is nothing to show.
           Once rows are on screen an error becomes a strip above them, so the
@@ -732,10 +667,8 @@ export function RequestsClient() {
           {effectiveView === "table" && (
             <TableView
               table={table}
-              emptyTitle={
-                activeFilters.length > 0 ? t("ids.emptyFiltered") : t("ids.emptyTitle")
-              }
-              emptyHint={activeFilters.length > 0 ? undefined : t("ids.emptyHint")}
+              emptyTitle={filtered ? t("ids.emptyFiltered") : t("ids.emptyTitle")}
+              emptyHint={filtered ? undefined : t("ids.emptyHint")}
               footer={pagination}
               onRowClick={openCard}
               rowLabel={(card) => t("ids.openCard", { id: card.id })}
@@ -746,11 +679,7 @@ export function RequestsClient() {
             <>
               <CardView
                 table={table}
-                emptyTitle={
-                  activeFilters.length > 0
-                    ? t("ids.emptyFiltered")
-                    : t("ids.emptyTitle")
-                }
+                emptyTitle={filtered ? t("ids.emptyFiltered") : t("ids.emptyTitle")}
                 handlers={handlers}
               />
 

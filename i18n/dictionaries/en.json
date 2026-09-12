@@ -202,6 +202,14 @@
     "all": "All",
     "nothingToChoose": "Nothing to choose from",
     "removeFilter": "Remove {attribute} filter",
+    "add": "Add filter",
+    "editFilter": "Edit {attribute} filter",
+    "appliedCount": {
+      "one": "{count} filter applied",
+      "other": "{count} filters applied"
+    },
+    "from": "From",
+    "to": "To",
     "rangeFrom": "{field} from",
     "rangeTo": "{field} to",
     "rangeBoth": "{from} – {to}",

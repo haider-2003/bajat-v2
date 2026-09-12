@@ -12,3 +12,19 @@ export { SelectFilter, type SelectOption } from "./select-filter"
 export { FilterChips, FilterChip, type ActiveFilter } from "./filter-chips"
 export { FilterSheet, SHEET_CONTROL } from "./filter-sheet"
 export { DateRangeFilter, describeRange } from "./date-range-filter"
+
+// The add-a-filter kit (§12.8 / §14.5) — for screens with more filters than
+// a toolbar can carry. See filter-builder.tsx.
+export {
+  AppliedFilters,
+  FilterMenu,
+  useFilterEditor,
+  type FilterDefinition,
+} from "./filter-builder"
+export {
+  ChoiceEditor,
+  DateRangeEditor,
+  FacetEditor,
+  RangeEditor,
+  TextEditor,
+} from "./filter-editors"

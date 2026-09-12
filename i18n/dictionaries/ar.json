@@ -206,6 +206,18 @@
     "all": "الكل",
     "nothingToChoose": "لا توجد خيارات",
     "removeFilter": "إزالة عامل تصفية {attribute}",
+    "add": "إضافة عامل تصفية",
+    "editFilter": "تعديل عامل تصفية {attribute}",
+    "appliedCount": {
+      "zero": "لا عوامل تصفية",
+      "one": "عامل تصفية واحد",
+      "two": "عاملا تصفية",
+      "few": "{count} عوامل تصفية",
+      "many": "{count} عامل تصفية",
+      "other": "{count} عامل تصفية"
+    },
+    "from": "من",
+    "to": "إلى",
     "rangeFrom": "{field} من",
     "rangeTo": "{field} إلى",
     "rangeBoth": "{from} – {to}",
