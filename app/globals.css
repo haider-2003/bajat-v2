@@ -1608,7 +1608,9 @@ html[dir="rtl"] [data-flip-rtl] {
    for … active chart series", applied literally.
 
    One series per card is the whole colour system: no legend, no second
-   hue, no ramp. Identity is carried by the axis label beside each mark,
+   hue, no ramp. (The pulse blocks rest in `--viz-rest` grey and take
+   the accent only under the pointer — the hue still means "this one",
+   it is just spent on one block instead of the series.) Identity is carried by the axis label beside each mark,
    never by colour, so the accent can be any of the eight hues without
    re-validating anything against a neighbour. (An ordinal ramp derived
    from the accent with `color-mix` was validated across all eight hues
@@ -1631,12 +1633,16 @@ html[dir="rtl"] [data-flip-rtl] {
   /* The ground plane the pulse blocks stand on — half a step off the
      surface, lighter than the grid so the hairline still edges it. */
   --viz-floor: #f6f6f8;
+  /* The resting tone of the pulse blocks — a mid grey that steps aside for
+     the accent on the one block under the pointer. */
+  --viz-rest: #cfcfd4;
 }
 
 .dark {
   --viz-accent: var(--accent-violet);
   --viz-grid: #242428;
   --viz-floor: #1c1c1f;
+  --viz-rest: #3d3d43;
 }
 
 /* ------------------------------------------------------------

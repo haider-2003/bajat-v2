@@ -69,6 +69,14 @@ import {
  * wall are what make the extrusion read as space rather than as a bevel; they
  * are still nothing but flat fills and hairlines.
  *
+ * ### Grey at rest, accent under the pointer
+ *
+ * The blocks stand in `--viz-rest` — a mid grey — and only the one being
+ * hovered (or walked to with the arrow keys) takes the accent, the same colour
+ * the tooltip's swatch wears. One coloured block among grey ones is a far
+ * clearer "you are here" than a whole series in pink with one block a shade
+ * brighter, and it lets the shape of the year read as shape first.
+ *
  * ### The current bucket is drawn as unfinished
  *
  * The last column is the month (or week, or day) in progress, so it is
@@ -83,7 +91,7 @@ const PAD = { top: 38, right: 22, bottom: 30, left: 44 }
 const PLOT_HEIGHT = 292
 
 /** Widest a column is allowed to get, however much room the panel has. */
-const MAX_COLUMN = 30
+const MAX_COLUMN = 34
 
 /**
  * The three faces of an extruded block, square-cornered.
@@ -136,12 +144,12 @@ export function PulsePanel({
   const plotW = Math.max(80, width - PAD.left - PAD.right)
   const plotH = PLOT_HEIGHT - PAD.top - PAD.bottom
   const band = points.length > 0 ? plotW / points.length : plotW
-  const columnW = Math.min(MAX_COLUMN, band * 0.58)
+  const columnW = Math.min(MAX_COLUMN, band * 0.64)
   // Extrusion depth, proportional to the column: a 30-day range should not
   // wear the same shoulder as a 12-month one on columns twice the width.
   // Clamped at both ends — under 5px the faces vanish, over 14px the top
   // face is a bigger shape than a short front and starts to read as data —
-  // and always smaller than the 42% gap, so blocks never overlap.
+  // and always smaller than the 36% gap, so blocks never overlap.
   const depth = Math.max(5, Math.min(14, Math.round(columnW * 0.45)))
 
   /**
@@ -394,6 +402,7 @@ export function PulsePanel({
               // a 2px-tall sliver of side — and the extrusion stays a constant
               // offset across the series, which is the whole point of it.
               const face = blockFaces(x, baseline - h, columnW, h, depth)
+              const fill = isActive ? "var(--viz-accent)" : "var(--viz-rest)"
 
               return (
                 <g
@@ -403,14 +412,11 @@ export function PulsePanel({
                   style={{ animationDelay: `${160 + i * 38}ms` }}
                 >
                   {/* Body. The in-progress bucket is ghosted; every other
-                      column is nearly opaque and lifts to full on hover, so
-                      the pointer is always acknowledged. */}
-                  <g
-                    opacity={point.isCurrent ? 0.28 : isActive ? 1 : 0.9}
-                    className="transition-opacity duration-120"
-                  >
-                    <path d={face.front} fill="var(--viz-accent)" />
-                    <path d={face.side} fill="var(--viz-accent)" />
+                      column is solid, and the pointer is acknowledged by the
+                      fill switching from rest grey to the accent. */}
+                  <g opacity={point.isCurrent ? 0.28 : 1}>
+                    <path d={face.front} fill={fill} className="transition-[fill] duration-150" />
+                    <path d={face.side} fill={fill} className="transition-[fill] duration-150" />
                     {/* Shade and highlight are translucent black and white
                         rather than two more palette entries — the same trick
                         `BLOCK_BEVEL` plays on the meters, for the same reason:
@@ -421,7 +427,7 @@ export function PulsePanel({
                   {/* The cap stays solid, the in-progress bucket included: a
                       block still filling is still a measured block, and the
                       lit face is what makes it read as one. */}
-                  <path d={face.top} fill="var(--viz-accent)" />
+                  <path d={face.top} fill={fill} className="transition-[fill] duration-150" />
                   <path d={face.top} fill="#fff" opacity={0.44} />
                 </g>
               )
