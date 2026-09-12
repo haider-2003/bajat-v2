@@ -314,6 +314,9 @@ export type TooltipState = {
   /** Anchor, in the container's own coordinates. */
   x: number
   y: number
+  /** How far the mark reaches either side of `x`. When the readout has to sit
+   *  beside the mark instead of above it, it clears this much. */
+  reach?: number
   title: string
   rows: TooltipRow[]
 } | null
@@ -327,9 +330,15 @@ export type TooltipState = {
  * density a box is data-weight ink doing a label's job.
  *
  * Positioned inside the chart's own `relative` box and clamped to it, so it
- * never escapes a card or forces the page to scroll. `pointer-events-none`
- * throughout — a tooltip that can be hovered steals the pointer from the marks
- * underneath and makes the readout flicker.
+ * never escapes a card or forces the page to scroll. It sits above the anchor
+ * when there is room; when there is not — the tallest column's cap is a few
+ * pixels under the plot's top edge, and the card clips whatever crosses it —
+ * it steps to the side of the mark instead, so it neither gets cut off nor
+ * covers the block it is describing. It measures itself to decide, because
+ * a one-row readout and a two-row one are 20px apart and the guess that
+ * fits one clips the other. `pointer-events-none` throughout — a tooltip
+ * that can be hovered steals the pointer from the marks underneath and makes
+ * the readout flicker.
  *
  * Every value this shows is also reachable without hovering: each chart ships
  * a table view under `<details>`, and the marks carry direct labels. The
@@ -345,18 +354,60 @@ export function VizTooltip({
   width: number
   align?: "center" | "start"
 }) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  // Starts at the size of a two-row readout; corrected before first paint.
+  const [size, setSize] = React.useState({ w: 176, h: 80 })
+  // Re-measured whenever the content changes — a different bucket may carry
+  // one row or two — and a no-op when the box comes back the same size.
+  React.useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const w = el.offsetWidth
+    const h = el.offsetHeight
+    setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }))
+  }, [state])
+
   if (!state) return null
 
-  // Clamped so the card's edge is never crossed. 88px is half the widest
-  // readout this screen produces; a narrower one simply sits off-centre.
-  const half = 88
-  const left =
-    align === "start"
-      ? Math.min(Math.max(state.x, 8), Math.max(8, width - half * 2 - 8))
-      : Math.min(Math.max(state.x, half + 4), Math.max(half + 4, width - half - 4))
+  const EDGE = 4
+  const GAP = 10
+  const reach = state.reach ?? 0
+  const fitsAbove = state.y - size.h >= 0
+
+  let left: number
+  let top: number
+  let transform: string | undefined
+
+  if (fitsAbove) {
+    // Above the anchor, clamped so the card's edge is never crossed. The
+    // clamp uses the measured half-width, so a narrow readout sits centred
+    // and a wide one simply stops short of the edge.
+    const half = size.w / 2
+    left =
+      align === "start"
+        ? Math.min(Math.max(state.x, 8), Math.max(8, width - size.w - 8))
+        : Math.min(Math.max(state.x, half + EDGE), Math.max(half + EDGE, width - half - EDGE))
+    top = state.y
+    transform = align === "start" ? "translateY(-100%)" : "translate(-50%, -100%)"
+  } else {
+    // Beside the mark, its top on the anchor. Right of it by default — the
+    // plot always runs left-to-right — and left of it when the right side
+    // would cross the edge; on a plot too narrow for either, back to the
+    // clamp, where overlapping a neighbour beats being cut off.
+    const right = state.x + reach + GAP
+    const leftOf = state.x - reach - GAP - size.w
+    left =
+      right + size.w <= width - EDGE
+        ? right
+        : leftOf >= EDGE
+          ? leftOf
+          : Math.min(Math.max(state.x - size.w / 2, EDGE), Math.max(EDGE, width - size.w - EDGE))
+    top = Math.max(0, state.y)
+  }
 
   return (
     <div
+      ref={ref}
       role="tooltip"
       aria-hidden
       className={cn(
@@ -367,8 +418,8 @@ export function VizTooltip({
       )}
       style={{
         left,
-        top: state.y,
-        transform: align === "start" ? "translateY(-100%)" : "translate(-50%, -100%)",
+        top,
+        transform,
         // The readout is Latin-numeral tabular data in both languages; letting
         // it mirror under RTL would put the value on the wrong side of its key.
         direction: "ltr",

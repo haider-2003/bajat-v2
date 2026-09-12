@@ -201,6 +201,7 @@ export function PulsePanel({
       ? {
           x: xOf(active) + columnW / 2 + depth / 2,
           y: baseline - heightOf(activePoint.value) - depth - 12,
+          reach: columnW / 2 + depth / 2,
           title: activePoint.label,
           rows: [
             {
