@@ -63,6 +63,12 @@ import {
  * stating because most 3-D bar charts cross it: they ramp the depth with
  * perspective, and then a column is taller for being near.
  *
+ * The blocks stand on a floor — a slab the same `depth` deep, one flat tone —
+ * and the gridlines sit on the back wall behind them, offset by that same
+ * depth, so a block's top-back edge meets the line for its value. Floor and
+ * wall are what make the extrusion read as space rather than as a bevel; they
+ * are still nothing but flat fills and hairlines.
+ *
  * ### The current bucket is drawn as unfinished
  *
  * The last column is the month (or week, or day) in progress, so it is
@@ -73,7 +79,7 @@ import {
 
 /** Plot insets. The bottom band is reserved for x labels, so they can never be
  *  the thing that overflows the panel and nests a scrollbar inside it. */
-const PAD = { top: 30, right: 8, bottom: 30, left: 44 }
+const PAD = { top: 38, right: 22, bottom: 30, left: 44 }
 const PLOT_HEIGHT = 292
 
 /** Widest a column is allowed to get, however much room the panel has. */
@@ -133,9 +139,10 @@ export function PulsePanel({
   const columnW = Math.min(MAX_COLUMN, band * 0.58)
   // Extrusion depth, proportional to the column: a 30-day range should not
   // wear the same shoulder as a 12-month one on columns twice the width.
-  // Clamped at both ends — under 3px the face vanishes, over 6px it starts to
-  // read as data — and always smaller than the gap, so blocks never overlap.
-  const depth = Math.max(3, Math.min(6, Math.round(columnW * 0.22)))
+  // Clamped at both ends — under 5px the faces vanish, over 14px the top
+  // face is a bigger shape than a short front and starts to read as data —
+  // and always smaller than the 42% gap, so blocks never overlap.
+  const depth = Math.max(5, Math.min(14, Math.round(columnW * 0.45)))
 
   /**
    * The scale's ceiling, rounded up to something a reader can name.
@@ -315,22 +322,39 @@ export function PulsePanel({
             // under RTL would put "now" on the left and read as a countdown.
             style={{ direction: "ltr" }}
           >
-            {/* Scale — two hairlines and the baseline, solid and recessive.
-                No vertical gridlines: the columns are the x-structure. */}
+            {/* The floor: a slab exactly `depth` deep, the plane the blocks
+                stand on. Its front edge is the baseline; its back edge is the
+                baseline of the back wall. One flat tone, edged in the grid
+                hairline — no shadow, no blend. */}
+            <path
+              d={
+                `M${PAD.left} ${baseline} L${PAD.left + depth} ${baseline - depth}` +
+                ` L${PAD.left + plotW + depth} ${baseline - depth}` +
+                ` L${PAD.left + plotW} ${baseline} Z`
+              }
+              fill="var(--viz-floor)"
+              stroke="var(--viz-grid)"
+              strokeWidth={1}
+            />
+
+            {/* Scale — two hairlines on the *back* wall, offset by the same
+                `depth` as every block, so a block's top-back edge lands exactly
+                on the line for its value. Solid and recessive; no vertical
+                gridlines, the columns are the x-structure. */}
             {gridValues.map((value) => {
-              const y = baseline - heightOf(value)
+              const y = baseline - depth - heightOf(value)
               return (
                 <g key={value}>
                   <line
-                    x1={PAD.left}
-                    x2={PAD.left + plotW}
+                    x1={PAD.left + depth}
+                    x2={PAD.left + plotW + depth}
                     y1={y}
                     y2={y}
                     stroke="var(--viz-grid)"
                     strokeWidth={1}
                   />
                   <text
-                    x={PAD.left - 10}
+                    x={PAD.left + depth - 10}
                     y={y}
                     textAnchor="end"
                     dominantBaseline="middle"
@@ -341,14 +365,6 @@ export function PulsePanel({
                 </g>
               )
             })}
-            <line
-              x1={PAD.left}
-              x2={PAD.left + plotW}
-              y1={baseline}
-              y2={baseline}
-              stroke="var(--viz-grid)"
-              strokeWidth={1}
-            />
 
             {/* The columns. */}
             {points.map((point, i) => {
@@ -356,28 +372,28 @@ export function PulsePanel({
               const x = xOf(i)
               const isActive = active === i
 
-              // A zero bucket still gets a mark: a 3px stub on the baseline, so
-              // "nothing was issued" reads as a measured zero rather than as a
-              // month the chart forgot to draw. Flat — there is no block to
-              // extrude when there is nothing to count.
+              // A zero bucket still gets a mark: a 3px slab lying on the floor,
+              // so "nothing was issued" reads as a measured zero rather than
+              // as a month the chart forgot to draw. It wears the grid tone,
+              // not the accent — a tile, not a block.
               if (point.value === 0) {
+                const slab = blockFaces(x, baseline - 3, columnW, 3, depth)
                 return (
-                  <rect
-                    key={`${point.label}-${i}`}
-                    x={x}
-                    y={baseline - 3}
-                    width={columnW}
-                    height={3}
-                    fill="var(--viz-grid)"
-                  />
+                  <g key={`${point.label}-${i}`}>
+                    <path d={slab.front} fill="var(--viz-grid)" />
+                    <path d={slab.side} fill="var(--viz-grid)" />
+                    <path d={slab.side} fill="#000" opacity={0.3} />
+                    <path d={slab.top} fill="var(--viz-grid)" />
+                    <path d={slab.top} fill="#fff" opacity={0.12} />
+                  </g>
                 )
               }
 
-              // Never deeper than the block is tall: at `h < depth` the side
-              // face would fold back on itself and draw as a torn shape. Only
-              // columns under ~6px are affected, where the value is already
-              // being read as "almost none".
-              const face = blockFaces(x, baseline - h, columnW, h, Math.min(depth, h))
+              // The same depth on every block, however short: the side face
+              // is a parallelogram at any height, so a 2px column simply gets
+              // a 2px-tall sliver of side — and the extrusion stays a constant
+              // offset across the series, which is the whole point of it.
+              const face = blockFaces(x, baseline - h, columnW, h, depth)
 
               return (
                 <g
@@ -399,14 +415,14 @@ export function PulsePanel({
                         rather than two more palette entries — the same trick
                         `BLOCK_BEVEL` plays on the meters, for the same reason:
                         one pair works over any fill, in either theme. */}
-                    <path d={face.side} fill="#000" opacity={0.22} />
+                    <path d={face.side} fill="#000" opacity={0.36} />
                   </g>
 
                   {/* The cap stays solid, the in-progress bucket included: a
                       block still filling is still a measured block, and the
                       lit face is what makes it read as one. */}
                   <path d={face.top} fill="var(--viz-accent)" />
-                  <path d={face.top} fill="#fff" opacity={0.34} />
+                  <path d={face.top} fill="#fff" opacity={0.44} />
                 </g>
               )
             })}

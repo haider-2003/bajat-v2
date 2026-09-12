@@ -1628,11 +1628,15 @@ html[dir="rtl"] [data-flip-rtl] {
   --viz-accent: var(--accent-violet);
   /* Gridlines and axis rules — one step off the surface, hairline, solid. */
   --viz-grid: #ececef;
+  /* The ground plane the pulse blocks stand on — half a step off the
+     surface, lighter than the grid so the hairline still edges it. */
+  --viz-floor: #f6f6f8;
 }
 
 .dark {
   --viz-accent: var(--accent-violet);
   --viz-grid: #242428;
+  --viz-floor: #1c1c1f;
 }
 
 /* ------------------------------------------------------------
