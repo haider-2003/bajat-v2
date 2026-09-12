@@ -1586,3 +1586,109 @@ html[lang="ar"] .font-mono {
 html[dir="rtl"] [data-flip-rtl] {
   transform: scaleX(-1);
 }
+
+/* ============================================================
+   Overview charts — the visualization layer.
+
+   Scoped to the overview screen (app/[lang]/(overview)) and nothing
+   else. Declared here rather than inline for the same reason the rest
+   of the palette is: a chart fill has to change with the theme, and
+   the theme is a class on <html> resolved before hydration — a colour
+   computed during render would be one paint behind.
+
+   ### The charts wear the accent
+
+   Every chart on the overview is a single series, and every series is
+   `--viz-accent`, which is `--accent-violet` — so the charts follow the
+   Accent colour in Settings and, when primary buttons are set to
+   Accent, match the buttons, through the same attribute write that
+   recolours everything else (see components/layout/brand.tsx). Nothing
+   here names a hue: violet is only what the `:root` accent happens to
+   be. This is DESIGN.md §2.1 Strategy A's "single accent hue reserved
+   for … active chart series", applied literally.
+
+   One series per card is the whole colour system: no legend, no second
+   hue, no ramp. Identity is carried by the axis label beside each mark,
+   never by colour, so the accent can be any of the eight hues without
+   re-validating anything against a neighbour. (An ordinal ramp derived
+   from the accent with `color-mix` was validated across all eight hues
+   for the heat grid that used to live here — see the git history for
+   the percentages if a magnitude ramp is ever needed again.)
+
+   ### Every fill on this screen is flat
+
+   No gradient is used as a mark, a ground, or a panel: a blend
+   between two stops reads as a value changing across the mark, which
+   on a chart is a claim about data that is not being made. The one
+   translucent fill — the pipeline's area wash — is the accent at 10%
+   over the surface, one flat tone.
+   ============================================================ */
+:root {
+  /* The single-series hue — every mark on the overview. The accent itself. */
+  --viz-accent: var(--accent-violet);
+  /* Gridlines and axis rules — one step off the surface, hairline, solid. */
+  --viz-grid: #ececef;
+}
+
+.dark {
+  --viz-accent: var(--accent-violet);
+  --viz-grid: #242428;
+}
+
+/* ------------------------------------------------------------
+   Chart motion.
+
+   Every entrance is `both`-filled and paused behind the intro splash
+   via `data-await-intro` (see the hand-off block above), so a chart
+   that mounts underneath the overlay still animates when the overlay
+   lifts rather than finishing unseen. The reduced-motion block in
+   @layer base clamps all of them to a single 0.01ms frame, which lands
+   each one on its final state — no per-component guard needed.
+   ------------------------------------------------------------ */
+
+/* A column or bar growing from its baseline. Scaling rather than animating
+   height or width keeps it on the compositor. */
+@keyframes viz-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes viz-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Fills and cells arriving. The 2px translate is the whole lift — anything
+   more and a 7x12 grid reads as a wave rather than a settle. */
+@keyframes viz-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The "now" marker on the pulse. A held breath rather than a blink: it marks
+   the current bucket, and a hard flash would read as an alert. */
+@keyframes viz-pulse-now {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}

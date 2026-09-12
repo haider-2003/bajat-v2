@@ -114,9 +114,91 @@
     "sectionOptions": "{section} options",
     "addToSection": "Add to {section}"
   },
-  "home": {
+  "overview": {
+    "metaTitle": "Overview",
     "title": "Overview",
-    "subtitle": "Sidebar scaffold is in place. Content panel is a placeholder."
+    "subtitle": "Issuance, the request pipeline, and where the work is coming from.",
+    "tableView": "Table view",
+    "rangeLabel": "Time range",
+    "scopeNote": "Trends below cover {range}.",
+    "ranges": {
+      "30d": "30 days",
+      "90d": "90 days",
+      "12m": "12 months",
+      "allTime": "all time"
+    },
+    "chapters": {
+      "scale": "Scale",
+      "pipeline": "The pipeline",
+      "sources": "Where the work comes from",
+      "now": "Right now"
+    },
+    "pulse": {
+      "label": "Identities issued",
+      "vsPrevious": "vs the previous complete period",
+      "context": "Across {organizations} organizations, over {range}.",
+      "chartLabel": "Identities issued over {range}. Use the arrow keys to read each bucket.",
+      "issued": "issued",
+      "previousBucket": "previous",
+      "bucket": "Period",
+      "estimatedBuckets": "Daily and weekly shape is modelled — the API reports monthly totals. The window total is real.",
+      "inProgress": "still in progress",
+      "noComparison": "no comparable previous period"
+    },
+    "pipeline": {
+      "title": "Request to card",
+      "caption": "One population, measured four times as it moves. Anything lost between two steps is marked.",
+      "stages": {
+        "submitted": "Submitted",
+        "review": "In review",
+        "approved": "Approved",
+        "issued": "Issued"
+      },
+      "chartLabel": "Request to card, four stages. Use the arrow keys to read each stage.",
+      "stage": "Stage",
+      "count": "total",
+      "ofSubmitted": "of submitted",
+      "dwell": "Median wait",
+      "days": "{days} days",
+      "dropped": "Lost",
+      "lostHere": "lost at this step",
+      "estimatedDwell": "Median wait is modelled.",
+      "empty": "No applications yet"
+    },
+    "orgs": {
+      "title": "Top organizations",
+      "caption": "By identities issued.",
+      "organization": "Organization",
+      "identities": "Identities",
+      "share": "Share",
+      "empty": "No organizations have issued yet"
+    },
+    "activity": {
+      "title": "When applications arrive",
+      "caption": "Two-hour blocks, summed across the week — read it to staff the review queue.",
+      "chartLabel": "Applications by hour of day, in two-hour blocks.",
+      "peak": "Busiest: {hours}",
+      "hours": "Hours",
+      "applications": "Applications",
+      "empty": "No applications yet",
+      "estimated": "Modelled — the API reports no arrival times yet."
+    },
+    "queue": {
+      "title": "Latest applications",
+      "caption": "The six most recent, newest first.",
+      "viewAll": "View all",
+      "empty": "No applications yet"
+    },
+    "tiles": {
+      "members": "Members",
+      "membersFoot": "Approved applicants",
+      "identities": "Identities",
+      "perMember": "{ratio} per member",
+      "organizations": "Organizations",
+      "organizationsFoot": "Tenants on the platform",
+      "pending": "Pending review",
+      "pendingShare": "{percent} of intake"
+    }
   },
   "notFound": {
     "metaTitle": "Page not found · Bajat",
@@ -889,7 +971,7 @@
       "themeSystemHint": "Following your system setting, which is currently {resolved}.",
       "themeFixedHint": "Always {theme}, regardless of your system setting.",
       "accentLabel": "Accent color",
-      "accentHint": "{accent}. Used for focus rings, selected rows, links and checks — status and chart colors are unaffected.",
+      "accentHint": "{accent}. Used for focus rings, selected rows, links, checks and the overview charts — status colors are unaffected.",
       "accents": {
         "violet": "Violet",
         "indigo": "Indigo",

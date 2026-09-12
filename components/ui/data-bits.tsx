@@ -44,6 +44,51 @@ export function GradientOrb({
 }
 
 /**
+ * Flat identity disc — initials on the neutral step.
+ *
+ * The counterpart to `GradientOrb` for surfaces that keep every fill flat, the
+ * overview being the first of them. It also says more than a colour does: two
+ * letters name the row, where a hue only promises that the same row will be
+ * the same hue next time.
+ *
+ * Two initials at most, and one is fine — Arabic names are commonly given as a
+ * first name plus a patronymic chain, so the last word is often not a surname,
+ * and taking a letter from each end of a long chain would produce a pair that
+ * nobody recognises.
+ */
+export function InitialAvatar({
+  name,
+  size = 24,
+  className,
+}: {
+  name: string | null | undefined
+  size?: number
+  className?: string
+}) {
+  const words = (name ?? "").trim().split(/\s+/).filter(Boolean)
+  // `Array.from` rather than `[0]`: a UTF-16 index can split a surrogate pair
+  // and render half a character.
+  const initials = words
+    .slice(0, 2)
+    .map((word) => Array.from(word)[0] ?? "")
+    .join("")
+
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "grid shrink-0 place-items-center rounded-full",
+        "bg-neutral-bg font-medium text-text-secondary uppercase",
+        className
+      )}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
+    >
+      {initials}
+    </span>
+  )
+}
+
+/**
  * Avatar stack — 20px orbs overlapping by 8px, each with a 2px surface ring
  * so they read as separate discs (§8.6).
  */
