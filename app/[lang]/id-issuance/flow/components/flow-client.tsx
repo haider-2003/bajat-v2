@@ -552,6 +552,7 @@ export function FlowClient() {
       ) : inboxQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("idsFlow.loadFailed")}
+          error={inboxQuery.error}
           onRetry={() => inboxQuery.refetch()}
           retrying={inboxQuery.isFetching}
         />

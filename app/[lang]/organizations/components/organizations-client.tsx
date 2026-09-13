@@ -371,6 +371,7 @@ export function OrganizationsClient() {
       ) : organizationsQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("organizations.loadFailed")}
+          error={organizationsQuery.error}
           onRetry={() => organizationsQuery.refetch()}
           retrying={organizationsQuery.isFetching}
         />

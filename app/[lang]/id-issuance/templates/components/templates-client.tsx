@@ -766,6 +766,7 @@ export function TemplatesClient() {
       ) : templatesQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("templates.loadFailed")}
+          error={templatesQuery.error}
           onRetry={() => templatesQuery.refetch()}
           retrying={templatesQuery.isFetching}
         />

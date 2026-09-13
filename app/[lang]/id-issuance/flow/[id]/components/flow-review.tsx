@@ -8,9 +8,8 @@ import { CardStage, PrintSheet } from "@/components/id-card/card-stage"
 import { NodeChip } from "@/components/nodes/node-swatch"
 import { Permission } from "@/components/permission"
 import { EmptyState } from "@/components/table/empty-state"
-import { LoadFailed } from "@/components/table/load-states"
+import { LoadFailed, LoadingState } from "@/components/table/load-states"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { useGetId } from "@/features/ids/api"
 import { identityName, identityPhone, requestFields } from "@/features/ids/fields"
 import { statusMeta } from "@/features/ids/status"
@@ -78,7 +77,10 @@ export function FlowReview({ id }: { id: number }) {
 
   const [mode, setMode] = React.useState<ReviewMode | null>(null)
 
-  if (cardQuery.isPending) return <ReviewSkeleton />
+  // The card being written, not a skeleton of the page: a single record
+  // has no rows to keep the shape of, and the wait and the failure below
+  // it should be the same block in two states.
+  if (cardQuery.isPending) return <LoadingState label={t("ids.loadingOne")} />
 
   if (cardQuery.isError || !card) {
     const missing =
@@ -97,6 +99,7 @@ export function FlowReview({ id }: { id: number }) {
     ) : (
       <LoadFailed
         title={t("ids.loadOneFailed")}
+        error={cardQuery.error}
         onRetry={() => cardQuery.refetch()}
         retrying={cardQuery.isFetching}
       />
@@ -363,21 +366,3 @@ function Detail({
   )
 }
 
-function ReviewSkeleton() {
-  return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-      <Skeleton className="aspect-[54/85.6] max-h-[52vh] w-full rounded-xl" />
-      <div className="flex flex-col gap-6">
-        <Skeleton className="h-28 w-full rounded-xl" />
-        <div className="grid grid-cols-2 gap-x-6 gap-y-5 rounded-xl border border-border p-5">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex flex-col gap-1.5">
-              <Skeleton className="h-2.5 w-16" />
-              <Skeleton className="h-3.5 w-28" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}

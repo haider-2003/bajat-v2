@@ -456,6 +456,7 @@ export function OrganizationUsersClient() {
       ) : usersQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("organizationUsers.loadFailed")}
+          error={usersQuery.error}
           onRetry={() => usersQuery.refetch()}
           retrying={usersQuery.isFetching}
         />

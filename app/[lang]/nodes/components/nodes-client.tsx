@@ -561,6 +561,7 @@ export function NodesClient() {
            correctly empty. */
         <LoadFailed
           title={t("nodes.loadFailed")}
+          error={nodesQuery.error}
           onRetry={() => nodesQuery.refetch()}
           retrying={nodesQuery.isFetching}
         />

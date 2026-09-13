@@ -646,6 +646,7 @@ export function PrinterClient() {
       ) : idsQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("printer.loadFailed")}
+          error={idsQuery.error}
           onRetry={() => idsQuery.refetch()}
           retrying={idsQuery.isFetching}
         />

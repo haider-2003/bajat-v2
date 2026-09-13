@@ -392,6 +392,7 @@ export function AdminsClient() {
       ) : usersQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("admins.loadFailed")}
+          error={usersQuery.error}
           onRetry={() => usersQuery.refetch()}
           retrying={usersQuery.isFetching}
         />

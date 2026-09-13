@@ -1054,6 +1054,81 @@
   }
 }
 
+/* The card tapped against a reader that never answers (`IdCardSignal`).
+   Two animations on one 3.2s clock. `signal-reach` is the tap: the card
+   leans 5px toward the arcs, holds while they light, and settles back — the
+   rest pose is the same one `card-flip` starts from, and the translate is
+   listed first so it moves the tilted card in screen space rather than
+   along its own tilted axis. `signal-ping` is one arc: up fast, held, and
+   down slowly to its resting ghost; each arc runs it with its own delay, so
+   they light outward in sequence. Both loops close on the rest pose, which
+   is what the reduced-motion clamp lands on. */
+@keyframes signal-reach {
+  0%,
+  100% {
+    transform: rotateX(10deg) rotateY(-14deg) rotate(-3deg);
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  10%,
+  34% {
+    transform: translateX(5px) rotateX(10deg) rotateY(-14deg) rotate(-3deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  46% {
+    transform: rotateX(10deg) rotateY(-14deg) rotate(-3deg);
+  }
+}
+
+@keyframes signal-ping {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  6%,
+  22% {
+    opacity: 1;
+  }
+  34% {
+    opacity: 0.28;
+  }
+}
+
+/* The card being written (`IdCardFill`). Two animations on one 2.8s clock.
+   `card-fill` is one printed bar: it drops to a ghost of itself, waits,
+   comes back up to full over 0.28s and holds there for the rest of the
+   cycle; each bar runs it 0.08s after the one before, so the card clears
+   and fills in reading order. The loop ends *full*, not ghost, on purpose:
+   the reduced-motion clamp collapses every animation to one instant run
+   that lands on its last frame, and a card that lands blank would read as
+   a card with nothing on it. Landing printed reads as the card, at rest. */
+@keyframes card-fill {
+  0% {
+    opacity: 1;
+  }
+  6%,
+  40% {
+    opacity: 0.22;
+  }
+  50%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* The lift: a small rise and a turn toward the light while the bars come
+   in, then back to rest. Eased both ways. */
+@keyframes card-lift {
+  0%,
+  100% {
+    transform: rotateX(10deg) rotateY(-14deg) rotate(-3deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  50% {
+    transform: translateY(-4px) rotateX(6deg) rotateY(-9deg) rotate(-3deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
 /**
  * Entrances that must wait for the splash.
  *

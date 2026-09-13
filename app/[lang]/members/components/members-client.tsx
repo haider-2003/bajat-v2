@@ -502,6 +502,7 @@ export function MembersClient() {
       ) : membersQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("members.loadFailed")}
+          error={membersQuery.error}
           onRetry={() => membersQuery.refetch()}
           retrying={membersQuery.isFetching}
         />

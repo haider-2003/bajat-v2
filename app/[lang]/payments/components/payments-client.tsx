@@ -498,6 +498,7 @@ export function PaymentsClient() {
            answers, and only one of them is safe to reconcile against. */
         <LoadFailed
           title={t("payments.loadFailed")}
+          error={paymentsQuery.error}
           onRetry={() => paymentsQuery.refetch()}
           retrying={paymentsQuery.isFetching}
         />

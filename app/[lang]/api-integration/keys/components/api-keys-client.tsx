@@ -503,6 +503,7 @@ export function ApiKeysClient() {
            different answers, and this screen is opened to revoke something. */
         <LoadFailed
           title={t("apiKeys.loadFailed")}
+          error={keysQuery.error}
           onRetry={() => keysQuery.refetch()}
           retrying={keysQuery.isFetching}
         />

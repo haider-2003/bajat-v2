@@ -507,6 +507,7 @@ export function BlackListClient() {
            is the difference between issuing a card and refusing it. */
         <LoadFailed
           title={t("blackList.loadFailed")}
+          error={entriesQuery.error}
           onRetry={() => entriesQuery.refetch()}
           retrying={entriesQuery.isFetching}
         />

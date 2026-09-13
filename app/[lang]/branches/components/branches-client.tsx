@@ -407,6 +407,7 @@ export function BranchesClient() {
       ) : branchesQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("branches.loadFailed")}
+          error={branchesQuery.error}
           onRetry={() => branchesQuery.refetch()}
           retrying={branchesQuery.isFetching}
         />

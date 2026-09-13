@@ -114,17 +114,6 @@ export function PhotoEditor({
   const free = React.useRef<HTMLDivElement>(null)
 
   /**
-   * §20 — the loaded design, once and only once per template.
-   *
-   * The guard is a ref rather than a piece of state because hydrating is not a
-   * render concern: react-query hands back the same row object on every
-   * background refetch, and re-hydrating on one would throw away whatever the
-   * operator had drawn since. The id is the identity that matters — a refetch
-   * returning the *same* template must not reload it.
-   */
-  const loaded = React.useRef<number | null>(null)
-
-  /**
    * §4.2 — reset on the way in, **and on the way out**.
    *
    * The cleanup is the half that was missing, and the reason a second visit to
@@ -160,12 +149,36 @@ export function PhotoEditor({
     return () => reset()
   }, [reset, setTemplateId, setPanel, templateId])
 
+  /**
+   * §20 — the loaded design, once per template *and per document*.
+   *
+   * "Already loaded" is read off the store, not remembered in a ref: the
+   * store holds this template's design exactly when `hasConfigured` is true
+   * for this id, and `reset()` clears both together. The ref this replaced
+   * outlived the reset it was meant to track, which was a bug with a very
+   * specific shape — an editor that opened empty on every *return* visit to
+   * a template, and only in development. Under Strict Mode's mount → unmount
+   * → mount, pass one hydrated and marked the id, the simulated unmount ran
+   * the reset above and wiped the document, and pass two saw the mark and
+   * skipped. A first visit was fine because the row arrived from the network
+   * after all that; a return visit was not, because the row was already in
+   * the query cache and arrived on the first pass.
+   *
+   * Reading the store here rather than subscribing to it is deliberate: this
+   * must not re-run because the operator drew something. A background
+   * refetch hands back the same row, the store still says it holds this id,
+   * and nothing is thrown away.
+   *
+   * `row.id !== templateId` guards the other direction — a row for some
+   * other template must never be poured into this one's editor.
+   */
   React.useEffect(() => {
     const row = templateQuery.data
-    if (!row || loaded.current === row.id) return
-    loaded.current = row.id
+    if (!row || row.id !== templateId) return
+    const held = useEditorStore.getState()
+    if (held.hasConfigured && held.templateId === row.id) return
     hydrate({ ...templateToEditor(row), templateId: row.id })
-  }, [templateQuery.data, hydrate])
+  }, [templateQuery.data, templateId, hydrate])
 
   /**
    * Report the free area — the middle band's spacer — to the store.
@@ -324,7 +337,6 @@ export function PhotoEditor({
         const created = await createTemplate.mutateAsync(payload)
         // §16.1 step 6 — edit mode from here on, without leaving the page.
         setTemplateId(created.id)
-        loaded.current = created.id
         markSaved()
         notify(t("editor.saveCreated", { count: vars.length }), "ok")
       }

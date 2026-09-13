@@ -458,6 +458,7 @@ export function ExportsClient() {
       ) : exportsQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("exports.loadFailed")}
+          error={exportsQuery.error}
           onRetry={() => exportsQuery.refetch()}
           retrying={exportsQuery.isFetching}
         />

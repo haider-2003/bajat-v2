@@ -405,6 +405,7 @@ export function BranchUsersClient() {
       ) : usersQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("branchUsers.loadFailed")}
+          error={usersQuery.error}
           onRetry={() => usersQuery.refetch()}
           retrying={usersQuery.isFetching}
         />

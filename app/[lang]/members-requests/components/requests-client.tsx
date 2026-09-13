@@ -557,6 +557,7 @@ export function RequestsClient() {
       ) : requestsQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("requests.loadFailed")}
+          error={requestsQuery.error}
           onRetry={() => requestsQuery.refetch()}
           retrying={requestsQuery.isFetching}
         />

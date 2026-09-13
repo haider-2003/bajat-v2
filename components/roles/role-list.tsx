@@ -373,6 +373,7 @@ export function RoleList({ scope }: { scope: RoleType }) {
       ) : rolesQuery.isError && !hasRows ? (
         <LoadFailed
           title={t("roles.loadFailed")}
+          error={rolesQuery.error}
           onRetry={() => rolesQuery.refetch()}
           retrying={rolesQuery.isFetching}
         />

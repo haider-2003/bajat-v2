@@ -12,7 +12,7 @@ import {
   Workflow,
 } from "lucide-react"
 
-import { LoadFailed } from "@/components/table/load-states"
+import { LoadFailed, LoadingState } from "@/components/table/load-states"
 import { Button } from "@/components/ui/button"
 import { useGetNodes } from "@/features/nodes/api"
 import type { Node } from "@/features/nodes/types"
@@ -431,7 +431,8 @@ export function FlowBuilder({ templateId }: { templateId: number }) {
     <NodePalette
       nodes={library}
       loading={nodesQuery.isPending}
-      error={nodesQuery.isError}
+      error={nodesQuery.isError ? nodesQuery.error : null}
+      retrying={nodesQuery.isFetching}
       onRetry={() => nodesQuery.refetch()}
       query={libraryQuery}
       onQueryChange={setLibraryQuery}
@@ -604,19 +605,25 @@ export function FlowBuilder({ templateId }: { templateId: number }) {
             correctly empty. A 404 is not a failure here — it is a template
             that has never had a flow, which is exactly an empty canvas. */}
         {flowQuery.isError && flowQuery.error?.response?.status !== 404 ? (
-          <div className="flex flex-1 items-center justify-center p-6">
+          // On the canvas ground and without the block's own box: this is the
+          // whole canvas, not a card sitting on it, so it stands the way the
+          // 404 does — illustration, copy, one button, nothing framing them.
+          <div className="flex flex-1 items-center justify-center bg-background-subtle p-6">
             <LoadFailed
               title={t("flow.loadFailed")}
+              error={flowQuery.error}
               onRetry={() => flowQuery.refetch()}
               retrying={flowQuery.isFetching}
+              className="w-full max-w-lg border-0 bg-transparent"
             />
           </div>
         ) : flowQuery.isPending ? (
-          <div className="flex flex-1 items-center justify-center bg-background-subtle">
-            <Loader2
-              className="size-5 animate-spin text-text-placeholder"
-              strokeWidth={1.75}
-              aria-label={t("common.loading")}
+          // Same footing as the failure beside it: the canvas ground, no
+          // box, the card being written where the flow is about to be.
+          <div className="flex flex-1 items-center justify-center bg-background-subtle p-6">
+            <LoadingState
+              label={t("flow.loading")}
+              className="w-full max-w-lg border-0 bg-transparent"
             />
           </div>
         ) : (

@@ -1,11 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { AlertCircle, Plus, Search, X } from "lucide-react"
+import { Plus, Search, X } from "lucide-react"
 
 import { TextFilter } from "@/components/filters"
 import { CreateNodeDialog } from "@/components/nodes/node-dialog"
 import { NodePill } from "@/components/nodes/node-swatch"
+import { LoadFailed } from "@/components/table/load-states"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { Node } from "@/features/nodes/types"
 import { useT } from "@/i18n/context"
@@ -46,7 +47,9 @@ import type { FlowDragSource } from "./use-flow-drag"
 export type NodePaletteProps = {
   nodes: Node[]
   loading: boolean
-  error: boolean
+  /** The library request's error, or `null` when it succeeded. */
+  error: unknown
+  retrying: boolean
   onRetry: () => void
   query: string
   onQueryChange: (value: string) => void
@@ -69,6 +72,7 @@ export function NodePalette({
   nodes,
   loading,
   error,
+  retrying,
   onRetry,
   query,
   onQueryChange,
@@ -92,7 +96,8 @@ export function NodePalette({
     return [inFlow, rest]
   }, [nodes, usedCounts])
 
-  const empty = !loading && !error && nodes.length === 0
+  const failed = error != null
+  const empty = !loading && !failed && nodes.length === 0
   const searching = query.trim().length > 0
 
   return (
@@ -180,30 +185,17 @@ export function NodePalette({
           </div>
         )}
 
-        {error && (
-          <div
-            role="alert"
-            className="rounded-lg border border-border bg-danger-bg px-3 py-3 text-center"
-          >
-            <AlertCircle
-              className="mx-auto size-4 text-danger"
-              strokeWidth={1.5}
-              aria-hidden
-            />
-            <p className="mt-1.5 text-[12px] text-danger">
-              {t("nodes.loadFailed")}
-            </p>
-            <button
-              type="button"
-              onClick={onRetry}
-              className={cn(
-                "mt-1 rounded-sm text-[12px] font-medium text-danger underline-offset-4",
-                "outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-              )}
-            >
-              {t("common.retry")}
-            </button>
-          </div>
+        {/* Compact on purpose: when the network is down the canvas beside
+            this is already showing the full illustrated block, and two
+            cards tapping at once would be a lot of motion for one outage. */}
+        {failed && (
+          <LoadFailed
+            size="compact"
+            title={t("nodes.loadFailed")}
+            error={error}
+            onRetry={onRetry}
+            retrying={retrying}
+          />
         )}
 
         {/* Two readings of "nothing here", and only one of them is a problem:
@@ -219,7 +211,7 @@ export function NodePalette({
           </div>
         )}
 
-        {!loading && !error && nodes.length > 0 && (
+        {!loading && !failed && nodes.length > 0 && (
           <div className="flex flex-col gap-4">
             {used.length > 0 && (
               <PaletteGroup label={t("flow.groupInFlow")} count={used.length}>
