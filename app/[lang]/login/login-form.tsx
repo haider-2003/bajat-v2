@@ -1,10 +1,12 @@
 "use client"
 
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   ArrowLeft,
   KeyRound,
   MessageSquareLock,
+  QrCode,
   ShieldCheck,
   Smartphone,
 } from "lucide-react"
@@ -18,7 +20,9 @@ import {
   useLogin,
   useSendOTP,
 } from "@/features/auth/api"
+import { qrCodeSrc } from "@/features/auth/qr"
 import { useAuthStore } from "@/features/auth/store"
+import type { TwoFactorSetupResponse } from "@/features/auth/types"
 import type { User } from "@/features/users/types"
 import { Input, InputGroup, InputGroupAddon } from "@/components/ui/input"
 import { useT } from "@/i18n/context"
@@ -275,12 +279,99 @@ function Otp({
   )
 }
 
+/**
+ * Enrolment — shown in place of the "open your app" hint when this account has
+ * no authenticator secret yet.
+ *
+ * That is the state an administrator's "Reset 2FA" leaves behind: the login
+ * response comes back with `tfaEnabled: false`, the client provisions a fresh
+ * secret from `GET /auth/2fa/setup`, and the user has to add it to their app
+ * before the code box below can possibly accept anything. Without this block
+ * the step asks for a code from an app that no longer holds a matching secret —
+ * a dead end with no way out of it.
+ *
+ * Where the QR is drawn depends on the breakpoint. On `lg` and up the brand
+ * panel's front card turns over to show it (`panel-stack.tsx`), so here there is
+ * only a line pointing at it; printing the same code twice on one screen invites
+ * scanning the wrong one. Below `lg` the panel is not rendered at all, so the
+ * code is drawn here.
+ *
+ * Scanning is the only way through, by design — `secret` comes back from
+ * `/auth/2fa/setup` alongside the QR and is deliberately not offered as a
+ * manual-entry fallback. So a failed fetch has to say so in words rather than
+ * leave an empty box: that is the whole of the `failed` branch below.
+ */
+function Enrollment({
+  setup,
+  pending,
+  failed,
+}: {
+  setup: TwoFactorSetupResponse | null
+  pending: boolean
+  failed: boolean
+}) {
+  const t = useT()
+
+  if (failed) {
+    return (
+      <p
+        role="alert"
+        className="mt-6 text-[13px] leading-relaxed text-danger"
+      >
+        {t("auth.enroll.failed")}
+      </p>
+    )
+  }
+
+  return (
+    <div className="mt-6 rounded-lg border border-border bg-background-subtle p-4">
+      <div className="lg:hidden">
+        {setup && !pending ? (
+          // White, with its own padding: a scanner needs a light ground and a
+          // quiet zone, and the code arrives as SVG with neither.
+          <div className="mx-auto w-fit rounded-md bg-white p-3 shadow-[0_1px_3px_rgba(0,0,0,0.12)]">
+            {/* A data URL, so there is nothing for next/image to fetch or
+                resize — and `alt=""` because the heading and hint above
+                already say what this is, and no wording of an alt text makes
+                a QR usable without a camera. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={qrCodeSrc(setup.qrCode)}
+              alt=""
+              className="block size-37"
+            />
+          </div>
+        ) : (
+          <div className="mx-auto size-43 animate-pulse rounded-md bg-border/60" />
+        )}
+        <p className="mt-3 text-center text-xs text-text-muted">
+          {t("auth.enroll.scanHint")}
+        </p>
+      </div>
+
+      <p className="hidden items-start gap-2.5 text-xs leading-relaxed text-text-muted lg:flex">
+        <QrCode className="mt-px size-4 shrink-0" strokeWidth={1.5} />
+        {t("auth.enroll.panelPointer")}
+      </p>
+    </div>
+  )
+}
+
 function Authenticator({
+  enrolling,
+  setup,
+  setupPending,
+  setupFailed,
   onSubmit,
   onBack,
   pending,
   error,
 }: {
+  /** No authenticator secret yet — this sign-in has to enrol one first. */
+  enrolling: boolean
+  setup: TwoFactorSetupResponse | null
+  setupPending: boolean
+  setupFailed: boolean
   onSubmit: (code: string) => void
   onBack: () => void
   pending: boolean
@@ -292,18 +383,29 @@ function Authenticator({
 
   return (
     <>
-      <StepIcon icon={ShieldCheck} tone="accent" />
+      <StepIcon icon={enrolling ? QrCode : ShieldCheck} tone="accent" />
 
       <header className="mt-5 space-y-1.5">
         <h1 className="text-xl font-semibold tracking-[-0.015em] text-text">
-          {t("auth.totpTitle")}
+          {enrolling ? t("auth.enroll.title") : t("auth.totpTitle")}
         </h1>
         <p className="text-[13px] leading-relaxed text-text-muted">
-          {t("auth.totpHint")}
+          {enrolling ? t("auth.enroll.hint") : t("auth.totpHint")}
         </p>
       </header>
 
-      <div className="mt-8">
+      {/* Enrolling reverses the order of the step: the code has to be in the
+          app before there is anything to type, so the QR comes first and the
+          digits follow it. */}
+      {enrolling && (
+        <Enrollment
+          setup={setup}
+          pending={setupPending}
+          failed={setupFailed}
+        />
+      )}
+
+      <div className={enrolling ? "mt-5" : "mt-8"}>
         <OtpInput
           value={code}
           onChange={setCode}
@@ -314,16 +416,20 @@ function Authenticator({
           autoFocus
         />
 
-        {/* Helper card — §9.1 card metrics at a compact scale */}
-        <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-border bg-background-subtle p-3">
-          <Smartphone
-            className="mt-0.5 size-4 shrink-0 text-text-muted"
-            strokeWidth={1.5}
-          />
-          <p className="text-xs leading-relaxed text-text-muted">
-            {t("auth.totpAppHint", { app: "Bajat" })}
-          </p>
-        </div>
+        {/* Helper card — §9.1 card metrics at a compact scale. Only for someone
+            who already holds the account in their app; enrolling has just said
+            all of this at length. */}
+        {!enrolling && (
+          <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-border bg-background-subtle p-3">
+            <Smartphone
+              className="mt-0.5 size-4 shrink-0 text-text-muted"
+              strokeWidth={1.5}
+            />
+            <p className="text-xs leading-relaxed text-text-muted">
+              {t("auth.totpAppHint", { app: "Bajat" })}
+            </p>
+          </div>
+        )}
       </div>
 
       <FormError>{error}</FormError>
@@ -333,18 +439,25 @@ function Authenticator({
         onClick={() => onSubmit(code)}
         disabled={pending || !complete}
       >
-        {pending ? t("auth.signingIn") : t("auth.signIn")}
+        {pending
+          ? t("auth.signingIn")
+          : enrolling
+            ? t("auth.enroll.confirm")
+            : t("auth.signIn")}
       </PremiumButton>
 
       {/* No recovery-code endpoint exists yet (docs/authentication.md §9 lists
-          every auth route). Left in place, inert, until one does. */}
-      <PremiumButton
-        variant="soft"
-        icon={KeyRound}
-        className="mt-2.5 w-full"
-      >
-        {t("auth.useRecoveryCode")}
-      </PremiumButton>
+          every auth route). Left in place, inert, until one does — but not to
+          someone mid-enrolment, who has no recovery codes to reach for. */}
+      {!enrolling && (
+        <PremiumButton
+          variant="soft"
+          icon={KeyRound}
+          className="mt-2.5 w-full"
+        >
+          {t("auth.useRecoveryCode")}
+        </PremiumButton>
+      )}
 
       <BackLink onClick={onBack}>{t("common.back")}</BackLink>
     </>
@@ -408,6 +521,7 @@ export function LoginForm() {
   const t = useT()
   const router = useLocaleRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
+  const queryClient = useQueryClient()
 
   const [step, setStep] = React.useState<Step>("credentials")
   const [phone, setPhone] = React.useState("")
@@ -421,10 +535,31 @@ export function LoginForm() {
   const login = useLogin()
   const enable2FA = use2FAEnable()
 
-  // Provisions the enrolment secret for a user who has no authenticator yet.
-  // The QR it returns has nowhere to render in this screen — see the note in
-  // the handover; the request still has to happen for `2fa/enable` to succeed.
-  use2FASetup(step === "authenticator" && user?.tfaEnabled === false)
+  /**
+   * Provisions the enrolment secret for a user who has no authenticator yet —
+   * the state an administrator's "Reset 2FA" leaves behind.
+   *
+   * This is the only place that decides whether a QR exists at all, and it owns
+   * the fetch for both halves of the screen: the brand panel subscribes to the
+   * same `["2fa-setup"]` entry to turn its front card over (`panel-stack.tsx`).
+   * Which is why `removeQueries` below matters — see there.
+   */
+  const enrolling = user?.tfaEnabled === false
+  const setup2FA = use2FASetup(step === "authenticator" && enrolling)
+
+  /**
+   * Forget the provisioned secret.
+   *
+   * `["2fa-setup"]` is keyed on nothing — no phone, no user id — and held at
+   * `staleTime: Infinity`, so without this a second sign-in in the same tab
+   * would be served the *previous* user's QR and setup key straight from the
+   * cache. That was survivable while the code was fetched and never shown; now
+   * that both the panel and the form draw it, a stale one is an enrolment
+   * against the wrong account.
+   */
+  const forgetSetup = React.useCallback(() => {
+    queryClient.removeQueries({ queryKey: ["2fa-setup"] })
+  }, [queryClient])
 
   const requestOtp = React.useCallback(() => {
     setError(null)
@@ -486,6 +621,9 @@ export function LoginForm() {
             // The temp token MUST go first: `getAuthToken` prefers it, so
             // leaving it behind would shadow the real session token forever.
             localStorage.removeItem(TEMP_TOKEN_KEY)
+            // Enrolled — the secret is the authenticator app's now, and this
+            // cache entry must not outlive it into the next sign-in.
+            forgetSetup()
 
             const account = data.user ?? user
             if (data.accessToken && account) {
@@ -507,13 +645,27 @@ export function LoginForm() {
         }
       )
     },
-    [enable2FA, router, setAuth, user, t]
+    [enable2FA, forgetSetup, router, setAuth, user, t]
   )
 
-  const goBack = React.useCallback((to: Step) => {
-    setError(null)
-    setStep(to)
-  }, [])
+  const goBack = React.useCallback(
+    (to: Step) => {
+      setError(null)
+      setStep(to)
+
+      // Back to the number is starting over, possibly as somebody else, so the
+      // account and its provisioned secret both go.
+      //
+      // Stepping back only as far as the SMS code deliberately keeps them: the
+      // user is still enrolling, and re-fetching would hand them a second
+      // secret that does not match the one they may already have scanned.
+      if (to === "credentials") {
+        setUser(null)
+        forgetSetup()
+      }
+    },
+    [forgetSetup]
+  )
 
   return (
     <div className="flex min-h-svh flex-col px-6 py-8 sm:px-10 lg:px-14">
@@ -556,6 +708,10 @@ export function LoginForm() {
           )}
           {step === "authenticator" && (
             <Authenticator
+              enrolling={enrolling}
+              setup={setup2FA.data ?? null}
+              setupPending={setup2FA.isPending}
+              setupFailed={setup2FA.isError}
               onSubmit={verifyTotp}
               onBack={() => goBack("otp")}
               pending={enable2FA.isPending}

@@ -1,9 +1,10 @@
 import { IdCard, ShieldCheck, Workflow } from "lucide-react"
 
 import { BajatMark } from "@/components/brand/bajat-mark"
-import { IdCardStack } from "@/components/brand/id-card-stack"
 import { getTranslations } from "@/i18n/server"
 import type { TranslationKey } from "@/i18n/translate"
+
+import { PanelStack } from "./panel-stack"
 
 /**
  * Login brand panel — the dark half of the split screen.
@@ -14,8 +15,10 @@ import type { TranslationKey } from "@/i18n/translate"
  *
  * Motion is a one-time staggered entrance and nothing more: the stack settles
  * and holds. The user's task is the form on the left, and a card that keeps
- * drifting keeps reclaiming the eye. Reduced motion is handled globally in
- * globals.css (§18.0 rule 10).
+ * drifting keeps reclaiming the eye. The one later movement is a response, not
+ * an ambience — the front card turns over to hand a reset user their new 2FA
+ * enrolment code. Reduced motion is handled globally in globals.css
+ * (§18.0 rule 10).
  */
 
 const POINTS: { icon: typeof IdCard; key: TranslationKey }[] = [
@@ -76,7 +79,10 @@ export async function BrandPanel() {
       </div>
 
       <div className="relative flex items-center justify-center py-10">
-        <IdCardStack mode="panel" />
+        {/* A client island: the front card turns over to show the enrolment QR
+            when a reset user signs in, which means reading state this server
+            component cannot see. See `panel-stack.tsx`. */}
+        <PanelStack />
       </div>
 
       {/* Value line + supporting points */}

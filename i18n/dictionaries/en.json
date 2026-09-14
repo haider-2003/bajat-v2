@@ -226,6 +226,16 @@
     "totpHint": "Enter the current code from your authenticator app.",
     "totpAppHint": "Open Google Authenticator, Authy, or your organization's app and use the code listed under {app}.",
     "useRecoveryCode": "Use a recovery code",
+    "enroll": {
+      "title": "Set up your authenticator",
+      "hint": "Two-factor authentication was reset for this account, so you need to enrol again. Add the new code to your authenticator app, then enter the 6-digit code it shows.",
+      "confirm": "Confirm and sign in",
+      "panelPointer": "Scan the QR code on the card beside this form with your authenticator app.",
+      "scanHint": "Scan this with your authenticator app",
+      "cardTitle": "Scan to enrol",
+      "cardHint": "Add a new account in your authenticator app, then point it at this code.",
+      "failed": "Couldn't load your new enrolment code. Go back and sign in again to get a fresh one."
+    },
     "stepOf": "Step {step} of {total}",
     "copyright": "© {year} {name}",
     "support": "Support",
