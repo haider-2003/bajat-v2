@@ -18,7 +18,7 @@ come from. Governing spec: [DESIGN.md](DESIGN.md).
 
 | Template | Ramp | Accent | Primary | Notes |
 |---|---|---|---|---|
-| **Graphite** | `:root` / `.dark` defaults | violet | neutral | The shipped design. No CSS block — it *is* the fallback, which is what makes it a safe reset target. |
+| **Graphite** | `:root` / `.dark` defaults | blue | neutral | The shipped design. No CSS block — it *is* the fallback, which is what makes it a safe reset target. |
 | **Clay** | `[data-template="clay"]` | clay `#D97757` | accent | claude.ai's warm paper. Cream page, warmer rail, orange buttons. |
 | **Ink** | `[data-template="ink"]` | blue | neutral | High contrast. Borders at ~3× the usual, white rail on a tinted page. Structure from outlines, not fills. |
 | **Ledger** | `[data-template="ledger"]` | **indigo** `#635BFF` | accent | The Stripe dashboard. Blue-cast neutrals, navy ink, indigo buttons. Closest of the four to what Bajat actually is. |

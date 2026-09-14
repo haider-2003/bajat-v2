@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils"
  * (8px radius, 1px border, accent border + 3px ring on focus). The mono face
  * and tabular figures keep the digits optically aligned (§3.1).
  *
- * Presentation only: typing moves focus and paste fans out across the boxes,
- * because a code field that does not do that is not really reviewable — but
- * nothing is submitted or validated.
+ * Typing moves focus and paste fans out across the boxes. Enter reports up
+ * through `onEnter` so the code can be submitted from the keyboard without
+ * reaching for the button; validation stays with the caller.
  */
 
 const LENGTH = 6
@@ -22,11 +22,14 @@ const LENGTH = 6
 export function OtpInput({
   value,
   onChange,
+  onEnter,
   invalid,
   autoFocus,
 }: {
   value: string
   onChange: (next: string) => void
+  /** Enter pressed in any box — the caller decides whether to submit. */
+  onEnter?: () => void
   invalid?: boolean
   autoFocus?: boolean
 }) {
@@ -60,6 +63,12 @@ export function OtpInput({
   }
 
   const handleKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      // These boxes are not inside a <form>, so nothing submits on its own.
+      e.preventDefault()
+      onEnter?.()
+      return
+    }
     if (e.key === "Backspace" && !digits[i]?.trim() && i > 0) {
       refs.current[i - 1]?.focus()
     }

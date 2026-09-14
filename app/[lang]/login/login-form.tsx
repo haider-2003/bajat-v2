@@ -20,7 +20,6 @@ import {
 } from "@/features/auth/api"
 import { useAuthStore } from "@/features/auth/store"
 import type { User } from "@/features/users/types"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input, InputGroup, InputGroupAddon } from "@/components/ui/input"
 import { useT } from "@/i18n/context"
 import { Link, useLocaleRouter } from "@/i18n/navigation"
@@ -46,9 +45,6 @@ import { PremiumButton } from "./premium-button"
 type Step = "credentials" | "otp" | "authenticator"
 
 const STEPS: Step[] = ["credentials", "otp", "authenticator"]
-
-/** Seconds before "Resend code" becomes available again. */
-const RESEND_COOLDOWN = 60
 
 /* ------------------------------------------------------------------ *
  * Phone handling
@@ -76,10 +72,6 @@ function maskPhone(input: string): string {
   const digits = input.replace(/\D/g, "").replace(/^0+/, "")
   if (digits.length < 7) return `+964 ${digits}`
   return `+964 ${digits.slice(0, 3)} ••• ${digits.slice(-4)}`
-}
-
-function formatCountdown(seconds: number): string {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
 }
 
 /* ------------------------------------------------------------------ *
@@ -172,7 +164,9 @@ function Credentials({
         </p>
       </header>
 
-      <div className="mt-8 space-y-4">
+      {/* One field only: `POST /auth/login` takes `{ phone, otp }` and nothing
+          else (docs/authentication.md §2), so there is no password box. */}
+      <div className="mt-8">
         <Field label={t("auth.phoneLabel")} htmlFor="phone">
           {/* Country code is welded to the field, not a chip beside it:
               one control, so one border and one focus ring (§10.11). */}
@@ -203,16 +197,6 @@ function Credentials({
             />
           </InputGroup>
         </Field>
-
-        {/* No password box: `POST /auth/login` takes `{ phone, otp }` and
-            nothing else (docs/authentication.md §2). The field that used to
-            sit here was never submitted. */}
-        <label className="group/field-label flex w-fit cursor-pointer items-center gap-2 pt-0.5">
-          <Checkbox defaultChecked />
-          <span className="text-[13px] text-text-secondary">
-            {t("auth.keepSignedIn")}
-          </span>
-        </label>
       </div>
 
       <FormError>{error}</FormError>
@@ -232,20 +216,14 @@ function Otp({
   phone,
   onSubmit,
   onBack,
-  onResend,
   pending,
-  resending,
   error,
-  resendIn,
 }: {
   phone: string
   onSubmit: (code: string) => void
   onBack: () => void
-  onResend: () => void
   pending: boolean
-  resending: boolean
   error: string | null
-  resendIn: number
 }) {
   const t = useT()
   const [code, setCode] = React.useState("")
@@ -275,25 +253,12 @@ function Otp({
         <OtpInput
           value={code}
           onChange={setCode}
+          onEnter={() => {
+            if (!pending && complete) onSubmit(code)
+          }}
           invalid={!!error}
           autoFocus
         />
-        <p className="mt-3 text-xs text-text-muted">
-          {t("auth.otpNotReceived")}{" "}
-          <button
-            type="button"
-            onClick={onResend}
-            disabled={resendIn > 0 || resending}
-            className="font-medium text-text underline-offset-4 hover:underline"
-          >
-            {t("auth.resendCode")}
-          </button>{" "}
-          <span className="text-text-placeholder">
-            {resendIn > 0
-              ? t("auth.resendIn", { time: formatCountdown(resendIn) })
-              : t("auth.resendNow")}
-          </span>
-        </p>
       </div>
 
       <FormError>{error}</FormError>
@@ -342,6 +307,9 @@ function Authenticator({
         <OtpInput
           value={code}
           onChange={setCode}
+          onEnter={() => {
+            if (!pending && complete) onSubmit(code)
+          }}
           invalid={!!error}
           autoFocus
         />
@@ -444,7 +412,6 @@ export function LoginForm() {
   const [step, setStep] = React.useState<Step>("credentials")
   const [phone, setPhone] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
-  const [resendIn, setResendIn] = React.useState(0)
 
   // Held from the login response so it can be paired with the access token
   // that only arrives at the end of the TOTP step.
@@ -459,37 +426,24 @@ export function LoginForm() {
   // the handover; the request still has to happen for `2fa/enable` to succeed.
   use2FASetup(step === "authenticator" && user?.tfaEnabled === false)
 
-  // Resend cooldown.
-  React.useEffect(() => {
-    if (resendIn <= 0) return
-    const id = setTimeout(() => setResendIn((s) => s - 1), 1000)
-    return () => clearTimeout(id)
-  }, [resendIn])
-
-  const requestOtp = React.useCallback(
-    (options?: { advance?: boolean }) => {
-      setError(null)
-      sendOtp.mutate(
-        { phone: normalizePhone(phone) },
-        {
-          onSuccess: () => {
-            setResendIn(RESEND_COOLDOWN)
-            if (options?.advance) setStep("otp")
-          },
-          onError: (err) => {
-            setError(
-              getAuthErrorMessage(
-                err,
-                t("auth.errors.sendFailed"),
-                t("auth.errors.offline")
-              )
+  const requestOtp = React.useCallback(() => {
+    setError(null)
+    sendOtp.mutate(
+      { phone: normalizePhone(phone) },
+      {
+        onSuccess: () => setStep("otp"),
+        onError: (err) => {
+          setError(
+            getAuthErrorMessage(
+              err,
+              t("auth.errors.sendFailed"),
+              t("auth.errors.offline")
             )
-          },
-        }
-      )
-    },
-    [phone, sendOtp, t]
-  )
+          )
+        },
+      }
+    )
+  }, [phone, sendOtp, t])
 
   const verifyOtp = React.useCallback(
     (code: string) => {
@@ -586,7 +540,7 @@ export function LoginForm() {
                 setPhone(next)
                 setError(null)
               }}
-              onNext={() => requestOtp({ advance: true })}
+              onNext={requestOtp}
               pending={sendOtp.isPending}
               error={error}
             />
@@ -596,11 +550,8 @@ export function LoginForm() {
               phone={phone}
               onSubmit={verifyOtp}
               onBack={() => goBack("credentials")}
-              onResend={() => requestOtp()}
               pending={login.isPending}
-              resending={sendOtp.isPending}
               error={error}
-              resendIn={resendIn}
             />
           )}
           {step === "authenticator" && (

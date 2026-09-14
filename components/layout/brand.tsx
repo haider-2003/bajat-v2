@@ -28,7 +28,7 @@ import type { TranslationKey } from "@/i18n/translate"
  * `--accent-violet`, `--ring` or `--primary` follows automatically, and nothing
  * has to be re-plumbed to opt in.
  *
- * Defaults are the `:root` values, so `violet` and `neutral` deliberately have
+ * Defaults are the `:root` values, so `blue` and `neutral` deliberately have
  * no CSS block of their own — selecting them means falling back to what
  * globals.css already declares.
  */
@@ -204,7 +204,8 @@ export type TemplateDef = {
 /**
  * `graphite` is the shipped design and deliberately has no CSS block —
  * selecting it means falling back to the `:root` / `.dark` ramps, which is
- * also what makes it a safe reset target.
+ * also what makes it a safe reset target. Its accent is `blue` for the same
+ * reason: blue is the `:root` accent, so graphite is the whole default.
  *
  * `clay` is claude.ai's warm palette, documented in
  * docs/CLAUDE-CHAT-DESIGN-SYSTEM.md. It pairs the cream ramp with the `clay`
@@ -232,7 +233,7 @@ export const TEMPLATES: readonly TemplateDef[] = [
     value: "graphite",
     labelKey: "settings.appearance.templates.graphite",
     descriptionKey: "settings.appearance.templates.graphiteHint",
-    accent: "violet",
+    accent: "blue",
     primary: "neutral",
     preview: {
       light: {
@@ -352,7 +353,7 @@ export function matchTemplate(
     : null
 }
 
-const DEFAULT_ACCENT: Accent = "violet"
+const DEFAULT_ACCENT: Accent = "blue"
 const DEFAULT_PRIMARY: PrimaryStyle = "neutral"
 export const DEFAULT_TEMPLATE: Template = "graphite"
 
@@ -366,7 +367,7 @@ const TEMPLATE_KEY = "bajat-template"
 
 /**
  * Stamps both attributes before first paint, alongside `themeInitScript`.
- * Without it the first frame renders in violet/neutral and then snaps to the
+ * Without it the first frame renders in blue/neutral and then snaps to the
  * stored choice — the same flash the theme script exists to prevent.
  *
  * Unknown values fall through to the defaults rather than being written, so a

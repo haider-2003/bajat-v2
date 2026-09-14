@@ -133,20 +133,22 @@
   --accent: #f5f5f5;
   --accent-foreground: #171717;
 
-  /* Violet accent reserved for focus / selection (§2.1) */
-  --accent-violet: #7c3aed;
-  --accent-soft: #f3eeff;
-  --accent-border: #e3d8ff;
+  /* Blue accent reserved for focus / selection (§2.1). The token is still
+     called `--accent-violet` because it names the *slot*, not the hue — every
+     alternate accent below writes the same property. */
+  --accent-violet: #2563eb;
+  --accent-soft: #eaf1fe;
+  --accent-border: #cfe0fd;
   /* The hue darkened enough to carry white text at AA — see the
      "Primary strategy" block below. §2.1's `--color-accent-hover`. */
-  --accent-strong: #6d28d9;
+  --accent-strong: #1d4ed8;
 
   /* Borders — hairlines at ~7% black (§1.6) */
   --border: #eaeaea;
   --border-strong: #d4d4d4;
   --border-subtle: #f1f1f1;
   --input: #eaeaea;
-  --ring: rgba(124, 58, 237, 0.35);
+  --ring: rgba(37, 99, 235, 0.35);
 
   /* Status (§2.2) */
   --success: #16a34a;
@@ -177,7 +179,7 @@
   --sidebar-accent: rgba(0, 0, 0, 0.04);
   --sidebar-accent-foreground: #171717;
   --sidebar-border: #eaeaea;
-  --sidebar-ring: rgba(124, 58, 237, 0.35);
+  --sidebar-ring: rgba(37, 99, 235, 0.35);
 
   /* Overlay (§13.2) */
   --overlay: rgba(15, 15, 15, 0.32);
@@ -221,18 +223,18 @@
   --accent: rgba(255, 255, 255, 0.045);
   --accent-foreground: #ededed;
 
-  --accent-violet: #a78bfa;
-  --accent-soft: rgba(167, 139, 250, 0.14);
-  --accent-border: rgba(167, 139, 250, 0.32);
+  --accent-violet: #60a5fa;
+  --accent-soft: rgba(96, 165, 250, 0.14);
+  --accent-border: rgba(96, 165, 250, 0.32);
   /* Dark mode puts near-black text on the hue, so no darkening is needed. */
-  --accent-strong: #a78bfa;
+  --accent-strong: #60a5fa;
 
   /* Borders LIGHTEN the ground (§16.1) */
   --border: #262626;
   --border-strong: #3a3a3a;
   --border-subtle: #1c1c1c;
   --input: #2a2a2a;
-  --ring: rgba(167, 139, 250, 0.45);
+  --ring: rgba(96, 165, 250, 0.45);
 
   /* Status lightened; backgrounds become low-alpha overlays (§2.3) */
   --success: #4ade80;
@@ -260,7 +262,7 @@
   --sidebar-accent: rgba(255, 255, 255, 0.08);
   --sidebar-accent-foreground: #ededed;
   --sidebar-border: #262626;
-  --sidebar-ring: rgba(167, 139, 250, 0.45);
+  --sidebar-ring: rgba(96, 165, 250, 0.45);
 
   --overlay: rgba(0, 0, 0, 0.6);
 }
@@ -613,7 +615,7 @@
    Only the *accent slot* moves. Status, chart and surface tokens are
    untouched, so a green accent never turns a danger badge green.
 
-   `data-accent="violet"` and `data-primary="neutral"` have no block: they
+   `data-accent="blue"` and `data-primary="neutral"` have no block: they
    are the :root defaults declared above, so selecting them means falling
    back rather than overriding. Every other hue is a light/dark **pair**
    (§2.2/§2.3) — a tone dark enough for white text in light mode is
@@ -647,22 +649,23 @@
   --sidebar-ring: rgba(165, 160, 255, 0.45);
 }
 
-/* ---- Blue — §2.1 Strategy B alternative, §19.1 `info` ---- */
-:root[data-accent="blue"] {
-  --accent-violet: #2563eb;
-  --accent-soft: #eaf1fe;
-  --accent-border: #cfe0fd;
-  --ring: rgba(37, 99, 235, 0.35);
-  --sidebar-ring: rgba(37, 99, 235, 0.35);
-  --accent-strong: #1d4ed8;
+/* ---- Violet — §2.1's other documented strategy, and the accent this
+   product shipped with before blue became the default ---- */
+:root[data-accent="violet"] {
+  --accent-violet: #7c3aed;
+  --accent-soft: #f3eeff;
+  --accent-border: #e3d8ff;
+  --ring: rgba(124, 58, 237, 0.35);
+  --sidebar-ring: rgba(124, 58, 237, 0.35);
+  --accent-strong: #6d28d9;
 }
-.dark[data-accent="blue"] {
-  --accent-violet: #60a5fa;
-  --accent-soft: rgba(96, 165, 250, 0.14);
-  --accent-border: rgba(96, 165, 250, 0.32);
-  --ring: rgba(96, 165, 250, 0.45);
-  --sidebar-ring: rgba(96, 165, 250, 0.45);
-  --accent-strong: #60a5fa;
+.dark[data-accent="violet"] {
+  --accent-violet: #a78bfa;
+  --accent-soft: rgba(167, 139, 250, 0.14);
+  --accent-border: rgba(167, 139, 250, 0.32);
+  --ring: rgba(167, 139, 250, 0.45);
+  --sidebar-ring: rgba(167, 139, 250, 0.45);
+  --accent-strong: #a78bfa;
 }
 
 /* ---- Cyan — chart-6 (#06B6D4) taken to the same two tiers ---- */
