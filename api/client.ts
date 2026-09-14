@@ -13,12 +13,22 @@ import { transformRequestKeys, transformResponseKeys } from "@/utils/api/key-con
  * `api` directly only for non-REST endpoints, binaries, and public calls.
  */
 
+const PRODUCTION_API_BASE_URL = "https://identities.g4t.io/api/dashboard/v1/"
+
 /**
  * Overridable so staging/local backends do not need a code change. The default
  * is the production dashboard API.
+ *
+ * `NEXT_PUBLIC_*` values are inlined at build time, so a key that exists but is
+ * blank in the build environment inlines as `""`, and `??` would pass that
+ * straight through. Axios treats a falsy `baseURL` as "no base" and leaves the
+ * relative endpoint path untouched, so the browser resolves it against the
+ * current page — `auth/send_otp` posts to `/<lang>/auth/send_otp` on our own
+ * origin instead of the API. Blank has to count as unset.
  */
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://identities.g4t.io/api/dashboard/v1/"
+const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
+
+export const API_BASE_URL = configuredApiBaseUrl || PRODUCTION_API_BASE_URL
 
 const baseConfig: AxiosRequestConfig = {
   baseURL: API_BASE_URL,
