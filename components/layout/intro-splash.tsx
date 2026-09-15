@@ -82,6 +82,11 @@ export const introInitScript = `
     var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     var seen = sessionStorage.getItem(${JSON.stringify(SESSION_KEY)}) === "1";
     if (reduce || seen) return;
+    // Claim the session *now* rather than at dismiss, ~1750ms later. Anything
+    // that reloads the document inside that window — the 401 handler's hard
+    // redirect above all — would otherwise arrive at a session this never got
+    // to mark, and play the whole intro a second time.
+    sessionStorage.setItem(${JSON.stringify(SESSION_KEY)}, "1");
   } catch (e) { /* private mode: play it */ }
   document.documentElement.dataset.intro = "playing";
   // themeInitScript runs immediately before this one and has already put
