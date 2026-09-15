@@ -106,6 +106,9 @@
     "collapse": "Collapse sidebar",
     "switchOrganization": "Switch organization",
     "signedIn": "Signed in",
+    "searchPlaceholder": "Jump to a page…",
+    "searchEmpty": "Nothing matches “{query}”",
+    "searchHint": "Type in English or Arabic.",
     "navigation": "Navigation",
     "openNavigation": "Open navigation",
     "closeNavigation": "Close navigation",
@@ -950,6 +953,24 @@
   "settings": {
     "metaTitle": "Settings · Bajat",
     "subtitle": "Preferences for this workspace and this device.",
+    "account": {
+      "title": "Account",
+      "description": "The account you are signed in as. These details come from the directory — ask an administrator to change them.",
+      "nameLabel": "Name",
+      "phoneLabel": "Phone",
+      "emailLabel": "Email",
+      "typeLabel": "Account type",
+      "organizationLabel": "Organization",
+      "notSet": "Not set",
+      "signedOut": "You are not signed in, so there is nothing to show here.",
+      "signOutLabel": "Sign out",
+      "signOutDescription": "Ends this session on this device. Signing back in needs your phone and your authenticator app.",
+      "type": {
+        "admin": "Administrator",
+        "organizationUser": "Organization user",
+        "branchUser": "Branch user"
+      }
+    },
     "language": {
       "title": "Language",
       "description": "The language this dashboard is shown in. The choice is remembered on this device and travels in the URL, so a link you share opens in the language you were reading.",

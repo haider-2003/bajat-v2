@@ -141,17 +141,22 @@ export const FLAT_VARIANTS: FlatVariant[] = ["tinted", "solid", "outline"]
 
 export const DEFAULT_FLAT: FlatVariant = "tinted"
 
-const FLAT_FACES: Record<FlatVariant, { face: string; muted: string }> = {
+const FLAT_FACES: Record<
+  FlatVariant,
+  { face: string; faceText: string; muted: string }
+> = {
   tinted: {
     face: [
       "bg-[var(--ctl-face-bg)] text-[var(--ctl-face-fg)]",
       "shadow-[0_1px_2px_rgba(0,0,0,0.05)] ring-1 ring-[var(--ctl-face-rim)]",
       "dark:shadow-none",
     ].join(" "),
+    faceText: "text-[var(--ctl-face-fg)]",
     muted: "text-[var(--ctl-face-muted)]",
   },
   solid: {
     face: "bg-primary text-primary-foreground hover:bg-primary/90",
+    faceText: "text-primary-foreground",
     muted: "text-primary-foreground/70",
   },
   outline: {
@@ -159,6 +164,7 @@ const FLAT_FACES: Record<FlatVariant, { face: string; muted: string }> = {
       "bg-transparent text-[var(--ctl-face-fg)] ring-1 ring-[var(--ctl-face-rim)]",
       "hover:bg-[var(--ctl-face-bg)]",
     ].join(" "),
+    faceText: "text-[var(--ctl-face-fg)]",
     muted: "text-[var(--ctl-face-muted)]",
   },
 }
@@ -174,6 +180,14 @@ export type ControlSurface = {
      * the active nav chip.
      */
     face: string
+    /**
+     * Just the label colour `face` carries, with none of its fill.
+     *
+     * The sidebar's travelling highlight paints `face` on an element of its
+     * own, behind the rows, so the row it lands on needs the matching text
+     * colour without a second background stacked under the first.
+     */
+    faceText: string
     /**
      * The muted half of a two-tone label (§6.6) on `face`.
      *
@@ -206,6 +220,7 @@ export const CONTROL_SURFACE: Record<ControlStyle, ControlSurface> = {
   raised: {
     solid: TONE_SURFACE,
     face: SOFT_SURFACE,
+    faceText: "text-text",
     muted: "text-text-secondary",
     solidMuted: "text-[var(--pb-label)]",
   },
@@ -213,6 +228,7 @@ export const CONTROL_SURFACE: Record<ControlStyle, ControlSurface> = {
   ink: {
     solid: TONE_SURFACE,
     face: TONE_SURFACE,
+    faceText: "text-[var(--pb-label)]",
     muted: "text-[var(--pb-label)]",
     solidMuted: "text-[var(--pb-label)]",
   },

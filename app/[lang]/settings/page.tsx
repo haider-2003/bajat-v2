@@ -4,6 +4,7 @@ import { AppShell } from "@/components/layout/app-shell"
 import { SidebarTrigger } from "@/components/layout/sidebar"
 import { getTranslations } from "@/i18n/server"
 
+import { AccountSection } from "./components/account-section"
 import { AppearanceSection } from "./components/appearance-section"
 import { LanguageSection } from "./components/language-section"
 
@@ -61,6 +62,9 @@ export default async function SettingsPage() {
               without scrolling past a section they cannot read either. */}
           <LanguageSection />
           <AppearanceSection />
+          {/* Account last: it is reference, not a control — nothing on it
+              changes the page you are reading it on. */}
+          <AccountSection />
         </div>
       </div>
     </AppShell>

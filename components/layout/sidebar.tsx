@@ -4,8 +4,6 @@ import * as React from "react"
 import { createPortal } from "react-dom"
 import {
   ChevronDown,
-  Loader2,
-  LogOut,
   Menu,
   MoreHorizontal,
   PanelLeft,
@@ -15,14 +13,8 @@ import {
 } from "lucide-react"
 
 import { BajatMark } from "@/components/brand/bajat-mark"
-import { useLogout } from "@/features/auth/api"
-import { useAuthStore } from "@/features/auth/store"
 import { useDir, useT } from "@/i18n/context"
-import {
-  Link,
-  useLocalePathname,
-  useLocaleRouter,
-} from "@/i18n/navigation"
+import { Link, useLocalePathname } from "@/i18n/navigation"
 import type { Translator } from "@/i18n/translate"
 import { cn } from "@/lib/utils"
 import {
@@ -37,6 +29,7 @@ import {
   type ControlSurface,
 } from "@/components/ui/control-style"
 
+import { SidebarSearchDialog } from "./sidebar-search-dialog"
 import { useShell } from "./shell-context"
 
 /**
@@ -135,6 +128,116 @@ function CollapsedLabel({
 }
 
 /* ------------------------------------------------------------------ *
+ * Travelling highlight
+ * ------------------------------------------------------------------ */
+
+/**
+ * Which row the pointer is over, and which list it lives in.
+ *
+ * The zone matters because each list draws its own highlight: pointing at
+ * something in the footer must not drag the chip out of the scrolling section
+ * list, it should just light the footer row and leave the active one where it
+ * is.
+ */
+type HoveredRow = { zone: string; key: string } | null
+
+/**
+ * One chip per list, moved rather than redrawn.
+ *
+ * The active row used to own `chip.face` outright and every other row faded a
+ * flat hover fill in and out underneath the cursor, so crossing the rail read
+ * as a row of lights blinking on and off. Here a single element carries the
+ * face and slides between rows: it rests on the current page, follows the
+ * pointer while it is over the list, and returns when it leaves.
+ *
+ * It is measured rather than styled into place because the rows are not a
+ * uniform height — a group's children are 32px against a leaf's 34 — so the
+ * chip animates its height along with its offset.
+ *
+ * Rows are found by walking `[data-nav-key]` rather than with an attribute
+ * selector: the keys are hrefs, and quoting those into a selector is a escaping
+ * problem with no upside.
+ */
+function NavHighlight({
+  containerRef,
+  litKey,
+  pathname,
+  face,
+}: {
+  containerRef: React.RefObject<HTMLDivElement | null>
+  litKey: string | null
+  /** Not read — a dependency, so the chip re-measures when the current row moves. */
+  pathname: string
+  face: string
+}) {
+  const chipRef = React.useRef<HTMLDivElement>(null)
+
+  React.useLayoutEffect(() => {
+    const container = containerRef.current
+    const chip = chipRef.current
+    if (!container || !chip) return
+
+    const place = () => {
+      const rows = Array.from(
+        container.querySelectorAll<HTMLElement>("[data-nav-key]")
+      )
+      const row = litKey
+        ? rows.find((r) => r.dataset.navKey === litKey)
+        : rows.find((r) => r.hasAttribute("data-nav-current"))
+
+      if (!row) {
+        chip.style.opacity = "0"
+        return
+      }
+
+      const c = container.getBoundingClientRect()
+      const r = row.getBoundingClientRect()
+
+      // The first placement is a jump, not a slide: without this the chip
+      // flies in from the top of the list on every mount. Suppress the
+      // transition, commit the position, then hand it back.
+      const first = chip.dataset.placed !== "true"
+      if (first) chip.style.transition = "none"
+
+      chip.style.transform = `translateY(${r.top - c.top}px)`
+      chip.style.height = `${r.height}px`
+      chip.style.opacity = "1"
+
+      if (first) {
+        // Reading a layout property flushes both writes above while the
+        // transition is still off, so they are not what ends up animating.
+        void chip.offsetHeight
+        chip.style.transition = ""
+        chip.dataset.placed = "true"
+      }
+    }
+
+    place()
+
+    // Rows shift when a group opens, a section collapses, the rail narrows or
+    // a webfont lands. Watching the container covers all four.
+    const observer = new ResizeObserver(place)
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [containerRef, litKey, pathname])
+
+  // Position, height and opacity are written straight to the node above; the
+  // classes only supply the material and the easing.
+  return (
+    <div
+      ref={chipRef}
+      aria-hidden
+      className={cn(
+        "pointer-events-none absolute inset-x-0 top-0 h-0 rounded-md opacity-0",
+        "transition-[transform,height,opacity] duration-200 ease-out",
+        "motion-reduce:transition-none",
+        face
+      )}
+    />
+  )
+}
+
+/* ------------------------------------------------------------------ *
  * Leaf nav item — 34px, 8px radius, 16px icon, 10px gap (§5.2)
  * ------------------------------------------------------------------ */
 
@@ -143,39 +246,47 @@ function NavLeaf({
   active,
   collapsed,
   chip,
+  zone,
+  hovered,
 }: {
   item: NavItem
   active: boolean
   collapsed: boolean
   chip: ControlSurface
+  zone: string
+  hovered: HoveredRow
 }) {
   const t = useT()
   const Icon = item.icon
   const label = t(item.labelKey)
   const ref = React.useRef<HTMLAnchorElement>(null)
+  // The chip is under this row when the pointer is on it, or when the pointer
+  // is somewhere else entirely and this is the page you are on.
+  const lit = hovered?.key === item.href || (active && hovered?.zone !== zone)
 
   return (
     <Link
       ref={ref}
       href={item.href}
       aria-current={active ? "page" : undefined}
+      data-nav-key={item.href}
+      data-nav-current={active ? "" : undefined}
       className={cn(
+        // `relative` keeps the row above the highlight, which is an earlier
+        // sibling and would otherwise paint over it.
         "group/item relative flex h-nav-item items-center gap-2.5 rounded-md px-2.5",
-        "text-sm font-medium transition-[background-color,box-shadow,color] duration-120",
+        "text-sm font-medium transition-colors duration-120",
         "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
         collapsed && "justify-center px-0",
-        active
-          ? chip.face
-          : "text-text-secondary hover:bg-[rgba(0,0,0,0.04)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.045)]"
+        // No fill here any more — `NavHighlight` carries it.
+        lit ? chip.faceText : "text-text-secondary"
       )}
     >
       <Icon
         className={cn(
           "size-4 shrink-0 transition-colors",
           // Icons sit one contrast step lighter than their label (§15.3).
-          active
-            ? "text-current"
-            : "text-text-muted group-hover/item:text-text"
+          lit ? "text-current" : "text-text-muted"
         )}
         strokeWidth={1.5}
       />
@@ -194,11 +305,15 @@ function NavGroup({
   pathname,
   collapsed,
   chip,
+  zone,
+  hovered,
 }: {
   item: NavItem
   pathname: string
   collapsed: boolean
   chip: ControlSurface
+  zone: string
+  hovered: HoveredRow
 }) {
   const t = useT()
   const childActive = item.children?.some((c) => c.href === pathname) ?? false
@@ -208,10 +323,20 @@ function NavGroup({
   // open unless the user has explicitly toggled it since.
   const [override, setOverride] = React.useState<boolean | null>(null)
   const open = override ?? childActive
+  const headerLit =
+    hovered?.key === item.href ||
+    (childActive && !open && hovered?.zone !== zone)
 
   if (collapsed) {
     return (
-      <NavLeaf item={item} active={childActive} collapsed chip={chip} />
+      <NavLeaf
+        item={item}
+        active={childActive}
+        collapsed
+        chip={chip}
+        zone={zone}
+        hovered={hovered}
+      />
     )
   }
 
@@ -221,17 +346,22 @@ function NavGroup({
         type="button"
         onClick={() => setOverride(!open)}
         aria-expanded={open}
+        data-nav-key={item.href}
+        // A closed group standing in for the child you are on is the row that
+        // holds the chip; once it opens, the child itself takes it.
+        data-nav-current={childActive && !open ? "" : undefined}
         className={cn(
-          "group/item flex h-nav-item w-full items-center gap-2.5 rounded-md px-2.5",
+          "group/item relative flex h-nav-item w-full items-center gap-2.5 rounded-md px-2.5",
           "text-sm font-medium transition-colors duration-120",
           "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
-          childActive && !open
-            ? "text-text"
-            : "text-text-secondary hover:bg-[rgba(0,0,0,0.04)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.045)]"
+          headerLit ? chip.faceText : "text-text-secondary"
         )}
       >
         <Icon
-          className="size-4 shrink-0 text-text-muted transition-colors group-hover/item:text-text"
+          className={cn(
+            "size-4 shrink-0 transition-colors",
+            headerLit ? "text-current" : "text-text-muted"
+          )}
           strokeWidth={1.5}
         />
         <span className="truncate">{t(item.labelKey)}</span>
@@ -248,20 +378,24 @@ function NavGroup({
         <div className="mt-0.5 flex flex-col gap-0.5">
           {item.children?.map((child) => {
             const active = pathname === child.href
+            const childLit =
+              hovered?.key === child.href || (active && hovered?.zone !== zone)
             return (
               <Link
                 key={child.href}
                 href={child.href}
                 aria-current={active ? "page" : undefined}
+                data-nav-key={child.href}
+                data-nav-current={active ? "" : undefined}
                 className={cn(
                   // Child text aligns under the parent's text, not its icon (§5.7).
                   // Logical padding, so the indent moves to the right edge
                   // under RTL instead of stranding the labels mid-rail.
-                  "flex h-8 items-center rounded-md ps-[38px] pe-2.5 text-sm transition-colors duration-120",
+                  "relative flex h-8 items-center rounded-md ps-[38px] pe-2.5 text-sm transition-colors duration-120",
                   "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
-                  active
-                    ? "bg-[rgba(0,0,0,0.05)] font-medium text-text dark:bg-[rgba(255,255,255,0.06)]"
-                    : "font-normal text-text-secondary hover:bg-[rgba(0,0,0,0.04)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.045)]"
+                  childLit
+                    ? `font-medium ${chip.faceText}`
+                    : "font-normal text-text-secondary"
                 )}
               >
                 <span className="truncate">{t(child.labelKey)}</span>
@@ -433,13 +567,23 @@ function WorkspaceSwitcher({
  * Zone 2 — search field, sunken fill + keyboard hint (§6.7)
  * ------------------------------------------------------------------ */
 
-function SidebarSearch({ collapsed }: { collapsed: boolean }) {
+function SidebarSearch({
+  collapsed,
+  onOpen,
+}: {
+  collapsed: boolean
+  onOpen: () => void
+}) {
   const t = useT()
 
   if (collapsed) {
     return (
       <div className="flex justify-center px-2 pb-2">
-        <IconButton label={t("common.search")} className="size-nav-item">
+        <IconButton
+          label={t("common.search")}
+          onClick={onOpen}
+          className="size-nav-item"
+        >
           <Search className="size-4" strokeWidth={1.5} />
         </IconButton>
       </div>
@@ -450,6 +594,7 @@ function SidebarSearch({ collapsed }: { collapsed: boolean }) {
     <div className="px-3 pb-2">
       <button
         type="button"
+        onClick={onOpen}
         className={cn(
           "flex h-8 w-full items-center gap-2 rounded-md bg-surface-sunken px-2.5",
           "text-start transition-colors duration-120",
@@ -469,111 +614,6 @@ function SidebarSearch({ collapsed }: { collapsed: boolean }) {
         </kbd>
       </button>
     </div>
-  )
-}
-
-/* ------------------------------------------------------------------ *
- * Zone 5 — footer profile row, 52px (§5.9)
- * ------------------------------------------------------------------ */
-
-/**
- * Who is signed in. **Not a control.**
- *
- * It used to be the sign-out button — the whole 52px row, with nothing on it
- * saying so. Two things were wrong with that: the only way to leave was to
- * click something that looks like an account switcher, and every stray click
- * near the bottom of the rail ended the session. Signing out now has its own
- * button below (`SignOutButton`), so this is a plain label: no hover face, no
- * chevron promising a menu that does not exist.
- */
-function ProfileRow({ collapsed }: { collapsed: boolean }) {
-  const t = useT()
-  const user = useAuthStore((s) => s.user)
-
-  return (
-    <div
-      className={cn(
-        "flex h-[52px] w-full items-center gap-2.5 rounded-md px-2.5",
-        collapsed && "justify-center px-0"
-      )}
-    >
-      <span
-        aria-hidden
-        className="size-7 shrink-0 rounded-full"
-        style={{
-          backgroundImage: "linear-gradient(135deg, #FB923C 0%, #EF4444 100%)",
-        }}
-      />
-      {!collapsed && (
-        <span className="flex min-w-0 flex-1 flex-col items-start">
-          <span className="w-full truncate text-[13px] font-medium leading-tight text-text">
-            {user?.name ?? t("sidebar.signedIn")}
-          </span>
-          <span className="w-full truncate text-[11px] leading-tight text-text-muted">
-            {user?.email ?? user?.phone ?? ""}
-          </span>
-        </span>
-      )}
-    </div>
-  )
-}
-
-/**
- * Sign out — the destructive outline button of §7.2, at nav-item height.
- *
- * Red and labelled, because leaving is the one action in the rail that cannot
- * be undone by clicking somewhere else. It reads as danger without shouting:
- * an outline, not a solid red fill, so a permanently visible control does not
- * dominate a footer it is used from once a day.
- *
- * The local logout runs whether or not the server call succeeds — a failed
- * request must never trap someone inside a signed-in shell
- * (docs/authentication.md §7).
- */
-function SignOutButton({ collapsed }: { collapsed: boolean }) {
-  const t = useT()
-  // The locale-aware router: `/login` is not a route, `/en/login` is.
-  const router = useLocaleRouter()
-  const logout = useAuthStore((s) => s.logout)
-  const logoutMutation = useLogout()
-  const pending = logoutMutation.isPending
-
-  const signOut = () => {
-    if (pending) return
-    const finish = () => {
-      logout()
-      router.push("/login")
-    }
-    logoutMutation.mutate(undefined, { onSuccess: finish, onError: finish })
-  }
-
-  const Icon = pending ? Loader2 : LogOut
-
-  return (
-    <button
-      type="button"
-      onClick={signOut}
-      disabled={pending}
-      title={t("auth.signOut")}
-      aria-label={t("auth.signOut")}
-      aria-busy={pending}
-      className={cn(
-        "inline-flex h-nav-item items-center justify-center gap-2 rounded-md",
-        "border border-danger/25 text-[13px] font-medium text-danger",
-        "transition-colors duration-120 hover:bg-danger-bg hover:border-danger/40",
-        "outline-none focus-visible:ring-2 focus-visible:ring-danger/40",
-        "disabled:cursor-not-allowed disabled:opacity-70",
-        // Collapsed the label goes, but the rim and the colour stay: a bare
-        // red glyph would be indistinguishable from a status dot.
-        collapsed ? "mx-auto w-nav-item" : "w-full"
-      )}
-    >
-      <Icon
-        className={cn("size-4 shrink-0", pending && "animate-spin")}
-        strokeWidth={1.5}
-      />
-      {!collapsed && (pending ? t("auth.signingOut") : t("auth.signOut"))}
-    </button>
   )
 }
 
@@ -598,9 +638,11 @@ function SignOutButton({ collapsed }: { collapsed: boolean }) {
 function SidebarBody({
   collapsed,
   onToggleCollapse,
+  onOpenSearch,
 }: {
   collapsed: boolean
   onToggleCollapse: () => void
+  onOpenSearch: () => void
 }) {
   const t = useT()
   // Bare of the `/en` prefix, because that is what the nav hrefs are written
@@ -616,6 +658,28 @@ function SidebarBody({
   // See components/ui/control-style.tsx.
   const chip = useControlSurface()
 
+  // One pointer, so one hovered row for the whole rail. The zone it came from
+  // decides which list's chip moves and which keeps sitting on its own row.
+  const [hovered, setHovered] = React.useState<HoveredRow>(null)
+  const primaryRef = React.useRef<HTMLDivElement>(null)
+  const sectionsRef = React.useRef<HTMLDivElement>(null)
+  const footerRef = React.useRef<HTMLDivElement>(null)
+
+  /**
+   * `pointerover` bubbles, so one handler per list is enough.
+   *
+   * A miss is ignored rather than cleared: the 2px gaps between rows would
+   * otherwise bounce the chip back to the active row and out again on every
+   * crossing, which is the flicker this whole thing is meant to remove. Only
+   * leaving the list clears it.
+   */
+  const onRowOver = (zone: string) => (e: React.PointerEvent) => {
+    const row = (e.target as HTMLElement).closest<HTMLElement>("[data-nav-key]")
+    const key = row?.dataset.navKey
+    if (key) setHovered({ zone, key })
+  }
+  const clearHover = () => setHovered(null)
+
   const toggleSection = (key: string) =>
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }))
 
@@ -626,7 +690,7 @@ function SidebarBody({
     if (el) el.scrollTop = railScrollTop
   }, [])
 
-  const renderItem = (item: NavItem) =>
+  const renderItem = (item: NavItem, zone: string) =>
     item.children?.length ? (
       <NavGroup
         key={item.href}
@@ -634,6 +698,8 @@ function SidebarBody({
         pathname={pathname}
         collapsed={collapsed}
         chip={chip}
+        zone={zone}
+        hovered={hovered}
       />
     ) : (
       <NavLeaf
@@ -642,6 +708,8 @@ function SidebarBody({
         active={pathname === item.href}
         collapsed={collapsed}
         chip={chip}
+        zone={zone}
+        hovered={hovered}
       />
     )
 
@@ -656,17 +724,27 @@ function SidebarBody({
           collapsed={collapsed}
           onToggleCollapse={onToggleCollapse}
         />
-        <SidebarSearch collapsed={collapsed} />
+        <SidebarSearch collapsed={collapsed} onOpen={onOpenSearch} />
 
         {/* Zone 3 — primary nav */}
         <nav
-          className={cn(
-            "flex flex-col gap-0.5",
-            collapsed ? "px-2" : "px-3"
-          )}
+          className={cn(collapsed ? "px-2" : "px-3")}
           aria-label={t("sidebar.primaryNav")}
         >
-          {primaryNav.map(renderItem)}
+          <div
+            ref={primaryRef}
+            className="relative flex flex-col gap-0.5"
+            onPointerOver={onRowOver("primary")}
+            onPointerLeave={clearHover}
+          >
+            <NavHighlight
+              containerRef={primaryRef}
+              litKey={hovered?.zone === "primary" ? hovered.key : null}
+              pathname={pathname}
+              face={chip.face}
+            />
+            {primaryNav.map((item) => renderItem(item, "primary"))}
+          </div>
         </nav>
 
         {/* Divider: 1px hairline with 8px of air (§5.2) */}
@@ -690,7 +768,19 @@ function SidebarBody({
         )}
         aria-label={t("sidebar.sectionsNav")}
       >
-        {navSections.map((section: NavSection) => {
+        <div
+          ref={sectionsRef}
+          className="relative"
+          onPointerOver={onRowOver("sections")}
+          onPointerLeave={clearHover}
+        >
+          <NavHighlight
+            containerRef={sectionsRef}
+            litKey={hovered?.zone === "sections" ? hovered.key : null}
+            pathname={pathname}
+            face={chip.face}
+          />
+          {navSections.map((section: NavSection) => {
           const key = section.labelKey ?? ""
           const open = openSections[key] ?? true
 
@@ -710,22 +800,31 @@ function SidebarBody({
               )}
               {(open || collapsed) && (
                 <div className="flex flex-col gap-0.5">
-                  {section.items.map(renderItem)}
+                  {section.items.map((item) => renderItem(item, "sections"))}
                 </div>
               )}
             </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </nav>
 
       {/* Zone 5 — footer, pinned outside the scroll region */}
       <div className={cn("shrink-0 pb-3", collapsed ? "px-2" : "px-3")}>
         <div className="mb-2 h-px bg-border" />
-        <div className="flex flex-col gap-0.5">
-          {footerNav.map(renderItem)}
-
-          <ProfileRow collapsed={collapsed} />
-          <SignOutButton collapsed={collapsed} />
+        <div
+          ref={footerRef}
+          className="relative flex flex-col gap-0.5"
+          onPointerOver={onRowOver("footer")}
+          onPointerLeave={clearHover}
+        >
+          <NavHighlight
+            containerRef={footerRef}
+            litKey={hovered?.zone === "footer" ? hovered.key : null}
+            pathname={pathname}
+            face={chip.face}
+          />
+          {footerNav.map((item) => renderItem(item, "footer"))}
         </div>
       </div>
     </div>
@@ -750,6 +849,21 @@ export function Sidebar() {
     setLastPath(pathname)
     setDrawerOpen(false)
   }
+
+  // ⌘K / Ctrl-K, owned here rather than in `SidebarSearch`: the rail and the
+  // mobile drawer both render a body, and two listeners would race to open two
+  // dialogs the moment the drawer is up.
+  const [searchOpen, setSearchOpen] = React.useState(false)
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   // Close the drawer on Escape (§18.2).
   React.useEffect(() => {
@@ -777,6 +891,7 @@ export function Sidebar() {
         <SidebarBody
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed(!collapsed)}
+          onOpenSearch={() => setSearchOpen(true)}
         />
       </aside>
 
@@ -808,10 +923,18 @@ export function Sidebar() {
             >
               <X className="size-4" strokeWidth={1.5} />
             </IconButton>
-            <SidebarBody collapsed={false} onToggleCollapse={() => {}} />
+            <SidebarBody
+              collapsed={false}
+              onToggleCollapse={() => {}}
+              onOpenSearch={() => setSearchOpen(true)}
+            />
           </div>
         </div>
       )}
+
+      {/* Rendered once, outside both bodies. Navigating out of it closes the
+          drawer on its own — the pathname check above does that. */}
+      <SidebarSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
     </>
   )
 }
