@@ -1,5 +1,7 @@
 import type { InternalAxiosRequestConfig } from "axios"
 
+import { defaultLocale, isLocale } from "@/i18n/config"
+
 /**
  * Token read and 401 handling for the Axios interceptors.
  *
@@ -71,10 +73,19 @@ export function handleUnauthorizedResponse(): void {
   clearAuthStorage()
   if (!hadToken) return
 
-  if (window.location.pathname !== "/login") {
+  // Every route lives under `app/[lang]`, so the sign-in page is `/en/login`
+  // — never a bare `/login`. Comparing against the unprefixed path meant the
+  // guard never matched: a 401 raised *on the login page* bounced anyway, to a
+  // URL the proxy then had to redirect again. Two full page loads, each one
+  // re-running the intro splash.
+  const currentLocale = window.location.pathname.split("/")[1]
+  const locale = isLocale(currentLocale) ? currentLocale : defaultLocale
+  const loginPath = `/${locale}/login`
+
+  if (window.location.pathname !== loginPath) {
     // A full page load is the point: router.push() would keep the React tree
     // alive, and with it every cached query belonging to the signed-out user.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.href = "/login"
+    window.location.href = loginPath
   }
 }
