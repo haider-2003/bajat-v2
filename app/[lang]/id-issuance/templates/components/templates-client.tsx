@@ -55,7 +55,6 @@ import { readPageInfo } from "@/utils/api/pagination"
 import { DEFAULT_PAGE_SIZE } from "@/utils/constants"
 
 import { createColumns } from "./columns"
-import { DebugWipeTemplates } from "./debug-wipe"
 import { ExportTemplateDialog } from "./export-template-dialog"
 import { IssueIdSheet } from "./issue-id-sheet"
 import {
@@ -719,13 +718,6 @@ export function TemplatesClient() {
             {/* View — column visibility + reordering (table only) */}
             {effectiveView === "table" && <ViewMenu table={table} />}
           </div>
-
-          {/* Debug only. `NODE_ENV` is inlined at build time, so this branch
-              is gone from a production build and the control cannot appear
-              there — see the note on the component. */}
-          {process.env.NODE_ENV !== "production" && (
-            <DebugWipeTemplates scope={scope} />
-          )}
         </div>
       </div>
 
