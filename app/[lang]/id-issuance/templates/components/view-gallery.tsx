@@ -18,6 +18,7 @@ import type { Template, TemplateScope } from "@/features/templates/types"
 import { useT } from "@/i18n/context"
 import type { Features } from "@/lib/table-features"
 import { cn } from "@/lib/utils"
+import { displayImageSrc } from "@/utils/download-image"
 import { EMPTY_VALUE, formatText } from "@/utils/format"
 
 import { TemplateFace } from "./template-face"
@@ -318,7 +319,7 @@ function BackPeek({
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={src}
+        src={displayImageSrc(src)}
         alt=""
         onError={() => setBrokenSrc(src)}
         className={cn(

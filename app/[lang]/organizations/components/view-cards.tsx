@@ -8,6 +8,7 @@ import type { Organization } from "@/features/organizations/types"
 import { useT } from "@/i18n/context"
 import { useFormatDate } from "@/i18n/format"
 import type { Features } from "@/lib/table-features"
+import { displayImageSrc } from "@/utils/download-image"
 import { EMPTY_VALUE, formatText } from "@/utils/format"
 
 import { OrganizationActions } from "./columns"
@@ -45,7 +46,7 @@ function OrganizationCard({
           {organization.logo ? (
             // eslint-disable-next-line @next/next/no-img-element -- user-supplied logo on an arbitrary host
             <img
-              src={organization.logo}
+              src={displayImageSrc(organization.logo)}
               alt=""
               className="size-full object-contain"
             />

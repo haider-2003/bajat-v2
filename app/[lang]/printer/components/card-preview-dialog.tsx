@@ -23,6 +23,7 @@ import type { IDCard } from "@/features/ids/types"
 import { useT } from "@/i18n/context"
 import { useFormatDate } from "@/i18n/format"
 import { cn } from "@/lib/utils"
+import { displayImageSrc } from "@/utils/download-image"
 import { EMPTY_VALUE, formatPhone, formatText } from "@/utils/format"
 
 /**
@@ -173,7 +174,7 @@ function CardPreview({
                         configured for, and one that expires in five minutes:
                         caching it through /_next/image would cache a 403. */}
                     <img
-                      src={field.value}
+                      src={displayImageSrc(field.value)}
                       alt={field.label}
                       className="size-20 rounded-lg border border-border object-cover"
                     />

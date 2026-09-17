@@ -3,6 +3,7 @@
 import * as React from "react"
 import { ImageOff } from "lucide-react"
 
+import { displayImageSrc } from "@/utils/download-image"
 import { cn } from "@/lib/utils"
 
 /**
@@ -64,7 +65,7 @@ export function TemplateFace({
         // /_next/image would cache a 403.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={src ?? undefined}
+          src={displayImageSrc(src)}
           alt={alt}
           onError={() => setBrokenSrc(src ?? null)}
           className={cn("size-full object-contain", imageClassName)}

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { SoftBadge, type Tone } from "@/components/ui/data-bits"
 import type { IDCard } from "@/features/ids/types"
 import { useT } from "@/i18n/context"
+import { displayImageSrc } from "@/utils/download-image"
 import { cn } from "@/lib/utils"
 
 /**
@@ -283,7 +284,7 @@ function CardFace({
         // /_next/image would cache a 403.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={src}
+          src={displayImageSrc(src)}
           alt={t("printer.faceAlt", { face: label })}
           onError={() => setBrokenSrc(src)}
           onLoad={(event) => {
@@ -341,11 +342,11 @@ export function PrintSheet({ card }: { card: IDCard }) {
     <div data-print-sheet aria-hidden>
       {/* eslint-disable @next/next/no-img-element -- pre-signed, expiring URLs. */}
       <div className="print-card">
-        <img src={card.frontImage} alt="" />
+        <img src={displayImageSrc(card.frontImage)} alt="" />
       </div>
       {card.backImage && (
         <div className="print-card">
-          <img src={card.backImage} alt="" />
+          <img src={displayImageSrc(card.backImage)} alt="" />
         </div>
       )}
       {/* eslint-enable @next/next/no-img-element */}

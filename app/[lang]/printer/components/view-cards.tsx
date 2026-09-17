@@ -12,6 +12,7 @@ import type { IDCard } from "@/features/ids/types"
 import { useT } from "@/i18n/context"
 import { useFormatDate } from "@/i18n/format"
 import type { Features } from "@/lib/table-features"
+import { displayImageSrc } from "@/utils/download-image"
 import { EMPTY_VALUE, formatPhone, formatText } from "@/utils/format"
 
 import { PrintActions } from "./print-actions"
@@ -164,7 +165,7 @@ function Thumbnail({
         // /_next/image would cache a 403.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={card.frontImage ?? undefined}
+          src={displayImageSrc(card.frontImage)}
           alt=""
           onError={() => setBrokenSrc(card.frontImage ?? null)}
           className="size-full object-contain"

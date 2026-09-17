@@ -12,6 +12,7 @@ import { useT } from "@/i18n/context"
 import { useFormatDate } from "@/i18n/format"
 import { Link } from "@/i18n/navigation"
 import type { Features } from "@/lib/table-features"
+import { displayImageSrc } from "@/utils/download-image"
 import { EMPTY_VALUE, formatPhone, formatText } from "@/utils/format"
 
 import { FlowActions, flowHref, type FlowActionHandlers } from "./flow-actions"
@@ -124,7 +125,7 @@ function Thumbnail({ card }: { card: IDCard }) {
         // A pre-signed, expiring URL; the optimizer would cache a 403.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={card.frontImage ?? undefined}
+          src={displayImageSrc(card.frontImage)}
           alt=""
           onError={() => setBrokenSrc(card.frontImage ?? null)}
           className="size-full object-contain"

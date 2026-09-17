@@ -22,6 +22,13 @@ import { NextResponse, type NextRequest } from "next/server"
  * Redirects are not followed — a 3xx from an allowed host to somewhere else
  * is treated as a failure — and the upstream must say it is an image.
  *
+ * ### It also shows the pictures, not only saves them
+ *
+ * The storage host has no TLS, so its `http://` URLs are mixed content on the
+ * deployed `https` site and the browser drops them. `displayImageSrc`
+ * (utils/download-image.ts) sends those — and only those — through here with
+ * no `filename`, so the response is `inline` and the `<img>` is same-origin.
+ *
  * ### No authentication, on purpose
  *
  * The dashboard token never reaches this route; the storage URLs are

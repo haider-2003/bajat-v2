@@ -3,13 +3,15 @@
  * app/api/download-image/route.ts.
  *
  * Every function here goes through the same-origin proxy rather than at the
- * storage host: the pre-signed URLs a row carries can be *shown* in an `<img>`
- * from anywhere, but saving one under a chosen name needs a
+ * storage host: saving a picture under a chosen name needs a
  * `Content-Disposition` the storage host does not send, and fetching one
  * needs a CORS policy it does not grant. The reference client did both — the
  * ledger through the proxy, the flow page straight at the host, where it
  * failed silently whenever CORS said no (docs/IDS-FLOW-EXPORTS-ROUTES.md
  * §9.12). This is the one path.
+ *
+ * Showing one is the third case, and it is only sometimes free — see
+ * `displayImageSrc`.
  */
 
 /** The proxy URL for a storage URL, with or without a save-as name. */
@@ -17,6 +19,28 @@ export function proxiedImageUrl(url: string, filename?: string): string {
   const params = new URLSearchParams({ url })
   if (filename) params.set("filename", filename)
   return `/api/download-image?${params.toString()}`
+}
+
+/**
+ * The `src` to put in an `<img>` for a URL the API handed back.
+ *
+ * ### Why a plain-`http` picture cannot be shown from an `https` page
+ *
+ * The storage host signs its URLs as `http://<ip>:<port>/…` — it has no TLS.
+ * On `http://localhost` that is an ordinary image. On the deployed site, which
+ * is `https`, it is mixed content: the browser upgrades the request to
+ * `https`, the handshake fails, and the `<img>` is dropped without a fallback.
+ * The same picture pulled through the proxy is same-origin, so the page sees
+ * it — the proxy fetches over plain `http` from the server, where no such
+ * rule applies. `https`, `data:` and `blob:` sources are left alone: they load
+ * directly, and a proxy hop would only add a function call to each one.
+ */
+export function displayImageSrc(url: string): string
+export function displayImageSrc(url: null | undefined): undefined
+export function displayImageSrc(url: string | null | undefined): string | undefined
+export function displayImageSrc(url: string | null | undefined): string | undefined {
+  if (!url) return undefined
+  return /^http:\/\//i.test(url) ? proxiedImageUrl(url) : url
 }
 
 /**

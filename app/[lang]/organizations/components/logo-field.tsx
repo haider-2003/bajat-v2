@@ -4,6 +4,7 @@ import * as React from "react"
 import { ImagePlus, X } from "lucide-react"
 
 import { useT } from "@/i18n/context"
+import { displayImageSrc } from "@/utils/download-image"
 import { cn } from "@/lib/utils"
 
 /**
@@ -98,7 +99,7 @@ export function LogoField({
       >
         {shown ? (
           // eslint-disable-next-line @next/next/no-img-element -- user-supplied logo on an arbitrary host
-          <img src={shown} alt="" className="size-full object-contain" />
+          <img src={displayImageSrc(shown)} alt="" className="size-full object-contain" />
         ) : (
           <ImagePlus
             className="size-5 text-text-placeholder"

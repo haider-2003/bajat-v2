@@ -4,6 +4,7 @@ import * as React from "react"
 import QRCode from "qrcode"
 
 import type { DesignElement, DesignPage } from "@/features/templates/design"
+import { displayImageSrc } from "@/utils/download-image"
 import { cn } from "@/lib/utils"
 
 import { useObjectUrl } from "./use-object-url"
@@ -112,7 +113,7 @@ export function CardFaceRender({
           // configured for.
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={page.backgroundImage}
+            src={displayImageSrc(page.backgroundImage)}
             alt=""
             className="absolute inset-0 size-full object-cover"
           />
@@ -287,7 +288,7 @@ function ImageRender({
       <div style={box}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={src}
+          src={displayImageSrc(src)}
           alt=""
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />

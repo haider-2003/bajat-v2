@@ -17,6 +17,7 @@ import {
 } from "@/features/templates/editor-store"
 import type { CanvasElement, EditorPage } from "@/features/templates/editor-types"
 import { useT } from "@/i18n/context"
+import { displayImageSrc } from "@/utils/download-image"
 import { cn } from "@/lib/utils"
 
 /**
@@ -469,7 +470,7 @@ function PageFace({
           // it is the difference between seeing that design and seeing a blank
           // face with elements floating on it.
           ...(page.backgroundImage && {
-            backgroundImage: cssUrl(page.backgroundImage),
+            backgroundImage: cssUrl(displayImageSrc(page.backgroundImage)),
             backgroundSize: "cover",
             backgroundPosition: "center",
           }),
@@ -660,7 +661,7 @@ function PictureNode({
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={element.src}
+        src={displayImageSrc(element.src)}
         alt=""
         draggable={false}
         style={{ width: "100%", height: "100%", objectFit: "fill" }}
@@ -698,7 +699,7 @@ function SlotNode({
       {element.src ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={element.src}
+          src={displayImageSrc(element.src)}
           alt=""
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />

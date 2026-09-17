@@ -32,7 +32,7 @@ import { useT } from "@/i18n/context"
 import { useFormatDate } from "@/i18n/format"
 import { Link, useLocaleRouter } from "@/i18n/navigation"
 import { cn } from "@/lib/utils"
-import { downloadCardFaces } from "@/utils/download-image"
+import { displayImageSrc, downloadCardFaces } from "@/utils/download-image"
 import { EMPTY_VALUE, formatPhone, formatText } from "@/utils/format"
 
 import { EditableField } from "./editable-field"
@@ -491,7 +491,7 @@ function TemplateFields({
                   pre-signed URL that expires in five minutes; the optimizer
                   would cache a 403. */}
               <img
-                src={field.value}
+                src={displayImageSrc(field.value)}
                 alt={field.label}
                 className="size-20 rounded-lg border border-border object-cover"
               />
