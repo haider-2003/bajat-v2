@@ -56,6 +56,14 @@ import { cn } from "@/lib/utils"
  * Nothing inside `.card` reads a theme token. The card is printed: if the
  * artwork followed `data-theme`, someone designing at night would lay out a
  * card in colors that do not exist on the stock.
+ *
+ * ### Touch
+ *
+ * `touch-action: none` on the viewport, so a finger's travel is the canvas's
+ * and never the browser's; one gesture at a time, each owned by the pointer
+ * that began it; a second finger pinches — zoom about the hand, pan with it.
+ * The selection chrome is counter-scaled to screen pixels so there is a
+ * handle to put a finger on at a phone's fit zoom.
  */
 
 export function Stage() {
@@ -76,12 +84,37 @@ export function Stage() {
   // outside React's render cycle, so a subscribed selector would only give it
   // stale values.
   const setPan = useEditorStore((s) => s.setPan)
+  const setView = useEditorStore((s) => s.setView)
   const setViewportSize = useEditorStore((s) => s.setViewportSize)
   const fitView = useEditorStore((s) => s.fitView)
 
   const viewportRef = React.useRef<HTMLDivElement>(null)
   const [panning, setPanning] = React.useState(false)
-  const panRef = React.useRef<{ x: number; y: number; ox: number; oy: number } | null>(null)
+
+  /**
+   * One gesture at a time, and each belongs to the pointer that began it.
+   *
+   * Every ref below records its `pointerId`, and a move or release from any
+   * other pointer is ignored. On a touch screen that is the whole difference:
+   * a second contact — a thumb on the bezel, the heel of the hand — landed on
+   * empty canvas mid-drag, cleared the selection and started a pan that then
+   * followed the *first* finger's moves. That is how dragging an element came
+   * to drag the whole canvas along with it.
+   */
+  const panRef = React.useRef<{
+    pointerId: number
+    x: number
+    y: number
+    ox: number
+    oy: number
+    /**
+     * Touch defers the deselect to the release. A mouse-down on empty canvas
+     * can clear the selection at once, but a finger landing there does not
+     * yet say whether it is a tap, a pan or the first half of a pinch — and
+     * pinching in on the element you just selected must not lose it.
+     */
+    tap: boolean
+  } | null>(null)
 
   const [guides, setGuides] = React.useState<{ x: number | null; y: number | null }>({
     x: null,
@@ -91,6 +124,7 @@ export function Stage() {
   const [hoverId, setHoverId] = React.useState<string | null>(null)
 
   const dragRef = React.useRef<{
+    pointerId: number
     id: string
     startX: number
     startY: number
@@ -100,6 +134,7 @@ export function Stage() {
   } | null>(null)
 
   const resizeRef = React.useRef<{
+    pointerId: number
     id: string
     handle: string
     startX: number
@@ -107,6 +142,37 @@ export function Stage() {
     box: { x: number; y: number; width: number; height: number }
     pushed: boolean
   } | null>(null)
+
+  /**
+   * Pinch — the touch screen's zoom.
+   *
+   * Every finger on the viewport is kept by id. The second one to land while
+   * the first is panning (or resting) starts a pinch, and from then on the
+   * distance and midpoint between the two drive zoom and pan together, about
+   * the hand. During an element drag or resize a second finger is only
+   * recorded, so a stray contact cannot yank the view out from under the
+   * element.
+   */
+  const touchesRef = React.useRef(new Map<number, { x: number; y: number }>())
+  const pinchRef = React.useRef<{
+    a: number
+    b: number
+    distance: number
+    /** Midpoint at the start, relative to the viewport. */
+    mid: { x: number; y: number }
+    zoom: number
+    panX: number
+    panY: number
+    /** Viewport origin, so each move converts with one subtraction. */
+    left: number
+    top: number
+  } | null>(null)
+
+  const gestureActive = () =>
+    dragRef.current !== null ||
+    resizeRef.current !== null ||
+    panRef.current !== null ||
+    pinchRef.current !== null
 
   /**
    * Track the window's size, and frame the content the first time it is known.
@@ -178,6 +244,9 @@ export function Stage() {
   }, [])
 
   const onPointerDown = (e: React.PointerEvent, element: CanvasElement, page: number) => {
+    // A pointer landing on an element while another is busy starts nothing —
+    // the viewport still sees it, for the pinch.
+    if (gestureActive()) return
     if (page !== activePage) {
       setActivePage(page)
       select(element.id)
@@ -188,8 +257,12 @@ export function Stage() {
     if (styleSource && styleSource !== element.id) applyStyleTo(element.id)
     select(element.id)
     if (element.locked) return
+    // Primary button, finger or pen only. A right-click selects and leaves the
+    // context menu alone rather than beginning a drag it will never finish.
+    if (e.button !== 0) return
 
     dragRef.current = {
+      pointerId: e.pointerId,
       id: element.id,
       startX: e.clientX,
       startY: e.clientY,
@@ -202,11 +275,13 @@ export function Stage() {
   }
 
   const onResizeStart = (e: React.PointerEvent, element: CanvasElement, handle: string) => {
+    if (gestureActive() || e.button !== 0) return
     // The handle sits outside the element's own box, so without this the
     // viewport would read the press as empty canvas: deselect, then pan.
     e.stopPropagation()
     e.preventDefault()
     resizeRef.current = {
+      pointerId: e.pointerId,
       id: element.id,
       handle,
       startX: e.clientX,
@@ -224,7 +299,7 @@ export function Stage() {
 
   const onResizeMove = (e: React.PointerEvent) => {
     const resize = resizeRef.current
-    if (!resize) return
+    if (!resize || resize.pointerId !== e.pointerId) return
     const state = useEditorStore.getState()
 
     if (!resize.pushed) {
@@ -232,8 +307,8 @@ export function Stage() {
       resize.pushed = true
     }
 
-    const dx = (e.clientX - resize.startX) / zoom
-    const dy = (e.clientY - resize.startY) / zoom
+    const dx = (e.clientX - resize.startX) / state.zoom
+    const dy = (e.clientY - resize.startY) / state.zoom
     const next = resizeBox(
       resize.box,
       resize.handle,
@@ -247,7 +322,7 @@ export function Stage() {
 
   const onPointerMove = (e: React.PointerEvent) => {
     const drag = dragRef.current
-    if (!drag) return
+    if (!drag || drag.pointerId !== e.pointerId) return
     const state = useEditorStore.getState()
     const element = state.element(drag.id)
     if (!element) return
@@ -262,8 +337,8 @@ export function Stage() {
     const siblings = state.doc.pages[activePage].elements.filter((el) => el.id !== drag.id)
     const snapped = computeDragSnap(
       {
-        x: drag.originX + (e.clientX - drag.startX) / zoom,
-        y: drag.originY + (e.clientY - drag.startY) / zoom,
+        x: drag.originX + (e.clientX - drag.startX) / state.zoom,
+        y: drag.originY + (e.clientY - drag.startY) / state.zoom,
         width: element.width,
         height: element.height,
       },
@@ -273,14 +348,6 @@ export function Stage() {
 
     updateElement(drag.id, { x: snapped.x, y: snapped.y })
     setGuides({ x: snapped.guideX, y: snapped.guideY })
-  }
-
-  const endDrag = () => {
-    dragRef.current = null
-    resizeRef.current = null
-    panRef.current = null
-    setPanning(false)
-    setGuides({ x: null, y: null })
   }
 
   /**
@@ -318,43 +385,177 @@ export function Stage() {
       state.setPan(state.panX - e.deltaX, state.panY - e.deltaY)
     }
 
+    // `touch-action: none` on the viewport covers scrolling everywhere, but
+    // Safari has been known to page-zoom on a two-finger spread regardless,
+    // and a non-passive `touchmove` is the one thing that reliably keeps the
+    // pinch on the canvas. Every gesture runs on pointer events, so nothing
+    // is lost by swallowing the touch event's default.
+    const onTouchMove = (e: TouchEvent) => e.preventDefault()
+
     node.addEventListener("wheel", onWheel, { passive: false })
-    return () => node.removeEventListener("wheel", onWheel)
+    node.addEventListener("touchmove", onTouchMove, { passive: false })
+    return () => {
+      node.removeEventListener("wheel", onWheel)
+      node.removeEventListener("touchmove", onTouchMove)
+    }
   }, [])
 
-  const onViewportPointerDown = (e: React.PointerEvent) => {
+  const beginPinch = (e: React.PointerEvent<HTMLDivElement>) => {
+    const [[a, pa], [b, pb]] = [...touchesRef.current]
+    const rect = e.currentTarget.getBoundingClientRect()
+    const state = useEditorStore.getState()
+    // The first finger may have been panning; the pinch picks up from where
+    // the view is now, so nothing jumps when the second one lands.
+    panRef.current = null
+    pinchRef.current = {
+      a,
+      b,
+      distance: Math.max(1, Math.hypot(pb.x - pa.x, pb.y - pa.y)),
+      mid: { x: (pa.x + pb.x) / 2 - rect.left, y: (pa.y + pb.y) / 2 - rect.top },
+      zoom: state.zoom,
+      panX: state.panX,
+      panY: state.panY,
+      left: rect.left,
+      top: rect.top,
+    }
+    setPanning(true)
+  }
+
+  const onPinchMove = (pinch: NonNullable<typeof pinchRef.current>) => {
+    const pa = touchesRef.current.get(pinch.a)
+    const pb = touchesRef.current.get(pinch.b)
+    if (!pa || !pb) return
+    // Clamped before the pan is solved, as the wheel does.
+    const next = Math.max(
+      ZOOM_MIN,
+      Math.min(ZOOM_MAX, pinch.zoom * (Math.hypot(pb.x - pa.x, pb.y - pa.y) / pinch.distance))
+    )
+    // The canvas point that was between the fingers stays between them: a
+    // spread zooms about the hand, and moving both fingers together pans.
+    const wx = (pinch.mid.x - pinch.panX) / pinch.zoom
+    const wy = (pinch.mid.y - pinch.panY) / pinch.zoom
+    const mx = (pa.x + pb.x) / 2 - pinch.left
+    const my = (pa.y + pb.y) / 2 - pinch.top
+    setView(next, mx - wx * next, my - wy * next)
+  }
+
+  const onViewportPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") {
+      const touches = touchesRef.current
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      // Captured here even when no gesture begins, so the release always
+      // reaches this handler and the finger is forgotten. A contact that
+      // lifted over the floating chrome would otherwise stay in the map and
+      // turn the next single finger into a phantom pinch.
+      e.currentTarget.setPointerCapture(e.pointerId)
+      if (touches.size >= 2) {
+        // A second finger while panning (or resting) is a pinch. During a
+        // drag or resize it is only recorded, so the element keeps moving.
+        if (touches.size === 2 && !dragRef.current && !resizeRef.current) beginPinch(e)
+        return
+      }
+    }
     if ((e.target as HTMLElement).closest("[data-element]")) return
+    if (gestureActive()) return
 
     // Anywhere that is not an element clears the selection — the page ground,
     // the gap between the faces, and the open canvas around them all count.
     // Scoping this to the active page's ground (as it was) left a click on the
     // empty canvas doing nothing, which reads as the click being ignored.
-    select(null)
+    const touch = e.pointerType === "touch"
+    if (!touch) select(null)
     if (e.button !== 0 && e.button !== 1) return
 
-    panRef.current = { x: e.clientX, y: e.clientY, ox: panX, oy: panY }
+    const state = useEditorStore.getState()
+    panRef.current = {
+      pointerId: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      ox: state.panX,
+      oy: state.panY,
+      tap: touch,
+    }
     setPanning(true)
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    e.currentTarget.setPointerCapture(e.pointerId)
   }
 
-  const onViewportPointerMove = (e: React.PointerEvent) => {
+  const onViewportPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Kept fresh for every finger, not only the pinching pair: when a pinch
+    // ends the surviving finger takes over from *its* last known position.
+    if (e.pointerType === "touch" && touchesRef.current.has(e.pointerId)) {
+      touchesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    }
+    const pinch = pinchRef.current
+    if (pinch) {
+      if (e.pointerId === pinch.a || e.pointerId === pinch.b) onPinchMove(pinch)
+      return
+    }
     if (resizeRef.current) {
       onResizeMove(e)
       return
     }
     const pan = panRef.current
     if (pan) {
-      setPan(pan.ox + (e.clientX - pan.x), pan.oy + (e.clientY - pan.y))
+      if (pan.pointerId === e.pointerId) {
+        const dx = e.clientX - pan.x
+        const dy = e.clientY - pan.y
+        if (Math.hypot(dx, dy) > TAP_SLOP) pan.tap = false
+        setPan(pan.ox + dx, pan.oy + dy)
+      }
       return
     }
     onPointerMove(e)
+  }
+
+  const onViewportPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    touchesRef.current.delete(e.pointerId)
+
+    const pinch = pinchRef.current
+    if (pinch) {
+      if (e.pointerId !== pinch.a && e.pointerId !== pinch.b) return
+      pinchRef.current = null
+      // Lifting one finger hands the view to the other, from where it is
+      // now, so a pinch that ends in a one-finger pan does not jump.
+      const remaining = e.pointerId === pinch.a ? pinch.b : pinch.a
+      const at = touchesRef.current.get(remaining)
+      if (at) {
+        const state = useEditorStore.getState()
+        panRef.current = {
+          pointerId: remaining,
+          x: at.x,
+          y: at.y,
+          ox: state.panX,
+          oy: state.panY,
+          tap: false,
+        }
+      } else {
+        setPanning(false)
+      }
+      return
+    }
+
+    if (dragRef.current?.pointerId === e.pointerId) {
+      dragRef.current = null
+      setGuides({ x: null, y: null })
+    }
+    if (resizeRef.current?.pointerId === e.pointerId) resizeRef.current = null
+    if (panRef.current?.pointerId === e.pointerId) {
+      if (panRef.current.tap) select(null)
+      panRef.current = null
+      setPanning(false)
+    }
   }
 
   return (
     <div
       ref={viewportRef}
       className={cn(
-        "absolute inset-0 overflow-hidden",
+        // `touch-none` is what makes a finger's travel the canvas's. Left to
+        // the browser, the first few px of a drag or a pan are read as a
+        // scroll: the pointer is cancelled, the gesture dies, and on a phone
+        // that looked like an element that would not move and a canvas that
+        // only ever went a little way before the page rubber-banded instead.
+        "absolute inset-0 touch-none overflow-hidden overscroll-none select-none",
         panning ? "cursor-grabbing" : "cursor-grab"
       )}
       style={{
@@ -362,11 +563,18 @@ export function Stage() {
         backgroundImage: "radial-gradient(var(--editor-dot) 1px, transparent 1px)",
         backgroundSize: `${18 * zoom}px ${18 * zoom}px`,
         backgroundPosition: `${panX}px ${panY}px`,
+        // iOS: no "Save Image" sheet when a finger rests on a picture element.
+        WebkitTouchCallout: "none",
       }}
       onPointerDown={onViewportPointerDown}
       onPointerMove={onViewportPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
+      onPointerUp={onViewportPointerUp}
+      onPointerCancel={onViewportPointerUp}
+      // Android's long-press menu would open over a drag that has not moved
+      // yet and cancel it. A right-click on an idle canvas still gets its menu.
+      onContextMenu={(e) => {
+        if (gestureActive()) e.preventDefault()
+      }}
     >
       {/* `dir="ltr"`, deliberately, inside an app that may be RTL.
 
@@ -778,6 +986,9 @@ function QrNode({
 /** §11.5's minimum. A box smaller than this is rejected, not shrunk further. */
 const MIN_SIZE = 5
 
+/** A finger that travels less than this before lifting was a tap. */
+const TAP_SLOP = 8
+
 /**
  * Resize one edge or corner — §11.5.
  *
@@ -849,6 +1060,14 @@ function SelectionFrame({
   element: CanvasElement
   onResizeStart: (e: React.PointerEvent, el: CanvasElement, handle: string) => void
 }) {
+  // Outline, handles and readout are drawn in *screen* pixels. The frame sits
+  // inside the zoomed plane, so without the counter-scale a handle was 5px at
+  // 50% and 40px at 400% — and on a phone, where the fit zoom is under 1,
+  // there was nothing a finger could land on. Konva's transformer (§11.5)
+  // drew them in screen space too.
+  const zoom = useEditorStore((s) => s.zoom)
+  const inverse = 1 / zoom
+
   const handles: [string, number, number][] = [
     ["nw", 0, 0], ["n", 0.5, 0], ["ne", 1, 0], ["e", 1, 0.5],
     ["se", 1, 1], ["s", 0.5, 1], ["sw", 0, 1], ["w", 0, 0.5],
@@ -857,16 +1076,40 @@ function SelectionFrame({
     nw: "nwse-resize", se: "nwse-resize", ne: "nesw-resize", sw: "nesw-resize",
     n: "ns-resize", s: "ns-resize", e: "ew-resize", w: "ew-resize",
   }
+  // A finger's hit area grows *outward* only. Growing it on every side would
+  // let eight handles swallow a small element's interior and leave nothing to
+  // drag it by; reaching away from the box costs nothing.
+  const reach: Record<string, string> = {
+    n: "pointer-coarse:after:-top-3",
+    s: "pointer-coarse:after:-bottom-3",
+    e: "pointer-coarse:after:-right-3",
+    w: "pointer-coarse:after:-left-3",
+  }
 
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute z-40 outline-[1.5px] outline-accent-violet"
-      style={{ left: element.x, top: element.y, width: element.width, height: element.height }}
+      className="pointer-events-none absolute z-40 outline outline-accent-violet"
+      style={{
+        left: element.x,
+        top: element.y,
+        width: element.width,
+        height: element.height,
+        outlineWidth: 1.5 * inverse,
+      }}
     >
       {/* The live readout rides the selection — the number belongs where the
-          eye already is, not across the screen in the property bar. */}
-      <span className="absolute -top-[21px] -left-[1.5px] inline-flex h-[17px] items-center rounded-[5px] bg-accent-violet px-1.5 font-mono text-[10px] tabular-nums whitespace-nowrap text-white">
+          eye already is, not across the screen in the property bar. Scaled
+          about its bottom-left corner so it keeps sitting 4px above the box. */}
+      <span
+        className="absolute inline-flex h-[17px] items-center rounded-[5px] bg-accent-violet px-1.5 font-mono text-[10px] tabular-nums whitespace-nowrap text-white"
+        style={{
+          left: -1.5 * inverse,
+          bottom: `calc(100% + ${4 * inverse}px)`,
+          transform: `scale(${inverse})`,
+          transformOrigin: "left bottom",
+        }}
+      >
         {Math.round(element.x)} · {Math.round(element.y)}
       </span>
       {!element.locked &&
@@ -878,14 +1121,19 @@ function SelectionFrame({
               left: `calc(${fx * 100}% - 5px)`,
               top: `calc(${fy * 100}% - 5px)`,
               cursor: cursor[key],
+              // About its own centre (the default origin), so the dot stays
+              // on the anchor at every zoom.
+              transform: `scale(${inverse})`,
             }}
             className={cn(
               // `pointer-events-auto` re-enables hit-testing the frame turned
               // off, and the padded hit area makes a 10px handle grabbable
-              // without drawing a bigger dot.
+              // without drawing a bigger dot: 22px for a mouse, 28px for a
+              // finger.
               "pointer-events-auto absolute size-2.5 rounded-[2px]",
               "border-[1.5px] border-accent-violet bg-white",
-              "after:absolute after:-inset-1.5 after:content-['']"
+              "after:absolute after:-inset-1.5 after:content-['']",
+              ...key.split("").map((side) => reach[side])
             )}
           />
         ))}

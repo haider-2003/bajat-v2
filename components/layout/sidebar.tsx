@@ -499,9 +499,12 @@ function IconButton({
 function WorkspaceSwitcher({
   collapsed,
   onToggleCollapse,
+  onClose,
 }: {
   collapsed: boolean
   onToggleCollapse: () => void
+  /** Drawer only — takes the collapse toggle's slot as the one close control. */
+  onClose?: () => void
 }) {
   const t = useT()
 
@@ -556,9 +559,18 @@ function WorkspaceSwitcher({
         />
       </button>
 
-      <IconButton label={t("sidebar.collapse")} onClick={onToggleCollapse}>
-        <PanelLeft data-flip-rtl className="size-4" strokeWidth={1.5} />
-      </IconButton>
+      {onClose ? (
+        // The drawer cannot collapse, so the toggle's slot holds its close
+        // control instead. Floating a separate X over the header left two
+        // buttons in the corner, one of which did nothing.
+        <IconButton label={t("sidebar.closeNavigation")} onClick={onClose}>
+          <X className="size-4" strokeWidth={1.5} />
+        </IconButton>
+      ) : (
+        <IconButton label={t("sidebar.collapse")} onClick={onToggleCollapse}>
+          <PanelLeft data-flip-rtl className="size-4" strokeWidth={1.5} />
+        </IconButton>
+      )}
     </div>
   )
 }
@@ -639,10 +651,13 @@ function SidebarBody({
   collapsed,
   onToggleCollapse,
   onOpenSearch,
+  onClose,
 }: {
   collapsed: boolean
   onToggleCollapse: () => void
   onOpenSearch: () => void
+  /** Drawer only — the body shows a close control and closes after a pick. */
+  onClose?: () => void
 }) {
   const t = useT()
   // Bare of the `/en` prefix, because that is what the nav hrefs are written
@@ -683,6 +698,21 @@ function SidebarBody({
   const toggleSection = (key: string) =>
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }))
 
+  /**
+   * Drawer only. Closes on the tap that picks a route, not when the route
+   * changes: the shell is mounted per page, so the drawer would otherwise
+   * hang over the old page until the new one had rendered — and tapping the
+   * page you are already on changes no route at all. Delegated, like the
+   * hover handling: every link in the body is a nav link.
+   */
+  const onPick = (e: React.MouseEvent) => {
+    if (!onClose || e.defaultPrevented) return
+    // A modified click opens a new tab and leaves this page — and its drawer —
+    // where they are.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    if ((e.target as HTMLElement).closest("a[href]")) onClose()
+  }
+
   // Stable, so it runs once per mount rather than on every render. Children
   // are already attached by the time a parent's ref fires, so the element has
   // its full scroll height and the offset lands rather than clamping to 0.
@@ -717,12 +747,14 @@ function SidebarBody({
     <div
       data-collapsed={collapsed}
       className="flex h-full min-h-0 flex-col bg-sidebar"
+      onClick={onPick}
     >
       {/* Zones 1–3 are fixed; only zone 4 scrolls. */}
       <div className="shrink-0">
         <WorkspaceSwitcher
           collapsed={collapsed}
           onToggleCollapse={onToggleCollapse}
+          onClose={onClose}
         />
         <SidebarSearch collapsed={collapsed} onOpen={onOpenSearch} />
 
@@ -916,17 +948,11 @@ export function Sidebar() {
               rtl ? "slide-in-from-right" : "slide-in-from-left"
             )}
           >
-            <IconButton
-              label={t("sidebar.closeNavigation")}
-              onClick={() => setDrawerOpen(false)}
-              className="absolute end-2 top-4 z-10"
-            >
-              <X className="size-4" strokeWidth={1.5} />
-            </IconButton>
             <SidebarBody
               collapsed={false}
               onToggleCollapse={() => {}}
               onOpenSearch={() => setSearchOpen(true)}
+              onClose={() => setDrawerOpen(false)}
             />
           </div>
         </div>
