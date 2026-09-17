@@ -1132,6 +1132,35 @@
   }
 }
 
+/* The card held above the slot it will go in (`IdCardHover`). Two
+   animations on one 3.6s clock. `card-hover` is the card: a slow rise of
+   6px with a hair of a turn toward the light, and back — a thing held in
+   the air, not a thing dropping. Eased both ways, and the rest pose is the
+   same one every other card loop closes on. `slot-march` is the slot's
+   dashed edge travelling around it — the flow canvas's wire pulse, saying
+   "pending" the same way it does there. One dash period per run, so the
+   loop is seamless at any speed; the component runs it at 1.2s, three to a
+   hover, and the offset must stay equal to one full dash+gap of the
+   pattern the component draws. Under reduced motion both clamp to their
+   last frames: the card at rest, the dash where it started. */
+@keyframes card-hover {
+  0%,
+  100% {
+    transform: rotateX(10deg) rotateY(-14deg) rotate(-3deg);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+  }
+  50% {
+    transform: translateY(-6px) rotateX(8deg) rotateY(-12deg) rotate(-3deg);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+  }
+}
+
+@keyframes slot-march {
+  to {
+    stroke-dashoffset: -3.12;
+  }
+}
+
 /**
  * Entrances that must wait for the splash.
  *

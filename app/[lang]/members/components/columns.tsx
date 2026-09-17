@@ -18,6 +18,7 @@ import {
   TextCell,
 } from "@/components/table/cells"
 import { CountChip } from "@/components/ui/data-bits"
+import { memberOrganizations } from "@/features/members/organizations"
 import type { Member } from "@/features/members/types"
 import type { Translator } from "@/i18n/translate"
 import type { Features } from "@/lib/table-features"
@@ -121,12 +122,11 @@ export function buildColumns(
  * the full value is available elsewhere", applied to a list instead of a
  * string.
  *
- * `organizations` is documented as always present. It is still read
- * defensively — a missing array here is a `.length` on undefined, which takes
- * the whole table down rather than dropping one cell.
+ * Read through `memberOrganizations`, which is where the raw array is both
+ * deduplicated and read defensively.
  */
 function OrganizationsCell({ member }: { member: Member }) {
-  const organizations = member.organizations ?? []
+  const organizations = memberOrganizations(member)
 
   if (organizations.length === 0) {
     return <span className="text-[13px] text-text-placeholder">{EMPTY_VALUE}</span>

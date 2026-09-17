@@ -4,6 +4,7 @@ import type { Table as TanTable } from "@tanstack/react-table"
 
 import { EmptyState } from "@/components/table/empty-state"
 import { SoftBadge } from "@/components/ui/data-bits"
+import { memberOrganizations } from "@/features/members/organizations"
 import type { Member } from "@/features/members/types"
 import { useT } from "@/i18n/context"
 import { useFormatDate } from "@/i18n/format"
@@ -36,9 +37,8 @@ function Detail({ label, value }: { label: string; value: string }) {
 function MemberCard({ member }: { member: Member }) {
   const t = useT()
   const formatDate = useFormatDate()
-  // Documented as always present; read defensively all the same, because a
-  // missing array is a crash rather than a blank line.
-  const organizations = member.organizations ?? []
+  // Deduplicated — see `memberOrganizations` for why the raw array is not.
+  const organizations = memberOrganizations(member)
 
   return (
     // §9.1: 12px radius, 1px border, 20px padding, no resting shadow.

@@ -157,14 +157,19 @@ type HoveredRow = { zone: string; key: string } | null
  * Rows are found by walking `[data-nav-key]` rather than with an attribute
  * selector: the keys are hrefs, and quoting those into a selector is a escaping
  * problem with no upside.
+ *
+ * The list it measures against is its own parent, read off the DOM rather
+ * than handed in as a ref: React attaches refs child-first, so on mount this
+ * layout effect runs *before* the parent's ref exists, and a chip that waited
+ * on one never placed itself until the first hover moved `litKey`. The DOM
+ * itself is complete by then — every row is already in it — so the parent is
+ * simply there to be read.
  */
 function NavHighlight({
-  containerRef,
   litKey,
   pathname,
   face,
 }: {
-  containerRef: React.RefObject<HTMLDivElement | null>
   litKey: string | null
   /** Not read — a dependency, so the chip re-measures when the current row moves. */
   pathname: string
@@ -173,8 +178,8 @@ function NavHighlight({
   const chipRef = React.useRef<HTMLDivElement>(null)
 
   React.useLayoutEffect(() => {
-    const container = containerRef.current
     const chip = chipRef.current
+    const container = chip?.parentElement
     if (!container || !chip) return
 
     const place = () => {
@@ -219,7 +224,7 @@ function NavHighlight({
     const observer = new ResizeObserver(place)
     observer.observe(container)
     return () => observer.disconnect()
-  }, [containerRef, litKey, pathname])
+  }, [litKey, pathname])
 
   // Position, height and opacity are written straight to the node above; the
   // classes only supply the material and the easing.
@@ -675,10 +680,26 @@ function SidebarBody({
 
   // One pointer, so one hovered row for the whole rail. The zone it came from
   // decides which list's chip moves and which keeps sitting on its own row.
-  const [hovered, setHovered] = React.useState<HoveredRow>(null)
-  const primaryRef = React.useRef<HTMLDivElement>(null)
-  const sectionsRef = React.useRef<HTMLDivElement>(null)
-  const footerRef = React.useRef<HTMLDivElement>(null)
+  const [pointed, setPointed] = React.useState<HoveredRow>(null)
+
+  /**
+   * The row a click or tap just chose, held lit until its route arrives.
+   *
+   * A touch fires `pointerleave` the moment the finger lifts, before the
+   * click — so without this the chip lit the tapped row, slid straight back
+   * to the page you were *leaving*, and sat there for as long as the new
+   * page took to load. Tagged with the pathname it was picked on: the shell
+   * mounts per page so the state resets on its own, but should it ever not,
+   * the hold still ends the instant the route changes.
+   */
+  const [picked, setPicked] = React.useState<
+    (NonNullable<HoveredRow> & { from: string }) | null
+  >(null)
+  const held = picked?.from === pathname ? picked : null
+  // What the lists light: the pointer wins while it is over a row, then the
+  // held pick, then nothing — at which point each chip rests on its own
+  // current row.
+  const hovered: HoveredRow = pointed ?? held
 
   /**
    * `pointerover` bubbles, so one handler per list is enough.
@@ -691,26 +712,36 @@ function SidebarBody({
   const onRowOver = (zone: string) => (e: React.PointerEvent) => {
     const row = (e.target as HTMLElement).closest<HTMLElement>("[data-nav-key]")
     const key = row?.dataset.navKey
-    if (key) setHovered({ zone, key })
+    if (key) setPointed({ zone, key })
   }
-  const clearHover = () => setHovered(null)
+  const clearHover = () => setPointed(null)
 
   const toggleSection = (key: string) =>
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }))
 
   /**
-   * Drawer only. Closes on the tap that picks a route, not when the route
-   * changes: the shell is mounted per page, so the drawer would otherwise
-   * hang over the old page until the new one had rendered — and tapping the
-   * page you are already on changes no route at all. Delegated, like the
-   * hover handling: every link in the body is a nav link.
+   * A click on a nav link. Delegated, like the hover handling: every link in
+   * the body is a nav link.
+   *
+   * Holds the chip on the row that was picked (see `picked`), and — drawer
+   * only — closes the drawer when the tap is for the page you are already
+   * on. Every other pick leaves the drawer up: it closes when the route
+   * changes (the pathname check in `Sidebar`), so the lit row stands as the
+   * "on its way" signal for as long as the new page takes, rather than the
+   * drawer vanishing to show the old page doing nothing. The same-page tap
+   * changes no route, so it is the one case that has to close on the tap.
    */
   const onPick = (e: React.MouseEvent) => {
-    if (!onClose || e.defaultPrevented) return
     // A modified click opens a new tab and leaves this page — and its drawer —
     // where they are.
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
-    if ((e.target as HTMLElement).closest("a[href]")) onClose()
+    const target = e.target as HTMLElement
+    if (!target.closest("a[href]")) return
+    const row = target.closest<HTMLElement>("[data-nav-key]")
+    const zone = row?.closest<HTMLElement>("[data-nav-zone]")?.dataset.navZone
+    const key = row?.dataset.navKey
+    if (key && zone) setPicked({ zone, key, from: pathname })
+    if (onClose && key === pathname) onClose()
   }
 
   // Stable, so it runs once per mount rather than on every render. Children
@@ -764,13 +795,12 @@ function SidebarBody({
           aria-label={t("sidebar.primaryNav")}
         >
           <div
-            ref={primaryRef}
+            data-nav-zone="primary"
             className="relative flex flex-col gap-0.5"
             onPointerOver={onRowOver("primary")}
             onPointerLeave={clearHover}
           >
             <NavHighlight
-              containerRef={primaryRef}
               litKey={hovered?.zone === "primary" ? hovered.key : null}
               pathname={pathname}
               face={chip.face}
@@ -801,13 +831,12 @@ function SidebarBody({
         aria-label={t("sidebar.sectionsNav")}
       >
         <div
-          ref={sectionsRef}
+          data-nav-zone="sections"
           className="relative"
           onPointerOver={onRowOver("sections")}
           onPointerLeave={clearHover}
         >
           <NavHighlight
-            containerRef={sectionsRef}
             litKey={hovered?.zone === "sections" ? hovered.key : null}
             pathname={pathname}
             face={chip.face}
@@ -845,13 +874,12 @@ function SidebarBody({
       <div className={cn("shrink-0 pb-3", collapsed ? "px-2" : "px-3")}>
         <div className="mb-2 h-px bg-border" />
         <div
-          ref={footerRef}
+          data-nav-zone="footer"
           className="relative flex flex-col gap-0.5"
           onPointerOver={onRowOver("footer")}
           onPointerLeave={clearHover}
         >
           <NavHighlight
-            containerRef={footerRef}
             litKey={hovered?.zone === "footer" ? hovered.key : null}
             pathname={pathname}
             face={chip.face}
