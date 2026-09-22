@@ -66,6 +66,9 @@
     "accountEnabledLabel": "Account enabled",
     "accountEnabledHelper": "Turning this off blocks sign-in without deleting the account or its history."
   },
+  "serverErrors": {
+    "statusSetByFlow": "This card is in the approval flow — its status is set by the reviewers at each step, not from here."
+  },
   "nav": {
     "home": "Home",
     "membersRequests": "Members Requests",
@@ -1770,14 +1773,14 @@
     "notesHelperApprove": "What you checked, or anything the next reviewer should know.",
     "notesHelperReject": "Why it is being rejected.",
     "notesPlaceholder": "Write a note…",
-    "fields": "Fields",
+    "fields": "Additional details",
     "fieldsHelper": "Add a reference number, a desk, or anything else worth recording at this step.",
-    "addField": "Add field",
+    "addField": "Add detail",
     "fieldKey": "Name",
     "fieldValue": "Value",
-    "fieldKeyLabel": "Field {n} name",
-    "fieldValueLabel": "Field {n} value",
-    "removeField": "Remove field",
+    "fieldKeyLabel": "Detail {n} name",
+    "fieldValueLabel": "Detail {n} value",
+    "removeField": "Remove detail",
     "attachments": "Attachments",
     "attachmentsHelper": "Scans or documents to keep with this approval.",
     "addFiles": "Add files",

@@ -138,7 +138,12 @@ export function EditableField({
   const error =
     invalid ??
     (update.isError
-      ? readApiError(update.error, t("ids.fields.saveFailed"), t("common.cannotReachServer"))
+      ? readApiError(
+          update.error,
+          t("ids.fields.saveFailed"),
+          t("common.cannotReachServer"),
+          t
+        )
       : null)
 
   return (

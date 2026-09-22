@@ -189,7 +189,8 @@ function ExportForm({ template }: { template: Template }) {
               {readApiError(
                 exportJob.error,
                 t("templates.export.failed"),
-                t("common.cannotReachServer")
+                t("common.cannotReachServer"),
+                t
               )}
             </p>
           </div>

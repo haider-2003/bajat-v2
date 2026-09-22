@@ -46,6 +46,14 @@ import type { FlowDragSource } from "./use-flow-drag"
 
 export type NodePaletteProps = {
   nodes: Node[]
+  /**
+   * The organization the list is scoped to, so a step created from the rail
+   * is created *into* that scope. Without it an admin's new step lands in
+   * whichever organization they happened to pick and then does not come back
+   * in the scoped list — created, saved, and invisible on the screen that
+   * made it. `undefined` on a global template, where the token decides.
+   */
+  organizationId?: number
   loading: boolean
   /** The library request's error, or `null` when it succeeded. */
   error: unknown
@@ -70,6 +78,7 @@ export type NodePaletteProps = {
 
 export function NodePalette({
   nodes,
+  organizationId,
   loading,
   error,
   retrying,
@@ -255,6 +264,7 @@ export function NodePalette({
           button in front of the answer. */}
       <div className="border-t border-border p-3">
         <CreateNodeDialog
+          defaultOrganizationId={organizationId}
           trigger={
             <button
               type="button"

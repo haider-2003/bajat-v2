@@ -180,7 +180,8 @@ function EndpointForm({
             {readApiError(
               save.error,
               t("webhooks.saveFailed"),
-              t("common.cannotReachServer")
+              t("common.cannotReachServer"),
+              t
             )}
           </p>
         </div>

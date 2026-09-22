@@ -70,6 +70,9 @@
     "accountEnabledLabel": "الحساب مُفعّل",
     "accountEnabledHelper": "إيقاف هذا يمنع تسجيل الدخول دون حذف الحساب أو سجلّه."
   },
+  "serverErrors": {
+    "statusSetByFlow": "هذه البطاقة داخل مسار الموافقات — تتحدّد حالتها في خطوات المراجعة، لا من هنا."
+  },
   "nav": {
     "home": "الرئيسية",
     "membersRequests": "طلبات الأعضاء",
@@ -1825,14 +1828,14 @@
     "notesHelperApprove": "ما تحققت منه، أو أي شيء يجب أن يعرفه المراجع التالي.",
     "notesHelperReject": "سبب الرفض.",
     "notesPlaceholder": "اكتب ملاحظة…",
-    "fields": "حقول",
+    "fields": "بيانات إضافية",
     "fieldsHelper": "أضف رقمًا مرجعيًا أو مكتبًا أو أي شيء يستحق التسجيل في هذه الخطوة.",
-    "addField": "إضافة حقل",
+    "addField": "إضافة بيان",
     "fieldKey": "الاسم",
     "fieldValue": "القيمة",
-    "fieldKeyLabel": "اسم الحقل {n}",
-    "fieldValueLabel": "قيمة الحقل {n}",
-    "removeField": "إزالة الحقل",
+    "fieldKeyLabel": "اسم البيان {n}",
+    "fieldValueLabel": "قيمة البيان {n}",
+    "removeField": "إزالة البيان",
     "attachments": "مرفقات",
     "attachmentsHelper": "مستندات أو صور ممسوحة تُحفظ مع هذه الموافقة.",
     "addFiles": "إضافة ملفات",

@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useT } from "@/i18n/context"
+import type { TranslationKey, Translator } from "@/i18n/translate"
 import type { ApiErrorBody } from "@/types/api"
 import { cn } from "@/lib/utils"
 
@@ -41,7 +42,7 @@ import { cn } from "@/lib/utils"
  *
  * Server wording passes through untranslated — a client dictionary cannot
  * localise a string it has never seen. Only the two messages this app writes
- * itself are translated.
+ * itself, and the handful listed in `RESTATED` below, are translated.
  */
 
 /** §18.6 — the footer's actions go full-width before the row goes horizontal. */
@@ -54,16 +55,50 @@ export type ConfirmTerm = {
   wide?: boolean
 }
 
+/**
+ * Server messages this app has seen, said in the app's own words.
+ *
+ * Pass-through is the right default — the API knows about failures this
+ * client has never heard of — but it leaves an Arabic screen showing English
+ * written for whoever wrote the endpoint, in that endpoint's vocabulary.
+ * "Identity in nodes now, you can't change status now" is true and useless:
+ * the reader is not looking at a node, they are looking at a card whose
+ * status they cannot set from the screen they are on.
+ *
+ * Matched on the message itself rather than a status or an error code,
+ * because neither distinguishes this refusal from any other 4xx. That makes
+ * the match brittle by nature: reword it on the server and the raw sentence
+ * comes back, which is the same thing the reader saw before this table
+ * existed. Nothing breaks — it just stops being translated.
+ */
+const RESTATED: Record<string, TranslationKey> = {
+  "identity in nodes now, you can't change status now":
+    "serverErrors.statusSetByFlow",
+}
+
+/** Case, spacing, curly quotes and a trailing full stop are not promised. */
+const normalize = (message: string) =>
+  message
+    .trim()
+    .toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, " ")
+    .replace(/[.!]+$/, "")
+
 /** An Axios rejection, reduced to one line somebody can act on. */
 export function readApiError(
   error: unknown,
   fallback: string,
-  offline: string
+  offline: string,
+  t: Translator
 ): string {
   if (!axios.isAxiosError(error)) return fallback
   const body = error.response?.data as ApiErrorBody | undefined
   const first = Object.values(body?.errors ?? {})[0]?.[0]
-  return first ?? body?.message ?? (error.response ? fallback : offline)
+  const message = first ?? body?.message
+  if (!message) return error.response ? fallback : offline
+  const restated = RESTATED[normalize(message)]
+  return restated ? t(restated) : message
 }
 
 /** One `label / value` pair in the restated row. */
@@ -155,7 +190,8 @@ export function ConfirmDialog({
                 {readApiError(
                   error,
                   errorFallback,
-                  t("common.cannotReachServer")
+                  t("common.cannotReachServer"),
+                  t
                 )}
               </p>
             </div>

@@ -123,11 +123,37 @@ export function FlowBuilder({ templateId }: { templateId: number }) {
   const [libraryQuery, setLibraryQuery] = React.useState("")
   const librarySearch = useDebounce(libraryQuery.trim(), SEARCH_DEBOUNCE_MS)
 
-  const nodesQuery = useGetNodes({
-    page: 1,
-    pageSize: LIBRARY_PAGE_SIZE,
-    filter: buildFilter({ search: librarySearch }),
-  })
+  /**
+   * The library is this template's organization's steps, not every step.
+   *
+   * `GET /node?organization_id={template.organization.id}` — the spec's own
+   * call (docs/IDS-TEMPLATES-CARD-ACTIONS.md §6.1). Unscoped, an admin's rail
+   * offers every tenant's nodes, and a flow assembled from them routes a card
+   * to desks in an organization that has nothing to do with it.
+   *
+   * A global template owns no organization, and there `organizationId` is
+   * `undefined`, which `buildFilter` drops — so the request goes out unscoped
+   * and the backend scopes it by the token. That is the right answer, not a
+   * gap: it is the only scope a global template has. What it must not do is
+   * send the string `"undefined"`, which is what `String(...)` on a missing
+   * organization produces and what the spec flags at §13.4.
+   */
+  const organizationId = templateQuery.data?.organization?.id
+
+  const nodesQuery = useGetNodes(
+    {
+      page: 1,
+      pageSize: LIBRARY_PAGE_SIZE,
+      filter: buildFilter({ search: librarySearch, organizationId }),
+    },
+    {
+      // Held until the template has answered. Firing first would fetch the
+      // unscoped list, cache it under its own key, show it, and then replace
+      // it once the scope arrived — a rail that briefly offers steps the
+      // template cannot use, which is worse than a rail that is still loading.
+      enabled: templateQuery.isSuccess,
+    }
+  )
 
   const library = React.useMemo(
     () => nodesQuery.data?.data.data ?? [],
@@ -427,13 +453,34 @@ export function FlowBuilder({ templateId }: { templateId: number }) {
 
   const templateTitle = templateQuery.data?.title ?? t("templates.singular")
 
+  /**
+   * A template that did not load is a rail that cannot be scoped.
+   *
+   * Since the node query waits on the template, a template that never answers
+   * leaves it disabled — and a disabled query is pending, so the rail would
+   * spin for good with nothing saying why. Its failure is the library's
+   * failure, shown and retried as one.
+   */
+  const libraryError = templateQuery.isError
+    ? templateQuery.error
+    : nodesQuery.isError
+      ? nodesQuery.error
+      : null
+
   const palette = (
     <NodePalette
       nodes={library}
+      organizationId={organizationId}
+      // `isPending` covers the gated wait too: a disabled query is pending, so
+      // the rail reads as loading from the first paint rather than flashing
+      // "no steps" while the template is still in flight.
       loading={nodesQuery.isPending}
-      error={nodesQuery.isError ? nodesQuery.error : null}
-      retrying={nodesQuery.isFetching}
-      onRetry={() => nodesQuery.refetch()}
+      error={libraryError}
+      retrying={templateQuery.isFetching || nodesQuery.isFetching}
+      onRetry={() => {
+        if (templateQuery.isError) void templateQuery.refetch()
+        void nodesQuery.refetch()
+      }}
       query={libraryQuery}
       onQueryChange={setLibraryQuery}
       usedCounts={usedCounts}

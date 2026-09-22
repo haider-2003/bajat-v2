@@ -171,7 +171,8 @@ function ReviewForm({
     ? readApiError(
         mutation.error,
         t(approving ? "idsFlow.approveFailed" : "idsFlow.rejectFailed"),
-        t("common.cannotReachServer")
+        t("common.cannotReachServer"),
+        t
       )
     : null
 
@@ -229,9 +230,9 @@ function ReviewForm({
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <span className="text-[13px] font-medium text-text-secondary">
-                    {t("idsFlow.fields")}
-                    <span className="ms-1.5 font-normal text-text-placeholder">
-                      {t("common.optional")}
+                    {t("idsFlow.fields")}{" "}
+                    <span className="font-normal text-text-placeholder">
+                      ({t("common.optional")})
                     </span>
                   </span>
                   <Button
@@ -293,9 +294,9 @@ function ReviewForm({
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <span className="text-[13px] font-medium text-text-secondary">
-                    {t("idsFlow.attachments")}
-                    <span className="ms-1.5 font-normal text-text-placeholder">
-                      {t("common.optional")}
+                    {t("idsFlow.attachments")}{" "}
+                    <span className="font-normal text-text-placeholder">
+                      ({t("common.optional")})
                     </span>
                   </span>
                   <Button

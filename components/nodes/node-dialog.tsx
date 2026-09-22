@@ -121,9 +121,18 @@ const WIRE_NAMES: Record<string, FieldName> = {
  */
 export function CreateNodeDialog({
   trigger,
+  defaultOrganizationId,
 }: {
   /** Overrides the default button. Must accept a click — it is the trigger. */
   trigger?: React.ReactElement
+  /**
+   * Preselects the organization select, for a caller that already knows the
+   * answer — the flow builder, whose rail lists one organization's steps and
+   * whose new step belongs in that same organization. Still a preselection
+   * and not a lock: an admin who opened the wrong template can change it.
+   * Ignored for a non-admin, who has no select and is scoped by their token.
+   */
+  defaultOrganizationId?: number
 } = {}) {
   const t = useT()
   const [open, setOpen] = React.useState(false)
@@ -143,7 +152,13 @@ export function CreateNodeDialog({
         />
         {/* Mounted per opening, so a cancelled draft never comes back on the
             next open and the mutation's error state starts clean. */}
-        {open && <NodeForm node={null} onDone={() => setOpen(false)} />}
+        {open && (
+          <NodeForm
+            node={null}
+            defaultOrganizationId={defaultOrganizationId}
+            onDone={() => setOpen(false)}
+          />
+        )}
       </Dialog>
     </Permission>
   )
@@ -171,7 +186,16 @@ export function EditNodeDialog({
   )
 }
 
-function NodeForm({ node, onDone }: { node: Node | null; onDone: () => void }) {
+function NodeForm({
+  node,
+  defaultOrganizationId,
+  onDone,
+}: {
+  node: Node | null
+  /** Create only — see `CreateNodeDialog`. */
+  defaultOrganizationId?: number
+  onDone: () => void
+}) {
   const t = useT()
   const user = useAuthStore((state) => state.user)
   const isAdmin = user?.type === "admin"
@@ -180,7 +204,9 @@ function NodeForm({ node, onDone }: { node: Node | null; onDone: () => void }) {
   const [name, setName] = React.useState(node?.name ?? "")
   const [color, setColor] = React.useState(node?.color ?? DEFAULT_COLOR)
   /** `""` is "nothing chosen" — the select is handed `null` for that. */
-  const [organizationId, setOrganizationId] = React.useState("")
+  const [organizationId, setOrganizationId] = React.useState(
+    defaultOrganizationId ? String(defaultOrganizationId) : ""
+  )
   const [errors, setErrors] = React.useState<Errors>({})
 
   // Only admins choose one, and only while creating — so the request is not

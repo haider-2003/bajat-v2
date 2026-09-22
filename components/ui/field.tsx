@@ -66,10 +66,18 @@ function Field({
         className="mb-1.5 text-[13px] font-medium text-text-secondary"
       >
         {label}
+        {/* A real space, not just a margin: the two spans are glued together
+            when the label is copied or read aloud otherwise — "Fields" and
+            "Optional" arrive as one word. Parenthesised because Arabic would
+            need the marker to agree in gender with every label it follows;
+            as an aside it agrees with none of them. */}
         {optional && (
-          <span className="ms-1.5 font-normal text-text-placeholder">
-            {t("common.optional")}
-          </span>
+          <>
+            {" "}
+            <span className="font-normal text-text-placeholder">
+              ({t("common.optional")})
+            </span>
+          </>
         )}
       </label>
 
