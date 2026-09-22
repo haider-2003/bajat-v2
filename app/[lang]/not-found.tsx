@@ -16,7 +16,6 @@ export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations()
   return { title: t("notFound.metaTitle") }
 }
-
 /**
  * 404 — the page under `/[lang]` that does not exist.
  *

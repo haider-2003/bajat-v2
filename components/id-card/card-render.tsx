@@ -4,6 +4,7 @@ import * as React from "react"
 import QRCode from "qrcode"
 
 import type { DesignElement, DesignPage } from "@/features/templates/design"
+import { fontStack } from "@/features/templates/editor-fonts"
 import { displayImageSrc } from "@/utils/download-image"
 import { cn } from "@/lib/utils"
 
@@ -214,7 +215,7 @@ function TextRender({
         opacity: element.opacity * (pending ? 0.35 : 1),
         transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
         transformOrigin: "top left",
-        fontFamily: `"${element.fontFamily ?? "Arial"}", Arial, sans-serif`,
+        fontFamily: fontStack(element.fontFamily),
         fontSize: element.fontSize,
         fontWeight: element.fontWeight === "bold" ? 700 : 400,
         fontStyle: element.fontStyle === "italic" ? "italic" : "normal",

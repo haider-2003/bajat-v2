@@ -133,18 +133,36 @@ const CONTROL = "h-11 text-base md:h-9 md:text-sm"
 const ACTION = "h-11 w-full md:h-9 md:w-auto"
 
 /**
+ * The widest the card is ever drawn, however far the sheet is dragged.
+ *
+ * Roughly 1.6x life size. Past that the preview stops being a card somebody is
+ * checking and starts being a poster, with the fields that fill it off in
+ * another column entirely.
+ */
+const CARD_MAX = 520
+
+/**
  * The split layout, from 860px of sheet up (`@container/sheet` — sheet.tsx).
  *
- * A 400px stage column and a fluid form column; the form column has three
- * rows — header, scrolling body, footer — and the stage spans all three. The
+ * A stage column and a fluid form column; the form column has three rows —
+ * header, scrolling body, footer — and the stage spans all three. The
  * `minmax(0, 1fr)` on the middle row is what lets the body be shorter than its
  * content and scroll, the grid equivalent of `min-h-0` on a flex child.
+ *
+ * The stage track is `minmax(400px, 0.6fr)` rather than a flat `400px`,
+ * because the sheet's width is the operator's to drag (see `SheetContent`'s
+ * note) and the card is the thing they drag it wider *for*. At the sheet's own
+ * 920px the fr share works out below the 400px floor, so the track sits on the
+ * floor and the layout is the documented 400 + 520, card at life size. Past
+ * that the new room is shared rather than handed whole to a form whose fields
+ * are no better for being 900px wide, and the card grows with its column up to
+ * `CARD_MAX`.
  *
  * Written out in full rather than built from a prefix: Tailwind finds classes
  * by scanning source for literal strings.
  */
 const SPLIT =
-  "@min-[860px]/sheet:grid @min-[860px]/sheet:grid-cols-[400px_minmax(0,1fr)] @min-[860px]/sheet:grid-rows-[auto_minmax(0,1fr)_auto]"
+  "@min-[860px]/sheet:grid @min-[860px]/sheet:grid-cols-[minmax(400px,0.6fr)_minmax(0,1fr)] @min-[860px]/sheet:grid-rows-[auto_minmax(0,1fr)_auto]"
 
 const AREA = {
   header: "@min-[860px]/sheet:col-start-2 @min-[860px]/sheet:row-start-1",
@@ -562,7 +580,10 @@ function IssueForm({
                   )}
                 </Field>
 
-                {template.branchRequired && (
+                {/* A ternary, not `&&`: `branchRequired` arrives as 0 or 1,
+                    and `0 && <Field/>` evaluates to `0`, which React prints as
+                    a digit in the middle of the form. */}
+                {template.branchRequired ? (
                   <Field
                     label={t("templates.columns.branch")}
                     error={errors.branch}
@@ -606,7 +627,7 @@ function IssueForm({
                       </Select>
                     )}
                   </Field>
-                )}
+                ) : null}
               </Group>
 
               {/* The template's own variables, grouped by the face they print
@@ -767,20 +788,33 @@ function Group({
  * stack is sized to the front; a back drawn at a different size would be a
  * design bug, not something to lay out for.
  *
- * ### Width is measured, and bounded by height
+ * ### Width is measured, bounded by height, and floored
  *
- * The stage is 400px when split, the whole sheet when stacked and the whole
- * viewport on a phone, and the card has to fill whichever it is without ever
- * being wider. `CardFaceRender` takes a pixel width because it scales the
- * whole design from one transform — a percentage would mean the page box
- * could not be laid out at its authored size.
+ * The stage is its share of the sheet when split, the whole sheet when stacked
+ * and the whole viewport on a phone, and the card has to fill whichever it is
+ * without ever being wider. `CardFaceRender` takes a pixel width because it
+ * scales the whole design from one transform — a percentage would mean the
+ * page box could not be laid out at its authored size.
  *
- * The width is the tightest of three: the stage, 360px, and the width at
- * which the card's *height* reaches `--stage-h`. The last one is the one a
- * portrait design needs — at 360px wide it is 570px tall, which stacked is
- * the whole sheet and the form gone beneath it. Stacked, a card gets 32vh;
- * split, the column is its own and it gets 60vh. The 360px cap keeps a
- * landscape card near life size: a CR-80 is 85.6mm, about 324px at 96dpi.
+ * The width is the tightest of three, then lifted to a floor. The three are
+ * the stage, `CARD_MAX`, and the width at which the card's *height* reaches
+ * `--stage-h`. The last is the one a portrait design needs: at 360px wide such
+ * a card is 570px tall, which stacked is the whole sheet and the form gone
+ * beneath it. Stacked, a card gets 32vh; split, the column is its own and it
+ * gets 72vh.
+ *
+ * At the sheet's default width the stage column is 400px, so the card lands at
+ * ~336px — a CR-80 is 85.6mm, about 324px at 96dpi, i.e. life size. Dragging
+ * the sheet wider widens the column (see `SPLIT`) and the card grows with it,
+ * to 520px or to whatever the height allows, which is how a portrait design
+ * gets read without squinting. That is the "maximise" here: the sheet's own
+ * grip, remembered per operator.
+ *
+ * `--stage-min` is the other end — the card is never drawn smaller than that,
+ * even on a short viewport where `--stage-h` alone would grind a portrait
+ * design down to a stamp. Split, the column scrolls; stacked there is no floor
+ * at all, because the only thing under the card there is the form it belongs
+ * to and a card cannot be allowed to push it off the screen.
  */
 function CardStage({
   className,
@@ -826,8 +860,11 @@ function CardStage({
       className={cn(
         "flex shrink-0 flex-col px-5 py-4",
         // How tall the card may be. Stacked it shares the height with the
-        // form; split, the column is its own.
-        "[--stage-h:32vh] @min-[860px]/sheet:[--stage-h:60vh]",
+        // form; split, the column is its own — and a portrait card is tall,
+        // so the split share is most of it.
+        "[--stage-h:32vh] @min-[860px]/sheet:[--stage-h:72vh]",
+        // The floor, and only where there is a column to hold it.
+        "[--stage-min:0px] @min-[860px]/sheet:[--stage-min:260px]",
         // Split: a full-height column beside the form.
         "@min-[860px]/sheet:min-h-0 @min-[860px]/sheet:overflow-y-auto @min-[860px]/sheet:px-8 @min-[860px]/sheet:py-8",
         className
@@ -838,7 +875,9 @@ function CardStage({
       <div className="my-auto flex flex-col items-center gap-4">
         <div
           ref={ref}
-          style={{ width: `min(100%, 360px, calc(var(--stage-h) * ${ratio}))` }}
+          style={{
+            width: `min(100%, max(var(--stage-min), min(${CARD_MAX}px, calc(var(--stage-h) * ${ratio}))))`,
+          }}
         >
           {loading ? (
             <Skeleton className="aspect-[85.6/54] w-full rounded-lg" />

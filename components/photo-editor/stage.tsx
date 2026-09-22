@@ -11,6 +11,7 @@ import {
   ZOOM_MIN,
   variableMeta,
 } from "@/features/templates/editor-constants"
+import { fontStack } from "@/features/templates/editor-fonts"
 import {
   computeDragSnap,
   useEditorStore,
@@ -781,7 +782,7 @@ function ElementNode({
         {...common}
         style={{
           ...style,
-          fontFamily: `"${element.fontFamily ?? "Arial"}", Arial, sans-serif`,
+          fontFamily: fontStack(element.fontFamily),
           fontSize: element.fontSize,
           fontWeight: element.fontWeight === "bold" ? 700 : 400,
           fontStyle: element.fontStyle === "italic" ? "italic" : "normal",

@@ -102,7 +102,8 @@ export function createColumns(
           <TemplateFace
             src={row.original.frontImage}
             alt=""
-            className="my-2 w-12 shrink-0 border border-border"
+            className="my-2 w-12 shrink-0"
+            cardClassName="border border-border"
           />
           <span className="min-w-0 flex-1">
             <span

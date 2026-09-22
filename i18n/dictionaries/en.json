@@ -689,7 +689,7 @@
     },
     "crop": {
       "title": "Frame the {field}",
-      "description": "Drag to move, zoom to fill. The outline is the shape the card prints.",
+      "description": "Drag to move, zoom in to fill or out to fit the whole photo. The outline is the shape the card prints.",
       "apply": "Use this crop",
       "zoom": "Zoom",
       "zoomIn": "Zoom in",
@@ -787,6 +787,11 @@
       "importJson": "Import JSON",
       "importNote": "Import replaces the design only — metadata and form-only variables are untouched",
       "nonStandardSize": "This is no longer the CR-80 default. Check the printer's stock before publishing."
+    },
+    "fontGroups": {
+      "system": "System",
+      "latin": "Latin",
+      "arabic": "Arabic"
     },
     "sizes": {
       "idCard": "ID Card (CR-80)",
@@ -921,6 +926,9 @@
       "bold": "Bold",
       "italic": "Italic",
       "underline": "Underline",
+      "noBold": "This typeface has no bold",
+      "noItalic": "This typeface has no italic",
+      "noBoldItalic": "This typeface has no bold italic",
       "style": "Style",
       "alignment": "Alignment",
       "fill": "Fill",

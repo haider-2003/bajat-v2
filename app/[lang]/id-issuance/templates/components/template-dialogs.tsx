@@ -248,8 +248,9 @@ function PreviewBody({
           </div>
         )}
 
-        {/* The frame carries the rim; `TemplateFace` stays borderless so it can
-            also be a 48px thumbnail in a table cell without a doubled edge. */}
+        {/* The rim goes on the card, not on the space reserved for it: a
+            portrait design framed at CR-80 would be a wide bordered box with
+            the artwork stranded in the middle of it. */}
         <TemplateFace
           key={shown}
           src={shown === "front" ? template.frontImage : template.backImage}
@@ -257,7 +258,7 @@ function PreviewBody({
             title: template.title,
             face: shown === "front" ? t("printer.front") : t("printer.back"),
           })}
-          className="border border-border"
+          cardClassName="border border-border"
         />
 
         {/* The terms an identity is actually cut on (§9.3). */}

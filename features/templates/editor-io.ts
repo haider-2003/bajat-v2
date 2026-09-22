@@ -763,7 +763,7 @@ export function templateToConfig(row: Template): TemplateConfig {
     description: row.description ?? "",
     price: Number(row.price ?? 0) || 0,
     identityDuration: row.identityDuration ?? 12,
-    branchRequired: row.branchRequired ?? false,
+    branchRequired: Boolean(row.branchRequired),
   }
 }
 

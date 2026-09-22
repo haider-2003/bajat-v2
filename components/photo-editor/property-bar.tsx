@@ -18,18 +18,26 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
+  blockedFaces,
+  clampEmphasis,
+  DEFAULT_FONT_FAMILY,
   DEFAULT_QR_MARGIN,
   EDITOR_SWATCHES,
   FONT_FAMILIES,
+  FONT_GROUP_LABELS,
+  FONT_GROUPS,
   variableMeta,
 } from "@/features/templates/editor-constants"
+import { fontStack } from "@/features/templates/editor-fonts"
 import { useEditorStore } from "@/features/templates/editor-store"
 import { useT } from "@/i18n/context"
 import type { TranslationKey } from "@/i18n/translate"
@@ -297,20 +305,48 @@ export function PropertyBar() {
   ]
 
   if (element.kind === "text") {
+    const family = element.fontFamily ?? DEFAULT_FONT_FAMILY
+    const isBold = element.fontWeight === "bold"
+    const isItalic = element.fontStyle === "italic"
+    /**
+     * Switching family can strand the element on a face the renderer has no
+     * file for, so the emphasis comes along to the nearest one that exists —
+     * in the same history step, because it is one operator action.
+     */
+    const pickFamily = (next: string) => {
+      const kept = clampEmphasis(next, { bold: isBold, italic: isItalic })
+      discrete({
+        fontFamily: next,
+        fontWeight: kept.bold ? "bold" : "normal",
+        fontStyle: kept.italic ? "italic" : "normal",
+      })
+    }
     const font = (
       <DropdownMenu>
-        <DropdownMenuTrigger
-          render={<Chip label={element.fontFamily ?? "Arial"} className="w-[116px]" />}
-        />
+        <DropdownMenuTrigger render={<Chip label={family} className="w-[116px]" />} />
         <DropdownMenuContent align="start" className="max-h-72 w-52 overflow-y-auto">
-          {FONT_FAMILIES.map((family) => (
-            <DropdownMenuItem
-              key={family}
-              onClick={() => discrete({ fontFamily: family })}
-              className={cn(element.fontFamily === family && "font-medium text-text")}
-            >
-              <span style={{ fontFamily: `"${family}", Arial` }}>{family}</span>
-            </DropdownMenuItem>
+          {FONT_GROUPS.map((group, index) => (
+            <React.Fragment key={group}>
+              {index > 0 && <DropdownMenuSeparator />}
+              {/* The label has to live inside the group — it is what supplies
+                  the group its accessible name, and Base UI throws without
+                  one rather than rendering an unlabelled heading. */}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>{t(FONT_GROUP_LABELS[group])}</DropdownMenuLabel>
+                {FONT_FAMILIES.filter((f) => f.group === group).map((f) => (
+                  <DropdownMenuItem
+                    key={f.family}
+                    onClick={() => pickFamily(f.family)}
+                    className={cn(family === f.family && "font-medium text-text")}
+                  >
+                    {/* The specimen is the point of the row — each name is set
+                        in its own face, so the list is browsable by eye rather
+                        than by recalling what "Corbel" looks like. */}
+                    <span style={{ fontFamily: fontStack(f.family) }}>{f.family}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </React.Fragment>
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
@@ -327,24 +363,32 @@ export function PropertyBar() {
     const colour = (
       <ColorControl color={element.fill ?? "#000000"} label={t("editor.props.textColor")} onPick={(c) => discrete({ fill: c })} />
     )
+    /**
+     * A face the renderer has no file for is not offered at all.
+     *
+     * The alternative is worse than a greyed button: the browser would happily
+     * fake it, and the operator would approve a card that prints upright.
+     * The tooltip says which face is missing rather than just refusing.
+     */
+    const blocked = blockedFaces(family, { bold: isBold, italic: isItalic })
     const emphasis = (
       <>
-        <Tip label={t("editor.props.bold")}>
-          <IconButton
-            icon={Bold}
-            label={t("editor.props.bold")}
-            pressed={element.fontWeight === "bold"}
-            onClick={() => discrete({ fontWeight: element.fontWeight === "bold" ? "normal" : "bold" })}
-          />
-        </Tip>
-        <Tip label={t("editor.props.italic")}>
-          <IconButton
-            icon={Italic}
-            label={t("editor.props.italic")}
-            pressed={element.fontStyle === "italic"}
-            onClick={() => discrete({ fontStyle: element.fontStyle === "italic" ? "normal" : "italic" })}
-          />
-        </Tip>
+        <FaceToggle
+          icon={Bold}
+          label={t("editor.props.bold")}
+          blockedLabel={isItalic ? t("editor.props.noBoldItalic") : t("editor.props.noBold")}
+          pressed={isBold}
+          blocked={blocked.bold}
+          onClick={() => discrete({ fontWeight: isBold ? "normal" : "bold" })}
+        />
+        <FaceToggle
+          icon={Italic}
+          label={t("editor.props.italic")}
+          blockedLabel={isBold ? t("editor.props.noBoldItalic") : t("editor.props.noItalic")}
+          pressed={isItalic}
+          blocked={blocked.italic}
+          onClick={() => discrete({ fontStyle: isItalic ? "normal" : "italic" })}
+        />
         <Tip label={t("editor.props.underline")}>
           <IconButton
             icon={Underline}
@@ -781,6 +825,43 @@ function Tip({ label, children }: { label: string; children: React.ReactNode }) 
       <TooltipTrigger render={children as React.ReactElement} />
       <TooltipContent side="bottom">{label}</TooltipContent>
     </Tooltip>
+  )
+}
+
+/**
+ * Bold or italic, disabled when the chosen family has no file for that face.
+ *
+ * The wrapping span is what makes the explanation reachable: a disabled button
+ * fires no pointer events, so a tooltip hung on the button itself would go
+ * quiet exactly when it has something to say.
+ */
+function FaceToggle({
+  icon,
+  label,
+  blockedLabel,
+  pressed,
+  blocked,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
+  label: string
+  blockedLabel: string
+  pressed: boolean
+  blocked: boolean
+  onClick: () => void
+}) {
+  return (
+    <Tip label={blocked ? blockedLabel : label}>
+      <span className="inline-flex">
+        <IconButton
+          icon={icon}
+          label={label}
+          pressed={pressed}
+          disabled={blocked}
+          onClick={onClick}
+        />
+      </span>
+    </Tip>
   )
 }
 

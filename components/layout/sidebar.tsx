@@ -45,7 +45,7 @@ import { useShell } from "./shell-context"
  */
 
 /**
- * Where zone 4 is scrolled to, kept outside the component tree.
+ * Where the rail is scrolled to, kept outside the component tree.
  *
  * `AppShell` is rendered by each `page.tsx` rather than by a layout, so every
  * navigation unmounts the whole rail and mounts a new one — and a fresh DOM
@@ -641,13 +641,13 @@ function SidebarSearch({
 /**
  * ### The rail deliberately does not move on navigation
  *
- * An earlier pass scrolled zone 4 to bring the active item into view on every
+ * An earlier pass scrolled the rail to bring the active item into view on every
  * route change. That lurched the rail under the cursor on every click, moving
  * the item you had just aimed at out from under you — so nothing here scrolls
  * the rail *to* anywhere. Where it sits is the user's business.
  *
  * Holding still, though, takes work: the shell is mounted per page, so each
- * navigation hands zone 4 a brand-new DOM node scrolled to the top. The ref
+ * navigation hands the rail a brand-new DOM node scrolled to the top. The ref
  * callback below writes the remembered offset back during commit — before
  * paint, so the restored position is the first one drawn, never a jump.
  */
@@ -780,7 +780,8 @@ function SidebarBody({
       className="flex h-full min-h-0 flex-col bg-sidebar"
       onClick={onPick}
     >
-      {/* Zones 1–3 are fixed; only zone 4 scrolls. */}
+      {/* Zones 1–2 — workspace switcher and search, the fixed head of the
+          rail. Everything below them scrolls as one, footer included. */}
       <div className="shrink-0">
         <WorkspaceSwitcher
           collapsed={collapsed}
@@ -788,10 +789,24 @@ function SidebarBody({
           onClose={onClose}
         />
         <SidebarSearch collapsed={collapsed} onOpen={onOpenSearch} />
+      </div>
 
+      <div
+        ref={restoreRailScroll}
+        onScroll={(e) => {
+          railScrollTop = e.currentTarget.scrollTop
+        }}
+        className={cn(
+          "flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-quiet",
+          // A vertical scroll container cannot also be overflow-x:visible —
+          // the browser coerces x to auto — so the content must simply never
+          // exceed the rail width. Tooltips are portalled out instead.
+          collapsed && "overflow-x-hidden"
+        )}
+      >
         {/* Zone 3 — primary nav */}
         <nav
-          className={cn(collapsed ? "px-2" : "px-3")}
+          className={cn("shrink-0", collapsed ? "px-2" : "px-3")}
           aria-label={t("sidebar.primaryNav")}
         >
           <div
@@ -810,81 +825,77 @@ function SidebarBody({
         </nav>
 
         {/* Divider: 1px hairline with 8px of air (§5.2) */}
-        <div className={cn("my-2", collapsed ? "px-2" : "px-3")}>
+        <div className={cn("my-2 shrink-0", collapsed ? "px-2" : "px-3")}>
           <div className="h-px bg-border" />
         </div>
-      </div>
 
-      {/* Zone 4 — sectioned nav, scrollable */}
-      <nav
-        ref={restoreRailScroll}
-        onScroll={(e) => {
-          railScrollTop = e.currentTarget.scrollTop
-        }}
-        className={cn(
-          "min-h-0 flex-1 overflow-y-auto pb-2 scrollbar-quiet",
-          // A vertical scroll container cannot also be overflow-x:visible —
-          // the browser coerces x to auto — so the content must simply never
-          // exceed the rail width. Tooltips are portalled out instead.
-          collapsed ? "overflow-x-hidden px-2" : "px-3"
-        )}
-        aria-label={t("sidebar.sectionsNav")}
-      >
-        <div
-          data-nav-zone="sections"
-          className="relative"
-          onPointerOver={onRowOver("sections")}
-          onPointerLeave={clearHover}
+        {/* Zone 4 — sectioned nav */}
+        <nav
+          className={cn("shrink-0 pb-2", collapsed ? "px-2" : "px-3")}
+          aria-label={t("sidebar.sectionsNav")}
         >
-          <NavHighlight
-            litKey={hovered?.zone === "sections" ? hovered.key : null}
-            pathname={pathname}
-            face={chip.face}
-          />
-          {navSections.map((section: NavSection) => {
-          const key = section.labelKey ?? ""
-          const open = openSections[key] ?? true
+          <div
+            data-nav-zone="sections"
+            className="relative"
+            onPointerOver={onRowOver("sections")}
+            onPointerLeave={clearHover}
+          >
+            <NavHighlight
+              litKey={hovered?.zone === "sections" ? hovered.key : null}
+              pathname={pathname}
+              face={chip.face}
+            />
+            {navSections.map((section: NavSection) => {
+            const key = section.labelKey ?? ""
+            const open = openSections[key] ?? true
 
-          return (
-            <div key={key} className="mb-3 last:mb-0">
-              {section.labelKey && !collapsed && (
-                <SectionHeader
-                  label={t(section.labelKey)}
-                  open={open}
-                  onToggle={() => toggleSection(key)}
-                  t={t}
-                />
-              )}
-              {/* Collapsed rails drop section labels and show a divider (§5.10) */}
-              {section.labelKey && collapsed && (
-                <div className="mx-auto mb-2 h-px w-6 bg-border" />
-              )}
-              {(open || collapsed) && (
-                <div className="flex flex-col gap-0.5">
-                  {section.items.map((item) => renderItem(item, "sections"))}
-                </div>
-              )}
-            </div>
-            )
-          })}
-        </div>
-      </nav>
+            return (
+              <div key={key} className="mb-3 last:mb-0">
+                {section.labelKey && !collapsed && (
+                  <SectionHeader
+                    label={t(section.labelKey)}
+                    open={open}
+                    onToggle={() => toggleSection(key)}
+                    t={t}
+                  />
+                )}
+                {/* Collapsed rails drop section labels and show a divider (§5.10) */}
+                {section.labelKey && collapsed && (
+                  <div className="mx-auto mb-2 h-px w-6 bg-border" />
+                )}
+                {(open || collapsed) && (
+                  <div className="flex flex-col gap-0.5">
+                    {section.items.map((item) => renderItem(item, "sections"))}
+                  </div>
+                )}
+              </div>
+              )
+            })}
+          </div>
+        </nav>
 
-      {/* Zone 5 — footer, pinned outside the scroll region */}
-      <div className={cn("shrink-0 pb-3", collapsed ? "px-2" : "px-3")}>
-        <div className="mb-2 h-px bg-border" />
+        {/* Zone 5 — footer. `mt-auto` holds it against the bottom edge while the
+            rail is short, and lets it ride along once the nav overflows. */}
         <div
-          data-nav-zone="footer"
-          className="relative flex flex-col gap-0.5"
-          onPointerOver={onRowOver("footer")}
-          onPointerLeave={clearHover}
+          className={cn(
+            "mt-auto shrink-0 pb-3",
+            collapsed ? "px-2" : "px-3"
+          )}
         >
-          <NavHighlight
-            litKey={hovered?.zone === "footer" ? hovered.key : null}
-            pathname={pathname}
-            face={chip.face}
-          />
-          {footerNav.map((item) => renderItem(item, "footer"))}
+          <div className="mb-2 h-px bg-border" />
+          <div
+            data-nav-zone="footer"
+            className="relative flex flex-col gap-0.5"
+            onPointerOver={onRowOver("footer")}
+            onPointerLeave={clearHover}
+          >
+            <NavHighlight
+              litKey={hovered?.zone === "footer" ? hovered.key : null}
+              pathname={pathname}
+              face={chip.face}
+            />
+            {footerNav.map((item) => renderItem(item, "footer"))}
+          </div>
         </div>
       </div>
     </div>

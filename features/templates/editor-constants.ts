@@ -110,19 +110,130 @@ export const TEXT_PRESETS = [
   fontWeight: string
 }[]
 
-/** §13.1 — a fixed list, because the server-side renderer has to have the face. */
-export const FONT_FAMILIES = [
-  "Arial",
-  "Cairo",
-  "Times New Roman",
-  "Courier New",
-  "Georgia",
-  "Verdana",
-  "Tahoma",
-  "Trebuchet MS",
-  "Impact",
-  "Comic Sans MS",
-] as const
+/**
+ * §13.1 — a fixed list, because the server-side renderer has to have the face.
+ *
+ * Longer than the ten the spec names: the render host's font directory has
+ * grown, and this list tracks *it*, not the document. `family` is not a label
+ * either — it is the key the renderer looks a `.ttf` up by, so it is never
+ * translated and never abbreviated.
+ *
+ * ### The face flags are the load-bearing part
+ *
+ * The renderer has one file per face, and its collection is ragged — Impact is
+ * regular only, Tahoma has no italic, Segoe UI has every face but bold-italic,
+ * and none of the Google families ships a bold-italic. A browser asked for a
+ * face it has no file for does not decline: it *synthesises* one, slanting or
+ * smearing the regular. So an operator would see bold italic Cairo on the
+ * canvas and get upright regular Cairo off the printer.
+ *
+ * Marking what exists lets the property bar refuse the combinations that would
+ * end that way (`blockedFaces`), and lets a family switch land on the nearest
+ * face the renderer can actually draw (`clampEmphasis`). Regular is not a flag
+ * because every family has one.
+ */
+export type FontGroup = "system" | "latin" | "arabic"
+
+export type FontFamilyMeta = {
+  family: string
+  group: FontGroup
+  bold: boolean
+  italic: boolean
+  boldItalic: boolean
+}
+
+const ALL_FACES = { bold: true, italic: true, boldItalic: true }
+/** Regular and bold only — the shape every Arabic family here has. */
+const NO_ITALIC = { bold: true, italic: false, boldItalic: false }
+/** Regular, bold and italic, but no bold-italic file. */
+const NO_BOLD_ITALIC = { bold: true, italic: true, boldItalic: false }
+
+export const FONT_FAMILIES: readonly FontFamilyMeta[] = [
+  // Installed with Windows, which both the render host and the operators run.
+  { family: "Arial", group: "system", ...ALL_FACES },
+  { family: "Calibri", group: "system", ...ALL_FACES },
+  { family: "Candara", group: "system", ...ALL_FACES },
+  { family: "Comic Sans MS", group: "system", ...ALL_FACES },
+  { family: "Consolas", group: "system", ...ALL_FACES },
+  { family: "Corbel", group: "system", ...ALL_FACES },
+  { family: "Courier New", group: "system", ...ALL_FACES },
+  { family: "Georgia", group: "system", ...ALL_FACES },
+  { family: "Times New Roman", group: "system", ...ALL_FACES },
+  { family: "Trebuchet MS", group: "system", ...ALL_FACES },
+  { family: "Verdana", group: "system", ...ALL_FACES },
+  { family: "Segoe UI", group: "system", ...NO_BOLD_ITALIC },
+  { family: "Tahoma", group: "system", ...NO_ITALIC },
+  { family: "Impact", group: "system", bold: false, italic: false, boldItalic: false },
+
+  // Open-source Latin. Self-hosted for the browser by editor-fonts.ts.
+  { family: "Inter", group: "latin", ...NO_BOLD_ITALIC },
+  { family: "Lato", group: "latin", ...NO_BOLD_ITALIC },
+  { family: "Montserrat", group: "latin", ...NO_BOLD_ITALIC },
+  { family: "Open Sans", group: "latin", ...NO_BOLD_ITALIC },
+  { family: "Poppins", group: "latin", ...NO_BOLD_ITALIC },
+  { family: "Roboto", group: "latin", ...NO_BOLD_ITALIC },
+
+  // Arabic-capable. The only families here drawn for Arabic rather than
+  // carrying it as a secondary script.
+  { family: "Cairo", group: "arabic", ...NO_ITALIC },
+  { family: "Tajawal", group: "arabic", ...NO_ITALIC },
+  { family: "Noto Sans Arabic", group: "arabic", ...NO_ITALIC },
+]
+
+/** Picker order. Arabic last is not a ranking — it is where Arabic work looks. */
+export const FONT_GROUPS = ["system", "latin", "arabic"] as const
+
+export const FONT_GROUP_LABELS: Record<FontGroup, TranslationKey> = {
+  system: "editor.fontGroups.system",
+  latin: "editor.fontGroups.latin",
+  arabic: "editor.fontGroups.arabic",
+}
+
+/** What an element with no `fontFamily` is drawn and exported as. */
+export const DEFAULT_FONT_FAMILY = "Arial"
+
+export function fontMeta(family?: string): FontFamilyMeta {
+  return (
+    FONT_FAMILIES.find((f) => f.family === family) ??
+    FONT_FAMILIES.find((f) => f.family === DEFAULT_FONT_FAMILY)!
+  )
+}
+
+type Emphasis = { bold: boolean; italic: boolean }
+
+/**
+ * Which emphasis toggles would turn *on* a face the renderer does not have.
+ *
+ * Only ever blocks switching a face on. Turning one off is always allowed —
+ * otherwise an element already saved in an impossible combination, or one that
+ * arrived through copy-style, would be stuck in it.
+ */
+export function blockedFaces(family: string | undefined, current: Emphasis) {
+  const meta = fontMeta(family)
+  return {
+    bold: !current.bold && !(current.italic ? meta.boldItalic : meta.bold),
+    italic: !current.italic && !(current.bold ? meta.boldItalic : meta.italic),
+  }
+}
+
+/**
+ * The nearest emphasis `family` can actually draw.
+ *
+ * Bold survives italic when only one can: on a card it is carrying the
+ * hierarchy, while the italic is usually decoration on a caption.
+ */
+export function clampEmphasis(family: string, current: Emphasis): Emphasis {
+  const meta = fontMeta(family)
+  let { bold, italic } = current
+  if (bold && italic && !meta.boldItalic) {
+    if (meta.bold) italic = false
+    else if (meta.italic) bold = false
+    else bold = italic = false
+  }
+  if (bold && !italic && !meta.bold) bold = false
+  if (italic && !bold && !meta.italic) italic = false
+  return { bold, italic }
+}
 
 // ── Page size presets (§14) ──────────────────────────────────────────────
 /**

@@ -220,7 +220,13 @@ function slotRadius(shorter: number, ratio: number): number {
 
 type CropSource = { url: string; name: string; type: string }
 
-const ZOOM_MIN = 1
+/**
+ * Zoom is a multiple of the scale that just *covers* the frame, so 1 is
+ * "fills the frame, nothing wasted" and stays the opening position.
+ *
+ * There is no constant floor. How far out the zoom goes depends on how badly
+ * the photo's shape disagrees with the slot's — see `zoomMin` in `CropBody`.
+ */
 const ZOOM_MAX = 3
 const ZOOM_STEP = 0.1
 
@@ -307,12 +313,28 @@ function CropBody({
   /**
    * The scale at which the image just covers the frame, times the zoom.
    *
-   * Cover rather than contain: a crop frame with letterbox bars in it is a
-   * frame the operator can position the subject *outside* of, and the exported
-   * rectangle would carry transparent edges into the card.
+   * Cover is the *unit*, not the limit: it is the framing an ID photo almost
+   * always wants, so it is where the dialog opens and what `zoom: 1` means.
    */
   const cover = natural && frame ? Math.max(frame.w / natural.w, frame.h / natural.h) : 0
   const scale = cover * zoom
+
+  /**
+   * How far out the zoom goes — the point where the whole photo is inside the
+   * frame, expressed in the same units as `zoom`.
+   *
+   * A circular or otherwise square-ish slot will crop a portrait photo's head
+   * and shoulders away at cover, and until this existed there was no way back:
+   * the floor was cover itself, so the top and bottom of the file the operator
+   * had just chosen were simply unreachable. Below 1 the frame letterboxes,
+   * which `cropToFile` pads with white rather than leaving transparent.
+   *
+   * It is 1 whenever the photo already matches the slot's shape, so a slot
+   * whose photos fit gains no pointless travel on its slider.
+   */
+  const containScale =
+    natural && frame ? Math.min(frame.w / natural.w, frame.h / natural.h) : 0
+  const zoomMin = cover > 0 ? containScale / cover : 1
 
   // Memoized because the clamp below closes over it: a fresh object per render
   // would rebuild the callback on every pointer move.
@@ -321,14 +343,11 @@ function CropBody({
     [natural, scale]
   )
 
-  /** Pan is clamped so the frame is never uncovered. */
+  /** Pan is clamped so the photo and the frame always overlap fully. */
   const clamp = React.useCallback(
     (next: { x: number; y: number }) => {
       if (!frame || !drawn) return next
-      return {
-        x: Math.min(0, Math.max(frame.w - drawn.w, next.x)),
-        y: Math.min(0, Math.max(frame.h - drawn.h, next.y)),
-      }
+      return clampWith(frame, drawn, next)
     },
     [frame, drawn]
   )
@@ -351,7 +370,7 @@ function CropBody({
   }, [natural, frame, zoom])
 
   const changeZoom = (nextZoom: number) => {
-    const bounded = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(nextZoom.toFixed(2))))
+    const bounded = Math.min(ZOOM_MAX, Math.max(zoomMin, Number(nextZoom.toFixed(2))))
     setZoom(bounded)
     if (!natural || !frame) return
     // Zoom about the frame's centre, so the subject stays put rather than
@@ -490,7 +509,7 @@ function CropBody({
             variant="outline"
             size="icon-lg"
             aria-label={t("issue.crop.zoomOut")}
-            disabled={zoom <= ZOOM_MIN}
+            disabled={zoom <= zoomMin}
             onClick={() => changeZoom(zoom - ZOOM_STEP)}
           >
             <Minus strokeWidth={1.75} />
@@ -498,7 +517,7 @@ function CropBody({
 
           <input
             type="range"
-            min={ZOOM_MIN}
+            min={zoomMin}
             max={ZOOM_MAX}
             step={0.01}
             value={zoom}
@@ -555,15 +574,26 @@ function CropBody({
   )
 }
 
-/** `clamp` as a free function, for the zoom handler's pre-state offset. */
+/**
+ * `clamp` as a free function, for the zoom handler's pre-state offset.
+ *
+ * Each axis is bounded by `0` and `frame - drawn`, in whichever order those
+ * fall. When the photo is larger than the frame that difference is negative
+ * and the pair reads as before: drag as far as the far edge, no further. When
+ * the zoom is below `zoomMin`'s neighbourhood and the photo is *smaller* than
+ * the frame, the same two numbers swap round and hold it inside the frame
+ * instead — so a letterboxed axis can be positioned but never pushed out of
+ * the exported rectangle.
+ */
 function clampWith(
   frame: { w: number; h: number },
   drawn: { w: number; h: number },
   next: { x: number; y: number }
 ) {
+  const slack = { x: frame.w - drawn.w, y: frame.h - drawn.h }
   return {
-    x: Math.min(0, Math.max(frame.w - drawn.w, next.x)),
-    y: Math.min(0, Math.max(frame.h - drawn.h, next.y)),
+    x: Math.min(Math.max(next.x, Math.min(0, slack.x)), Math.max(0, slack.x)),
+    y: Math.min(Math.max(next.y, Math.min(0, slack.y)), Math.max(0, slack.y)),
   }
 }
 
@@ -599,7 +629,56 @@ async function cropToFile({
 
   const context = canvas.getContext("2d")
   if (!context) throw new Error("2d context unavailable")
-  context.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+
+  /*
+   * Zoomed out past cover, the selected rectangle is larger than the photo and
+   * the margin around it has to become something.
+   *
+   * Transparent is the one thing it must not be: the renderer composites the
+   * slot over the artwork, so transparent bands would print as whatever sits
+   * behind them, and a JPEG cannot carry them at all — `toBlob` flattens an
+   * unpainted alpha to black. White is what a photo studio's backdrop is, and
+   * what the operator already sees behind the frame.
+   *
+   * Only when there *is* a margin, so an ordinary crop from inside the photo
+   * encodes exactly as it did before.
+   */
+  const overflows =
+    sx < 0 || sy < 0 || sx + sw > image.width || sy + sh > image.height
+  if (overflows) {
+    context.fillStyle = "#ffffff"
+    context.fillRect(0, 0, canvas.width, canvas.height)
+  }
+
+  /*
+   * The part of the selection that the photo actually covers, mapped to where
+   * it lands on the canvas.
+   *
+   * `drawImage` is specified to clip an out-of-bounds source rectangle and
+   * scale the destination to match, which would come to the same thing — but
+   * this is the geometry that decides what gets printed, so it is written out
+   * rather than delegated to that.
+   */
+  /* Per axis, because the canvas rounded each side to a whole pixel. */
+  const rx = canvas.width / sw
+  const ry = canvas.height / sh
+  const x0 = Math.max(0, sx)
+  const y0 = Math.max(0, sy)
+  const x1 = Math.min(image.width, sx + sw)
+  const y1 = Math.min(image.height, sy + sh)
+  if (x1 > x0 && y1 > y0) {
+    context.drawImage(
+      image,
+      x0,
+      y0,
+      x1 - x0,
+      y1 - y0,
+      (x0 - sx) * rx,
+      (y0 - sy) * ry,
+      (x1 - x0) * rx,
+      (y1 - y0) * ry
+    )
+  }
 
   const mime = type === "image/png" || type === "image/webp" ? type : "image/jpeg"
   const blob = await new Promise<Blob | null>((resolve) =>

@@ -37,8 +37,16 @@ export type Template = BaseEntity & {
    * direction (docs/api-types.md § cross-feature gotchas, trap 7).
    */
   isEnabled?: number
-  /** Whether issuing from this template forces the operator to name a branch. */
-  branchRequired?: boolean
+  /**
+   * Whether issuing from this template forces the operator to name a branch.
+   *
+   * **`0` / `1` on the entity**, like `isEnabled` above — the interceptor
+   * camelizes keys, not values, so nothing turns it into a boolean on the way
+   * in. It was declared as one for a long time, which is how
+   * `{branchRequired && …}` got into the issue sheet and printed a bare `0`
+   * in the middle of the form: `false` renders nothing, `0` renders the digit.
+   */
+  branchRequired?: boolean | number
   /** How many identities have been cut from this design. */
   identitiesCount?: number
   /** Key for the public self-service link — `/public/v1/template/{shareKey}`. */

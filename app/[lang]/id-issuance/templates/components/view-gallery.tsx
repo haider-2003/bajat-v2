@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils"
 import { displayImageSrc } from "@/utils/download-image"
 import { EMPTY_VALUE, formatText } from "@/utils/format"
 
-import { TemplateFace } from "./template-face"
+import { CR80, TemplateFace, useArtworkRatio } from "./template-face"
 import {
   TemplateActionRow,
   type TemplateActionHandlers,
@@ -180,11 +180,17 @@ function TemplateCard({
         <div className="relative">
           <BackPeek src={template.backImage} disabled={!status.enabled} />
 
+          {/* The slot stays `relative` so the front face paints over the
+              peek behind it; everything that traces the card's edges goes on
+              the card, which is the artwork's own shape and not the slot's —
+              a portrait design gets a narrow card with the stage showing at
+              its sides, not a landscape white slab. */}
           <TemplateFace
             src={template.frontImage}
             alt=""
-            className={cn(
-              "relative rounded-md bg-surface",
+            className="relative"
+            cardClassName={cn(
+              "rounded-md bg-surface",
               // The card's own shadow, not the tile's — see the note above.
               "shadow-[0_10px_24px_-8px_rgba(0,0,0,0.28),0_2px_6px_-2px_rgba(0,0,0,0.12)]",
               "dark:shadow-[0_12px_28px_-8px_rgba(0,0,0,0.7)]",
@@ -301,13 +307,17 @@ function BackPeek({
   disabled: boolean
 }) {
   const [brokenSrc, setBrokenSrc] = React.useState<string | null>(null)
+  // Fitted the same way the front is, so the two agree: a back face given the
+  // slot's full width would hang out past a portrait front on both sides and
+  // read as a border rather than as a second card.
+  const { ratio, measure } = useArtworkRatio(src)
   if (!src || brokenSrc === src) return null
 
   return (
     <span
       aria-hidden
       className={cn(
-        "pointer-events-none absolute inset-0",
+        "pointer-events-none absolute inset-0 flex items-center justify-center",
         // The resting offset is layout, not motion — it survives a reduced-
         // motion preference, because without it there is no stack to see. Only
         // the fan on hover is gated.
@@ -319,11 +329,15 @@ function BackPeek({
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
+        ref={measure}
         src={displayImageSrc(src)}
         alt=""
+        style={{ aspectRatio: ratio }}
+        onLoad={(event) => measure(event.currentTarget)}
         onError={() => setBrokenSrc(src)}
         className={cn(
-          "size-full rounded-md bg-surface object-contain opacity-90",
+          "rounded-md bg-surface object-contain opacity-90",
+          ratio >= CR80 ? "w-full" : "h-full",
           "shadow-[0_8px_18px_-8px_rgba(0,0,0,0.24)] dark:shadow-none",
           disabled && "opacity-50 grayscale"
         )}
