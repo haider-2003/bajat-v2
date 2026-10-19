@@ -561,6 +561,33 @@ export function LoginForm() {
     queryClient.removeQueries({ queryKey: ["2fa-setup"] })
   }, [queryClient])
 
+  // Signed in or not, the secret goes when this screen does. Not from
+  // `verifyTotp`'s success handler: the query above is still mounted and
+  // enabled there, and React Query answers a removed entry under a live
+  // observer by fetching it again — a second `GET /auth/2fa/setup`, now on the
+  // session token, whose failure painted the red enrolment error over a
+  // sign-in that had just succeeded.
+  React.useEffect(() => forgetSetup, [forgetSetup])
+
+  /**
+   * True from a successful `2fa/enable` until the page has navigated away.
+   *
+   * `router.push("/")` is not instant — the dashboard route still has to load —
+   * and the mutation has already settled, so the button used to come back as
+   * "Sign in" on a screen that had in fact signed in. Pressing it again re-sent
+   * a code the server had just consumed, without the temp token, and its
+   * rejection put "That code isn't right" over a sign-in that then went ahead.
+   */
+  const [signingIn, setSigningIn] = React.useState(false)
+
+  /**
+   * Set synchronously on submit. `isPending` only reaches the button after a
+   * re-render, so an Enter and a click inside that window would send the code
+   * twice — and only the *last* call's callbacks run, so the replay's rejection
+   * is what the user would see.
+   */
+  const totpInFlight = React.useRef(false)
+
   const requestOtp = React.useCallback(() => {
     setError(null)
     sendOtp.mutate(
@@ -613,6 +640,8 @@ export function LoginForm() {
 
   const verifyTotp = React.useCallback(
     (code: string) => {
+      if (totpInFlight.current) return
+      totpInFlight.current = true
       setError(null)
       enable2FA.mutate(
         { otp: code },
@@ -621,19 +650,20 @@ export function LoginForm() {
             // The temp token MUST go first: `getAuthToken` prefers it, so
             // leaving it behind would shadow the real session token forever.
             localStorage.removeItem(TEMP_TOKEN_KEY)
-            // Enrolled — the secret is the authenticator app's now, and this
-            // cache entry must not outlive it into the next sign-in.
-            forgetSetup()
 
             const account = data.user ?? user
             if (data.accessToken && account) {
+              // Held locked — `totpInFlight` included — until the page is gone.
+              setSigningIn(true)
               setAuth(account, data.accessToken)
               router.push("/")
             } else {
+              totpInFlight.current = false
               setError(t("auth.errors.noSession"))
             }
           },
           onError: (err) => {
+            totpInFlight.current = false
             setError(
               getAuthErrorMessage(
                 err,
@@ -645,7 +675,7 @@ export function LoginForm() {
         }
       )
     },
-    [enable2FA, forgetSetup, router, setAuth, user, t]
+    [enable2FA, router, setAuth, user, t]
   )
 
   const goBack = React.useCallback(
@@ -714,7 +744,7 @@ export function LoginForm() {
               setupFailed={setup2FA.isError}
               onSubmit={verifyTotp}
               onBack={() => goBack("otp")}
-              pending={enable2FA.isPending}
+              pending={enable2FA.isPending || signingIn}
               error={error}
             />
           )}

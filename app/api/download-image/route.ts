@@ -42,6 +42,7 @@ import { NextResponse, type NextRequest } from "next/server"
 
 /** Storage hosts the artwork is served from. Extend with the env var below. */
 const ALLOWED_HOSTS = new Set([
+  "api.bajat.net",
   "identities.g4t.io",
   "82.25.101.56:9000",
   "82.25.101.56:9100",

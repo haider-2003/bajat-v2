@@ -13,7 +13,15 @@ import { transformRequestKeys, transformResponseKeys } from "@/utils/api/key-con
  * `api` directly only for non-REST endpoints, binaries, and public calls.
  */
 
-const PRODUCTION_API_BASE_URL = "https://identities.g4t.io/api/dashboard/v1/"
+/**
+ * Known dashboard API hosts. `bajat` is production — what the Vercel build
+ * talks to. `g4t` is the previous host, kept so a build can be pointed back at
+ * it through `NEXT_PUBLIC_API_BASE_URL` (see .env.example).
+ */
+export const API_HOSTS = {
+  bajat: "https://api.bajat.net/api/dashboard/v1/",
+  g4t: "https://identities.g4t.io/api/dashboard/v1/",
+} as const
 
 /**
  * Overridable so staging/local backends do not need a code change. The default
@@ -28,7 +36,7 @@ const PRODUCTION_API_BASE_URL = "https://identities.g4t.io/api/dashboard/v1/"
  */
 const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
 
-export const API_BASE_URL = configuredApiBaseUrl || PRODUCTION_API_BASE_URL
+export const API_BASE_URL = configuredApiBaseUrl || API_HOSTS.bajat
 
 const baseConfig: AxiosRequestConfig = {
   baseURL: API_BASE_URL,
