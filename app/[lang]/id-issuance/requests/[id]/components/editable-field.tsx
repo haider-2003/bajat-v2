@@ -1,20 +1,19 @@
 "use client"
 
 import * as React from "react"
-import {
-  Check,
-  ImagePlus,
-  Loader2,
-  Lock,
-  Paperclip,
-  Pencil,
-  PenLine,
-  X,
-} from "lucide-react"
+import { ExternalLink, Eye, ImagePlus, Loader2, Paperclip, Pencil, PenLine } from "lucide-react"
 
 import { DynamicField } from "@/components/id-card/dynamic-field"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input, InputGroup, InputGroupAddon } from "@/components/ui/input"
 import {
   Select,
@@ -52,11 +51,13 @@ import { EMPTY_VALUE, formatPhone, toApiPhone } from "@/utils/format"
  * of options; anything else is text. Pictures, signatures and attachments are
  * `EditableMedia` below, on the same controls the issue form uses.
  *
- * ### The pencil is always there
+ * ### An editable value looks like the field it turns into
  *
- * It was revealed on hover until an operator looking at this page could not
- * find where to edit. With locked fields on the same screen, the pencil is also
- * what tells the two apart, and that has to be visible at rest.
+ * Operators on this page could not tell it was editable: first with a pencil
+ * revealed on hover, then with a small pencil always showing. So an editable
+ * value is drawn as the input it becomes, the same box in the same place, with
+ * the word "edit" in it, and all of it is the click target. A value that cannot
+ * be changed stays plain text, so the difference reads without any explaining.
  *
  * ### Dates go out as the day that was picked
  *
@@ -78,6 +79,9 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}/
 
 /** What may go in an `href`: `request` holds whatever a public form was sent. */
 const WEB_URL = /^https?:\/\//i
+
+/** §18.7 — 44px for touch, the §10.1 36px box from 768px up. */
+const CONTROL = "h-11 text-base md:h-9 md:text-sm"
 
 /** The one write both kinds of field share, and how it reports back. */
 function useFieldSave(card: IDCard) {
@@ -201,6 +205,8 @@ export function EditableField({
     <Input
       aria-label={field.label}
       aria-invalid={error ? true : undefined}
+      // In the group, the group sets the height.
+      className={isPhone ? "text-base md:text-sm" : CONTROL}
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
       type={isPhone ? "tel" : undefined}
@@ -220,7 +226,8 @@ export function EditableField({
     />
   )
 
-  const shown = field.value ? (isPhone ? formatPhone(field.value) : field.value) : EMPTY_VALUE
+  const shown = isPhone ? formatPhone(field.value) : field.value
+  const digits = isPhone && Boolean(field.value)
 
   return (
     <div className="min-w-0">
@@ -229,7 +236,7 @@ export function EditableField({
       </dt>
 
       {editing ? (
-        <dd className="mt-1">
+        <dd className="mt-1.5">
           <div className="flex items-center gap-1.5">
             {isSelect ? (
               <Select
@@ -237,10 +244,11 @@ export function EditableField({
                 value={draft || null}
                 onValueChange={(value) => setDraft(value ?? "")}
                 disabled={saving}
+                defaultOpen
               >
                 <SelectTrigger
                   aria-label={field.label}
-                  className="h-9 w-full min-w-0 border-input bg-surface text-sm data-[size=default]:h-9 dark:bg-surface-sunken"
+                  className="w-full min-w-0 border-input bg-surface text-base data-[size=default]:h-11 md:text-sm md:data-[size=default]:h-9 dark:bg-surface-sunken"
                 >
                   <SelectValue className="truncate" placeholder={t("common.selectPlaceholder")} />
                 </SelectTrigger>
@@ -260,13 +268,16 @@ export function EditableField({
                 onChange={setDraft}
                 disabled={saving}
                 invalid={!!error}
-                className="w-full"
+                defaultOpen
+                className={cn("w-full", CONTROL)}
               />
             ) : isPhone ? (
               // `ltr` for the whole group, as on the issue form: the code stays
               // on the left and the digits run away from it in either language.
-              <InputGroup dir="ltr" className="h-9 min-w-0 flex-1">
-                <InputGroupAddon className="text-sm text-text-secondary">+964</InputGroupAddon>
+              <InputGroup dir="ltr" className="h-11 min-w-0 flex-1 md:h-9">
+                <InputGroupAddon className="text-base text-text-secondary md:text-sm">
+                  +964
+                </InputGroupAddon>
                 {box}
               </InputGroup>
             ) : (
@@ -275,64 +286,74 @@ export function EditableField({
 
             <Button
               type="button"
-              size="icon-lg"
-              variant="default"
-              aria-label={t("common.save")}
+              className="h-11 shrink-0 md:h-9"
               disabled={saving}
               onClick={save}
             >
-              {saving ? (
-                <Loader2 className="animate-spin" strokeWidth={1.75} />
-              ) : (
-                <Check strokeWidth={1.75} />
+              {saving && (
+                <Loader2 data-icon="inline-start" className="animate-spin" strokeWidth={1.75} />
               )}
+              {t("common.save")}
             </Button>
             <Button
               type="button"
-              size="icon-lg"
               variant="outline"
-              aria-label={t("common.cancel")}
+              className="h-11 shrink-0 md:h-9"
               disabled={saving}
               onClick={cancel}
             >
-              <X strokeWidth={1.75} />
+              {t("common.cancel")}
             </Button>
           </div>
           {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
         </dd>
-      ) : (
-        <dd className="mt-1 flex min-w-0 items-center gap-1.5">
-          <span
+      ) : editable ? (
+        <dd className="mt-1.5">
+          <button
+            type="button"
+            onClick={begin}
             title={field.value || undefined}
-            dir={isPhone ? "ltr" : undefined}
+            // The value is part of the name: a screen reader hears what is
+            // there now, not only that it can be changed.
+            aria-label={
+              t("ids.fields.editLabel", { field: field.label }) +
+              (field.value ? `: ${shown}` : "")
+            }
             className={cn(
-              "min-w-0 truncate text-[13px]",
-              field.value ? "text-text-secondary" : "text-text-placeholder",
-              isPhone && field.value && "font-mono tabular-nums"
+              "group/edit flex w-full min-w-0 cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 text-start",
+              "border-input bg-surface dark:bg-surface-sunken",
+              "transition-[border-color,box-shadow] duration-120 outline-none",
+              "hover:border-accent-violet",
+              "focus-visible:border-accent-violet focus-visible:ring-3 focus-visible:ring-ring/45",
+              CONTROL
             )}
           >
-            {shown}
-          </span>
-          {editable ? (
-            <EditButton
-              label={t("ids.fields.editLabel", { field: field.label })}
-              onClick={begin}
-            />
-          ) : (
-            // Only for someone who could otherwise edit: to a viewer with no
-            // grant, a lock on one field would imply the others are open.
-            canEdit &&
-            field.locked && (
-              <span
-                role="img"
-                title={t("ids.fields.lockedLabel")}
-                aria-label={t("ids.fields.lockedLabel")}
-                className="inline-flex shrink-0 text-text-placeholder"
-              >
-                <Lock className="size-3" strokeWidth={1.75} />
-              </span>
-            )
+            <span
+              dir={isPhone ? "ltr" : undefined}
+              className={cn(
+                "min-w-0 truncate",
+                field.value ? "text-text" : "text-text-placeholder",
+                digits && "font-mono tabular-nums"
+              )}
+            >
+              {field.value ? shown : t("ids.fields.addValue")}
+            </span>
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-accent-violet">
+              <Pencil className="size-3" strokeWidth={1.75} aria-hidden />
+              {t("common.edit")}
+            </span>
+          </button>
+        </dd>
+      ) : (
+        <dd
+          title={field.value || undefined}
+          dir={isPhone ? "ltr" : undefined}
+          className={cn(
+            "mt-1 truncate text-[13px] text-text-secondary",
+            digits && "font-mono tabular-nums rtl:text-end"
           )}
+        >
+          {field.value ? shown : EMPTY_VALUE}
         </dd>
       )}
     </div>
@@ -346,6 +367,13 @@ export function EditableField({
  * shape, the signature pad — because the same reasons apply: a file that is not
  * the slot's shape prints squashed. There is no clearing one from here: `null`
  * is omitted from the multipart body, so the endpoint could not be told.
+ *
+ * ### What is there now stays in view
+ *
+ * A thumbnail is too small to judge a photo by, so it opens full size, for
+ * anyone who can see the card. The upload control starts empty, which would hide
+ * the very thing being replaced at the moment it matters, so the current file
+ * stays beside it while editing.
  */
 export function EditableMedia({
   card,
@@ -362,9 +390,14 @@ export function EditableMedia({
   const [file, setFile] = React.useState<File | null>(null)
   const picture = React.useRef<HTMLImageElement>(null)
   const [measured, setMeasured] = React.useState(0)
+  const [previewing, setPreviewing] = React.useState(false)
 
   const input = canEdit ? field.input : null
   const editLabel = t("ids.fields.editLabel", { field: field.label })
+  const kind = field.input?.kind
+  const isSignature = kind === "signature"
+  // An attachment may be a PDF: a link, not an `<img>` it would break.
+  const href = kind === "file" && WEB_URL.test(field.value) ? field.value : undefined
 
   const begin = () => {
     // Only consulted when the design gave no slot shape (`guessInput`). Zero
@@ -376,134 +409,180 @@ export function EditableMedia({
     setEditing(true)
   }
 
+  const Glyph = isSignature ? PenLine : kind === "file" ? Paperclip : ImagePlus
+  const WELL = "flex size-full items-center justify-center rounded-lg border"
+
+  // A click on the thumbnail is what most people try first, so it works, but for
+  // the pointer only: the labelled action under it is the real control, and two
+  // of the same control would be announced twice.
+  const well = !field.value ? (
+    <button
+      type="button"
+      onClick={begin}
+      tabIndex={-1}
+      aria-hidden
+      className={cn(
+        WELL,
+        "cursor-pointer border-dashed border-border-strong text-text-placeholder transition-colors outline-none hover:text-text"
+      )}
+    >
+      <Glyph className="size-5" strokeWidth={1.5} />
+    </button>
+  ) : kind === "file" ? (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      tabIndex={-1}
+      aria-hidden
+      className={cn(
+        WELL,
+        "border-border bg-background-subtle text-text-muted transition-colors outline-none hover:text-text"
+      )}
+    >
+      <Paperclip className="size-5" strokeWidth={1.5} />
+    </a>
+  ) : (
+    <button
+      type="button"
+      onClick={() => setPreviewing(true)}
+      tabIndex={-1}
+      aria-hidden
+      className="block size-full cursor-zoom-in rounded-lg outline-none"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- a pre-signed
+          URL that expires in five minutes; the optimizer would cache a 403. */}
+      <img
+        ref={picture}
+        src={displayImageSrc(field.value)}
+        alt={field.label}
+        className={cn(
+          "size-full rounded-lg border border-border",
+          // A photo fills its well. A signature is transparent ink, so it is
+          // contained, on the light ground it needs to show in dark mode.
+          isSignature ? "bg-white object-contain" : "object-cover"
+        )}
+      />
+    </button>
+  )
+
+  /** The way to look at what is stored, in either state. */
+  const view = !field.value ? null : kind !== "file" ? (
+    <Button
+      type="button"
+      variant="outline"
+      aria-label={`${t("common.preview")}: ${field.label}`}
+      className="h-10 w-full sm:h-8"
+      onClick={() => setPreviewing(true)}
+    >
+      <Eye data-icon="inline-start" strokeWidth={1.75} />
+      {t("common.preview")}
+    </Button>
+  ) : href ? (
+    <Button
+      variant="outline"
+      className="h-10 w-full sm:h-8"
+      nativeButton={false}
+      render={<a href={href} target="_blank" rel="noopener noreferrer" />}
+    >
+      <ExternalLink data-icon="inline-start" strokeWidth={1.75} />
+      {t("ids.fields.openFile")}
+    </Button>
+  ) : null
+
+  const previewDialog = field.value && kind !== "file" && (
+    <Dialog open={previewing} onOpenChange={setPreviewing}>
+      <DialogContent size="lg">
+        <DialogCloseButton />
+        <DialogHeader>
+          <DialogTitle>{field.label}</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          {/* eslint-disable-next-line @next/next/no-img-element -- as above. */}
+          <img
+            src={displayImageSrc(field.value)}
+            alt={field.label}
+            className={cn(
+              "max-h-[70vh] w-full rounded-lg object-contain",
+              isSignature ? "bg-white" : "bg-background-subtle"
+            )}
+          />
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  )
+
   if (editing && input) {
     return (
-      // A tile and its actions do not fit in the 80px of a thumbnail, so this
-      // takes the whole row of the wrapping list it sits in.
-      <div className="w-full">
-        <DynamicField
-          field={{ ...input, aspectRatio: input.aspectRatio || measured || 1 }}
-          value={file}
-          onChange={(next) => setFile(next instanceof File ? next : null)}
-          disabled={saving}
-        />
-        {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
-        <div className="mt-2 flex items-center gap-2">
-          <Button
-            type="button"
-            className="h-10 sm:h-8"
-            disabled={!file || saving}
-            onClick={() => file && save(field.key, file, () => setEditing(false))}
-          >
-            {saving ? (
-              <Loader2 data-icon="inline-start" className="animate-spin" strokeWidth={1.75} />
-            ) : (
-              <Check data-icon="inline-start" strokeWidth={1.75} />
-            )}
-            {t("common.save")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 sm:h-8"
+      // The upload control does not fit in a thumbnail's width, so this takes the
+      // whole row of the wrapping list it sits in.
+      <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-start">
+        {field.value && (
+          <div className="flex w-28 shrink-0 flex-col gap-1.5">
+            <p className="truncate text-xs text-text-muted">{t("ids.fields.current")}</p>
+            <div className="size-28">{well}</div>
+            {view}
+            {previewDialog}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <DynamicField
+            field={{ ...input, aspectRatio: input.aspectRatio || measured || 1 }}
+            value={file}
+            onChange={(next) => setFile(next instanceof File ? next : null)}
             disabled={saving}
-            onClick={() => {
-              reset()
-              setEditing(false)
-            }}
-          >
-            {t("common.cancel")}
-          </Button>
+          />
+          {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+          <div className="mt-2 flex items-center gap-2">
+            <Button
+              type="button"
+              className="h-10 sm:h-8"
+              disabled={!file || saving}
+              onClick={() => file && save(field.key, file, () => setEditing(false))}
+            >
+              {saving && (
+                <Loader2 data-icon="inline-start" className="animate-spin" strokeWidth={1.75} />
+              )}
+              {t("common.save")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 sm:h-8"
+              disabled={saving}
+              onClick={() => {
+                reset()
+                setEditing(false)
+              }}
+            >
+              {t("common.cancel")}
+            </Button>
+          </div>
         </div>
       </div>
     )
   }
 
-  const kind = field.input?.kind
-  const Glyph = kind === "signature" ? PenLine : kind === "file" ? Paperclip : ImagePlus
-
   return (
-    <figure className="w-20">
-      <div className="relative size-20">
-        {!field.value ? (
-          // The well is the control while there is nothing in it.
-          <button
-            type="button"
-            onClick={begin}
-            aria-label={editLabel}
-            className={cn(
-              "flex size-full items-center justify-center rounded-lg border border-dashed border-border-strong",
-              "text-text-placeholder transition-colors outline-none hover:text-text",
-              "focus-visible:ring-2 focus-visible:ring-ring"
-            )}
-          >
-            <Glyph className="size-5" strokeWidth={1.5} />
-          </button>
-        ) : kind === "file" ? (
-          // An attachment may be a PDF: a link, not an `<img>` it would break.
-          <a
-            href={WEB_URL.test(field.value) ? field.value : undefined}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={t("ids.fields.openFile")}
-            aria-label={t("ids.fields.openFile")}
-            className={cn(
-              "flex size-full items-center justify-center rounded-lg border border-border bg-background-subtle",
-              "text-text-muted transition-colors outline-none hover:text-text",
-              "focus-visible:ring-2 focus-visible:ring-ring"
-            )}
-          >
-            <Paperclip className="size-5" strokeWidth={1.5} />
-          </a>
-        ) : (
-          /* eslint-disable-next-line @next/next/no-img-element -- a pre-signed
-             URL that expires in five minutes; the optimizer would cache a 403. */
-          <img
-            ref={picture}
-            src={displayImageSrc(field.value)}
-            alt={field.label}
-            className="size-full rounded-lg border border-border object-cover"
-          />
-        )}
-
-        {input && field.value && (
-          <EditButton
-            label={editLabel}
-            onClick={begin}
-            className="absolute inset-e-1 top-1 border border-border bg-surface hover:bg-surface dark:hover:bg-surface"
-          />
-        )}
-      </div>
-      <figcaption title={field.key} className="mt-1.5 truncate text-[11px] text-text-muted">
+    <figure className="flex w-28 flex-col gap-1.5">
+      <div className="size-28">{well}</div>
+      <figcaption title={field.key} className="truncate text-[11px] text-text-muted">
         {field.label}
       </figcaption>
-    </figure>
-  )
-}
-
-function EditButton({
-  label,
-  onClick,
-  className,
-}: {
-  label: string
-  onClick: () => void
-  className?: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      className={cn(
-        "inline-flex size-6 shrink-0 items-center justify-center rounded-md",
-        "text-text-muted transition-colors outline-none",
-        "hover:bg-[rgba(0,0,0,0.04)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.06)]",
-        "focus-visible:ring-2 focus-visible:ring-ring",
-        className
+      {view}
+      {input && (
+        <Button
+          type="button"
+          variant="outline"
+          aria-label={editLabel}
+          className="h-10 w-full sm:h-8"
+          onClick={begin}
+        >
+          <Pencil data-icon="inline-start" strokeWidth={1.75} />
+          {field.value ? t("ids.fields.change") : t("common.add")}
+        </Button>
       )}
-    >
-      <Pencil className="size-3.5" strokeWidth={1.75} />
-    </button>
+      {previewDialog}
+    </figure>
   )
 }

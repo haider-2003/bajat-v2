@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Check,
   Download,
+  Lock,
   Printer,
   RefreshCw,
   Send,
@@ -23,7 +24,13 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { SoftBadge } from "@/components/ui/data-bits"
 import { useAuthStore } from "@/features/auth/store"
 import { useChangeIdStatus, useGetId } from "@/features/ids/api"
-import { cardFields, cardholderField, cardName, cardTemplateId } from "@/features/ids/fields"
+import {
+  cardFields,
+  cardholderField,
+  cardName,
+  cardTemplateId,
+  type CardField,
+} from "@/features/ids/fields"
 import { ledgerVerbs, statusMeta } from "@/features/ids/status"
 import type { IDCard, StatusName } from "@/features/ids/types"
 import { useGetTemplate } from "@/features/templates/api"
@@ -481,20 +488,24 @@ function TemplateFields({
       cardFields(card, design).filter((field) => field.value || (canEdit && field.input)),
     [card, design, canEdit]
   )
-  const textFields = fields.filter((field) => !field.media)
+  // Only worth setting apart for someone who can edit the rest. To a viewer with
+  // no grant, every field is equally read-only and stays in the design's order.
+  const isSetApart = (field: CardField) => canEdit && field.locked
+  const textFields = fields.filter((field) => !field.media && !isSetApart(field))
   const mediaFields = fields.filter((field) => field.media)
+  const lockedFields = fields.filter((field) => !field.media && isSetApart(field))
 
   if (fields.length === 0) return null
 
-  const hint = design === undefined
-    ? t("ids.fields.loadingLabels")
-    : !canEdit
-      ? undefined
-      : !design
-        ? t("ids.fields.noDesign")
-        : fields.some((field) => field.locked)
-          ? t("ids.fields.editHintLocked")
-          : t("ids.fields.editHint")
+  const editHint = t("ids.fields.editHint")
+  const hint =
+    design === undefined
+      ? t("ids.fields.loadingLabels")
+      : !canEdit || !fields.some((field) => field.input)
+        ? undefined
+        : design
+          ? editHint
+          : `${editHint} ${t("ids.fields.noDesign")}`
 
   return (
     <Section title={t("printer.templateFields")} hint={hint}>
@@ -508,6 +519,18 @@ function TemplateFields({
             <EditableMedia key={field.key} card={card} field={field} canEdit={canEdit} />
           ))}
         </div>
+      )}
+
+      {lockedFields.length > 0 && (
+        <>
+          <p className="col-span-full mt-1 flex items-center gap-1.5 border-t border-border pt-4 text-xs font-medium text-text-muted">
+            <Lock className="size-3 shrink-0" strokeWidth={1.75} aria-hidden />
+            {t("ids.fields.lockedTitle")}
+          </p>
+          {lockedFields.map((field) => (
+            <EditableField key={field.key} card={card} field={field} canEdit={canEdit} />
+          ))}
+        </>
       )}
     </Section>
   )
@@ -528,11 +551,11 @@ function Section({
 }) {
   return (
     <section className="rounded-xl border border-border bg-surface p-4 sm:p-5">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+      <div className="mb-4">
         <h2 className="text-sm font-semibold text-text">{title}</h2>
-        {hint && <p className="text-xs text-text-placeholder">{hint}</p>}
+        {hint && <p className="mt-1 text-[13px] leading-relaxed text-text-muted">{hint}</p>}
       </div>
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-3.5 min-[480px]:grid-cols-2">
+      <dl className="grid grid-cols-1 items-start gap-x-6 gap-y-4 min-[480px]:grid-cols-2">
         {children}
       </dl>
     </section>

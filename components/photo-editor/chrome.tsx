@@ -4,6 +4,7 @@ import * as React from "react"
 import {
   ChevronLeft,
   Download,
+  Eye,
   Maximize2,
   Minus,
   Plus,
@@ -123,10 +124,12 @@ export function DocBar() {
 
 export function ActionBar({
   onOpenSettings,
+  onPreview,
   onExport,
   onSave,
 }: {
   onOpenSettings: () => void
+  onPreview: () => void
   onExport: () => void
   onSave: () => void
 }) {
@@ -170,6 +173,21 @@ export function ActionBar({
       >
         <Settings2 className="size-4" strokeWidth={1.7} />
         <span className="hidden lg:inline">{t("nav.settings")}</span>
+      </button>
+
+      {/* Not behind the metadata gate below: a preview sends nothing anywhere. */}
+      <button
+        type="button"
+        onClick={onPreview}
+        aria-label={t("common.preview")}
+        className={cn(
+          "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] px-2 text-[13px] font-medium text-text-secondary lg:px-2.5",
+          "transition-colors duration-120 hover:bg-[var(--editor-hover)] hover:text-text",
+          "outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        )}
+      >
+        <Eye className="size-4" strokeWidth={1.7} />
+        <span className="hidden lg:inline">{t("common.preview")}</span>
       </button>
 
       {/* §4.3 — nothing can leave the editor before the metadata exists. */}

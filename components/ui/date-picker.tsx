@@ -156,6 +156,7 @@ export function DatePicker({
   "aria-describedby": describedBy,
   invalid = false,
   disabled = false,
+  defaultOpen = false,
 }: {
   /** `yyyy-mm-dd`, or `""` for no date. */
   value: string
@@ -179,11 +180,13 @@ export function DatePicker({
   "aria-describedby"?: string
   invalid?: boolean
   disabled?: boolean
+  /** Mount with the calendar open, for a field that only exists to pick a date. */
+  defaultOpen?: boolean
 }) {
   const t = useT()
   const locale = useLocale()
   const tag = localeTag[locale]
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = React.useState(defaultOpen)
   // The same face the filter buttons and the active nav chip wear.
   const surface = useControlSurface()
 

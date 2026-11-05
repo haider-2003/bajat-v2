@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils"
 import { ActionBar, DocBar, TEMPLATES_HREF, ZoomBar } from "./chrome"
 import { ResetSequenceDialog, SettingsDialog } from "./dialogs"
 import { Panel, PanelRail } from "./panels"
+import { PreviewDialog } from "./preview-dialog"
 import { PropertyBar } from "./property-bar"
 import { Stage } from "./stage"
 
@@ -42,6 +43,7 @@ import { Stage } from "./stage"
  *   panels.tsx        the five authoring panels and the rail
  *   panel-variables   the variable system (§10) — the domain half of the tool
  *   dialogs.tsx       template metadata (§15) and the sequence reset (§10.7)
+ *   preview-dialog    the card as it stands, filled with fake data
  *
  * State lives in `features/templates/editor-store.ts`, which is module-global,
  * so §4.2's first instruction is the one thing this component must not skip:
@@ -98,6 +100,7 @@ export function PhotoEditor({
 
   const [settingsOpen, setSettingsOpen] = React.useState(mode === "create")
   const [resetTarget, setResetTarget] = React.useState<EditorVariable | null>(null)
+  const [previewOpen, setPreviewOpen] = React.useState(false)
   const [toasts, setToasts] = React.useState<Toast[]>([])
   const [busy, setBusy] = React.useState(false)
 
@@ -225,6 +228,9 @@ export function PhotoEditor({
       const target = e.target as HTMLElement | null
       if (target && /input|textarea|select/i.test(target.tagName)) return
       if (target?.isContentEditable) return
+      // A modal owns the keyboard. Without this, Delete in an open dialog removes
+      // the selected element hidden behind it.
+      if (target?.closest('[role="dialog"]')) return
 
       const state = useEditorStore.getState()
       const selected = state.selected()
@@ -435,6 +441,7 @@ export function PhotoEditor({
             <PropertyBar onNotify={notify} />
             <ActionBar
               onOpenSettings={() => setSettingsOpen(true)}
+              onPreview={() => setPreviewOpen(true)}
               onExport={exportJson}
               onSave={save}
             />
@@ -446,7 +453,7 @@ export function PhotoEditor({
           <div className="flex min-h-0 flex-1 gap-4">
             {/* `relative` is what the drawer positions against below `lg`. */}
             <div className="relative flex min-h-0 items-start gap-4">
-              <PanelRail />
+              <PanelRail onPreview={() => setPreviewOpen(true)} />
               <Panel onResetSequence={setResetTarget} onNotify={notify} />
             </div>
             <div ref={free} className="min-w-0 flex-1" aria-hidden />
@@ -554,6 +561,8 @@ export function PhotoEditor({
         dismissible={mode === "edit" || hasConfigured}
         onCancel={() => router.push(TEMPLATES_HREF)}
       />
+
+      <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} />
 
       <ResetSequenceDialog
         variable={resetTarget}

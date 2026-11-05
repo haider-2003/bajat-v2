@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import {
+  Eye,
   FlipHorizontal,
   Image as ImageIcon,
   Loader2,
@@ -67,7 +68,7 @@ const PANELS: {
   { key: "page", icon: FlipHorizontal, labelKey: "editor.panels.page" },
 ]
 
-export function PanelRail() {
+export function PanelRail({ onPreview }: { onPreview: () => void }) {
   const t = useT()
   const panel = useEditorStore((s) => s.panel)
   const setPanel = useEditorStore((s) => s.setPanel)
@@ -96,6 +97,15 @@ export function PanelRail() {
           <TooltipContent side="right">{t(p.labelKey)}</TooltipContent>
         </Tooltip>
       ))}
+
+      {/* Set apart from the panels above: this opens a dialog, not a panel. */}
+      <span aria-hidden className="mx-1.5 my-1 h-px bg-[var(--editor-line)]" />
+      <Tooltip>
+        <TooltipTrigger
+          render={<IconButton icon={Eye} label={t("common.preview")} onClick={onPreview} />}
+        />
+        <TooltipContent side="right">{t("common.preview")}</TooltipContent>
+      </Tooltip>
     </Float>
   )
 }

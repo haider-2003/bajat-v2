@@ -713,6 +713,13 @@
     "unsavedChanges": "Unsaved changes",
     "export": "Export",
     "exportHint": "Export the design as JSON",
+    "preview": {
+      "title": "Card preview",
+      "description": "Filled with sample data so you can see how the card will look. Nothing here is saved.",
+      "sampleName": "Ahmed Ali Hassan",
+      "sampleText": "Sample text",
+      "sampleTextNumbered": "Sample text {n}"
+    },
     "saveTemplate": "Save template",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
@@ -1734,10 +1741,12 @@
       "failed": "The server refused the change."
     },
     "fields": {
-      "editHint": "Click the pencil to edit a value",
-      "editHintLocked": "Click the pencil to edit a value. Locked fields are set by the system.",
+      "editHint": "Click any field below to change it.",
       "noDesign": "This card's template couldn't be read, so field names may not be accurate.",
-      "lockedLabel": "Set by the system",
+      "lockedTitle": "Set by the system, so they can't be edited",
+      "addValue": "Add a value",
+      "change": "Change",
+      "current": "Currently saved",
       "openFile": "Open file",
       "loadingLabels": "Loading field labels…",
       "editLabel": "Edit {field}",

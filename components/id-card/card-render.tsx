@@ -51,6 +51,11 @@ export type CardValue = {
    */
   file?: File | null
   /**
+   * For an image slot: a picture that is not a picked file — the editor
+   * preview's sample photo. A constant has no object URL to own or release.
+   */
+  src?: string
+  /**
    * Drawn at half opacity, for a value the operator did not supply — a
    * server-generated stand-in, or an untouched field showing its own name.
    */
@@ -268,7 +273,7 @@ function ImageRender({
 }) {
   // One URL per slot, for as long as that slot holds that file.
   const uploaded = useObjectUrl(value?.file)
-  const src = element.variable ? uploaded : element.src
+  const src = element.variable ? (uploaded ?? value?.src) : element.src
   const radius = element.cornerRadius ?? 0
 
   const box: React.CSSProperties = {
