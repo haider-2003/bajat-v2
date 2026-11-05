@@ -2,9 +2,10 @@
 
 import * as React from "react"
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
-import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react"
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react"
 
 import { useControlSurface } from "@/components/ui/control-style"
+import { Input } from "@/components/ui/input"
 import { localeTag, type Locale } from "@/i18n/config"
 import { useLocale, useT } from "@/i18n/context"
 import { cn } from "@/lib/utils"
@@ -34,6 +35,23 @@ import { cn } from "@/lib/utils"
  * 31st for a value of the 1st. So the string is split into y/m/d integers and
  * only ever rebuilt through `new Date(y, m, d)`, which is local.
  * `toISOString` is never called.
+ *
+ * ### Getting to a far-off date
+ *
+ * Month arrows are fine for "next Tuesday" and useless for a birth date, which
+ * is hundreds of clicks away. So the month and the year in the header open grids
+ * of their own, and picking a year goes on to the month, then the day.
+ *
+ * ### Months are numbers first
+ *
+ * Not everyone knows the month names: Iraq's تشرين الأول is أكتوبر elsewhere, and
+ * either may be unfamiliar to someone copying `10` off a document. So a month
+ * always shows its number, with the name as the smaller hint.
+ *
+ * `numeric` goes further, for a date read off a document into a form. It adds
+ * boxes to type day, month and year, and the closed field shows `yyyy-mm-dd`,
+ * which is what the card prints. It is opt-in because a filter asks about last
+ * Tuesday, not a date on a document, and its summary chip reads the friendly form.
  */
 
 /**
@@ -77,7 +95,23 @@ function toISO(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
-const monthCache = new Map<string, Intl.DateTimeFormat>()
+/** The twelve month names in the active language, January first. */
+const monthNameCache = new Map<string, string[]>()
+
+function monthNames(locale: string): string[] {
+  let names = monthNameCache.get(locale)
+  if (!names) {
+    const fmt = new Intl.DateTimeFormat(locale, { month: "long" })
+    names = Array.from({ length: 12 }, (_, i) => fmt.format(new Date(2024, i, 1)))
+    monthNameCache.set(locale, names)
+  }
+  return names
+}
+
+/** How far the year grid reaches when `min` / `max` do not say. */
+const YEARS_BACK = 100
+const YEARS_AHEAD = 30
+
 const triggerCache = new Map<string, Intl.DateTimeFormat>()
 
 function cachedFormat(
@@ -92,9 +126,6 @@ function cachedFormat(
   }
   return fmt
 }
-
-const monthFmt = (locale: string) =>
-  cachedFormat(monthCache, locale, { month: "long", year: "numeric" })
 
 const triggerFmt = (locale: string) =>
   cachedFormat(triggerCache, locale, {
@@ -157,6 +188,7 @@ export function DatePicker({
   invalid = false,
   disabled = false,
   defaultOpen = false,
+  numeric = false,
 }: {
   /** `yyyy-mm-dd`, or `""` for no date. */
   value: string
@@ -182,6 +214,8 @@ export function DatePicker({
   disabled?: boolean
   /** Mount with the calendar open, for a field that only exists to pick a date. */
   defaultOpen?: boolean
+  /** `field`: boxes to type the date in, and `yyyy-mm-dd` on the closed field. */
+  numeric?: boolean
 }) {
   const t = useT()
   const locale = useLocale()
@@ -199,14 +233,49 @@ export function DatePicker({
   // open — rather than syncing it to `value` in an effect — is both simpler and
   // the better behaviour: the calendar always opens on the selected month.
   const [month, setMonth] = React.useState<Date>(() => startOfMonth(selected ?? new Date()))
+  const [view, setView] = React.useState<View>("days")
 
-  const handleOpenChange = (next: boolean) => {
-    if (next) setMonth(startOfMonth(selected ?? new Date()))
+  const popup = React.useRef<HTMLDivElement>(null)
+  const dayBox = React.useRef<HTMLInputElement>(null)
+  /** A complete date in the typed boxes, not yet the value. See `TypedDate`. */
+  const typed = React.useRef<Date | null>(null)
+
+  const handleOpenChange = (
+    next: boolean,
+    details: PopoverPrimitive.Root.ChangeEventDetails
+  ) => {
+    if (next) {
+      setMonth(startOfMonth(selected ?? new Date()))
+      setView("days")
+      typed.current = null
+    } else if (typed.current && details.reason !== "escape-key") {
+      // Clicking away keeps what was typed: the next click is usually the form's
+      // own submit, and it must not find the date gone. Escape means never mind.
+      onChange(toISO(typed.current))
+    }
     setOpen(next)
+  }
+
+  // The button that was just pressed is about to unmount with its view, so
+  // focus moves first, or it would fall out of the popover.
+  const changeView = (next: View) => {
+    popup.current?.focus()
+    setView(next)
   }
 
   const days = React.useMemo(() => buildMonth(month), [month])
   const today = new Date()
+  const names = monthNames(tag)
+  const viewYear = month.getFullYear()
+  const viewMonth = month.getMonth()
+
+  const years = React.useMemo(() => {
+    const now = new Date().getFullYear()
+    // Never without the year on screen, however far a stored value has it.
+    const first = minDate?.getFullYear() ?? Math.min(now - YEARS_BACK, viewYear)
+    const last = maxDate?.getFullYear() ?? Math.max(now + YEARS_AHEAD, viewYear)
+    return Array.from({ length: Math.max(last - first + 1, 0) }, (_, i) => first + i)
+  }, [minDate, maxDate, viewYear])
 
   const isDisabled = (day: Date) =>
     (minDate !== null && day < minDate) || (maxDate !== null && day > maxDate)
@@ -221,6 +290,7 @@ export function DatePicker({
 
   const todayDisabled = isDisabled(today)
   const field = variant === "field"
+  const asNumbers = field && numeric
 
   /** Clearing is the usual follow-up, so it sits on the trigger rather than
       only inside the popover. A nested <button> is invalid HTML, hence a span
@@ -234,12 +304,14 @@ export function DatePicker({
       }
       onClick={(e) => {
         e.stopPropagation()
+        typed.current = null
         onChange("")
       }}
       onKeyDown={(e) => {
         if (e.key !== "Enter" && e.key !== " ") return
         e.preventDefault()
         e.stopPropagation()
+        typed.current = null
         onChange("")
       }}
       className={cn(
@@ -300,9 +372,19 @@ export function DatePicker({
         {field ? (
           <>
             <span
-              className={cn("min-w-0 flex-1 truncate", !selected && "text-text-placeholder")}
+              // Digits read left to right whatever the locale does.
+              dir={asNumbers && selected ? "ltr" : undefined}
+              className={cn(
+                "min-w-0 flex-1 truncate",
+                !selected && "text-text-placeholder",
+                asNumbers && selected && "tabular-nums rtl:text-end"
+              )}
             >
-              {selected ? triggerFmt(tag).format(selected) : (placeholder ?? t("datePicker.pick"))}
+              {selected
+                ? asNumbers
+                  ? toISO(selected)
+                  : triggerFmt(tag).format(selected)
+                : (placeholder ?? (asNumbers ? t("datePicker.format") : t("datePicker.pick")))}
             </span>
             {clear}
             <CalendarDays
@@ -335,74 +417,169 @@ export function DatePicker({
           sideOffset={6}
         >
           <PopoverPrimitive.Popup
+            ref={popup}
+            // Straight into the boxes, except on touch, where focusing one would
+            // throw a keyboard over the calendar somebody may have come to tap.
+            initialFocus={
+              asNumbers ? (type) => (type === "touch" ? false : dayBox.current) : undefined
+            }
             className={cn(
-              "w-[268px] rounded-xl border border-border bg-surface p-3 shadow-lg outline-none",
+              "w-[288px] max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-surface p-3 shadow-lg outline-none",
               "origin-[var(--transform-origin)] transition-[transform,opacity] duration-120",
               "data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
               "data-[ending-style]:scale-95 data-[ending-style]:opacity-0"
             )}
           >
-            <div className="flex items-center justify-between">
-              <MonthButton
-                label={t("datePicker.previousMonth")}
-                icon={ChevronLeft}
-                onClick={() => shiftMonth(-1)}
+            {asNumbers && (
+              <TypedDate
+                selected={selected}
+                isDisabled={isDisabled}
+                dayBox={dayBox}
+                onDate={(date) => {
+                  typed.current = date
+                  if (date) setMonth(startOfMonth(date))
+                }}
+                onDone={(date) => {
+                  onChange(toISO(date))
+                  setOpen(false)
+                }}
               />
-              <span aria-live="polite" className="text-[13px] font-medium text-text">
-                {monthFmt(tag).format(month)}
-              </span>
-              <MonthButton
-                label={t("datePicker.nextMonth")}
-                icon={ChevronRight}
-                onClick={() => shiftMonth(1)}
-              />
-            </div>
+            )}
 
-            <div className="mt-2 grid grid-cols-7 gap-0.5">
-              {weekdayNames(tag).map((d) => (
-                <span
-                  key={d}
-                  aria-hidden
-                  className="flex h-7 items-center justify-center text-[11px] font-medium text-text-placeholder"
-                >
-                  {d}
-                </span>
-              ))}
+            {view === "days" ? (
+              <>
+                <div className="flex items-center justify-between gap-1">
+                  <MonthButton
+                    label={t("datePicker.previousMonth")}
+                    icon={ChevronLeft}
+                    onClick={() => shiftMonth(-1)}
+                  />
+                  <div aria-live="polite" className="flex min-w-0 items-center gap-1">
+                    <ViewButton
+                      label={t("datePicker.chooseMonth")}
+                      onClick={() => changeView("months")}
+                    >
+                      {viewMonth + 1} · {names[viewMonth]}
+                    </ViewButton>
+                    <ViewButton
+                      label={t("datePicker.chooseYear")}
+                      onClick={() => changeView("years")}
+                    >
+                      {viewYear}
+                    </ViewButton>
+                  </div>
+                  <MonthButton
+                    label={t("datePicker.nextMonth")}
+                    icon={ChevronRight}
+                    onClick={() => shiftMonth(1)}
+                  />
+                </div>
 
-              {days.map((day) => {
-                const outside = day.getMonth() !== month.getMonth()
-                const disabled = isDisabled(day)
-                const active = selected !== null && sameDay(day, selected)
+                <div className="mt-2 grid grid-cols-7 gap-0.5">
+                  {weekdayNames(tag).map((d) => (
+                    <span
+                      key={d}
+                      aria-hidden
+                      className="flex h-7 items-center justify-center text-[11px] font-medium text-text-placeholder"
+                    >
+                      {d}
+                    </span>
+                  ))}
 
-                return (
-                  <button
-                    key={day.getTime()}
-                    type="button"
-                    disabled={disabled}
-                    aria-pressed={active}
-                    onClick={() => pick(day)}
-                    className={cn(
-                      "flex h-8 items-center justify-center rounded-md text-[13px] tabular-nums",
-                      "transition-colors duration-120 outline-none",
-                      "focus-visible:ring-2 focus-visible:ring-ring",
-                      outside ? "text-text-placeholder" : "text-text-secondary",
-                      !disabled &&
-                        !active &&
-                        "hover:bg-[rgba(0,0,0,0.05)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.06)]",
-                      // Today is only marked when it is not the selection.
-                      !active &&
-                        sameDay(day, today) &&
-                        "font-semibold text-text ring-1 ring-inset ring-border-strong",
-                      active && "bg-text font-medium text-background",
-                      disabled &&
-                        "cursor-not-allowed text-text-placeholder opacity-40 hover:bg-transparent"
-                    )}
-                  >
-                    {day.getDate()}
-                  </button>
-                )
-              })}
-            </div>
+                  {days.map((day) => {
+                    const outside = day.getMonth() !== month.getMonth()
+                    const disabled = isDisabled(day)
+                    const active = selected !== null && sameDay(day, selected)
+
+                    return (
+                      <button
+                        key={day.getTime()}
+                        type="button"
+                        disabled={disabled}
+                        aria-pressed={active}
+                        onClick={() => pick(day)}
+                        className={cn(
+                          "flex h-8 items-center justify-center rounded-md text-[13px] tabular-nums",
+                          "transition-colors duration-120 outline-none",
+                          "focus-visible:ring-2 focus-visible:ring-ring",
+                          outside ? "text-text-placeholder" : "text-text-secondary",
+                          !disabled &&
+                            !active &&
+                            "hover:bg-[rgba(0,0,0,0.05)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.06)]",
+                          // Today is only marked when it is not the selection.
+                          !active &&
+                            sameDay(day, today) &&
+                            "font-semibold text-text ring-1 ring-inset ring-border-strong",
+                          active && "bg-text font-medium text-background",
+                          disabled &&
+                            "cursor-not-allowed text-text-placeholder opacity-40 hover:bg-transparent"
+                        )}
+                      >
+                        {day.getDate()}
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1">
+                  <MonthButton
+                    label={t("datePicker.backToCalendar")}
+                    icon={ChevronLeft}
+                    onClick={() => changeView("days")}
+                  />
+                  <span aria-live="polite" className="text-[13px] font-medium text-text">
+                    {view === "months"
+                      ? `${t("datePicker.chooseMonth")} · ${viewYear}`
+                      : t("datePicker.chooseYear")}
+                  </span>
+                </div>
+
+                {view === "months" ? (
+                  <PickGrid className="grid-cols-3">
+                    {names.map((name, index) => (
+                      <PickCell
+                        key={name}
+                        active={index === viewMonth}
+                        disabled={
+                          (minDate !== null && new Date(viewYear, index + 1, 0) < minDate) ||
+                          (maxDate !== null && new Date(viewYear, index, 1) > maxDate)
+                        }
+                        className="h-13 flex-col gap-0.5"
+                        onClick={() => {
+                          setMonth(new Date(viewYear, index, 1))
+                          changeView("days")
+                        }}
+                      >
+                        <span className="text-sm font-semibold tabular-nums">{index + 1}</span>
+                        <span className="max-w-full truncate px-1 text-[11px] opacity-70">
+                          {name}
+                        </span>
+                      </PickCell>
+                    ))}
+                  </PickGrid>
+                ) : (
+                  <PickGrid className="max-h-60 grid-cols-4 overflow-y-auto pe-1">
+                    {years.map((year) => (
+                      <PickCell
+                        key={year}
+                        active={year === viewYear}
+                        className="h-9 shrink-0 text-[13px] tabular-nums"
+                        onClick={() => {
+                          setMonth(new Date(year, viewMonth, 1))
+                          // On to the month: nobody comes here to change only the
+                          // year of a calendar they then have to page through.
+                          changeView("months")
+                        }}
+                      >
+                        {year}
+                      </PickCell>
+                    ))}
+                  </PickGrid>
+                )}
+              </>
+            )}
 
             <div className="mt-2 flex items-center justify-between border-t border-border pt-2">
               <FooterAction onClick={() => pick(today)} disabled={todayDisabled}>
@@ -422,6 +599,214 @@ export function DatePicker({
         </PopoverPrimitive.Positioner>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>
+  )
+}
+
+type View = "days" | "months" | "years"
+
+type DateParts = { d: string; m: string; y: string }
+
+/** `٢٠٢٦` to `2026`: an Arabic keyboard may well type the first. */
+const toLatinDigits = (text: string) =>
+  text
+    .replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 0x06f0))
+
+const pad2 = (n: number) => String(n).padStart(2, "0")
+
+/** The typed boxes as a real date, or null while they do not make one yet. */
+function partsToDate({ d, m, y }: DateParts): Date | null {
+  // A leading zero would have `Date` read 0099 as 1999.
+  if (!d || !m || y.length !== 4 || y.startsWith("0")) return null
+  return parseISO(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`)
+}
+
+/**
+ * Day, month and year as three labelled boxes, the fastest way to copy a date
+ * off a document: the labels are the format, so nobody has to know or guess one.
+ *
+ * Mounted per opening, because the popup unmounts when it closes, so it always
+ * starts from the current value without an effect to keep the two in step.
+ *
+ * ### Typed dates are held until the picker closes
+ *
+ * Changing one box of a date passes through dates nobody meant: `14` to `31`
+ * makes 31 May valid on the way to 31 March. Committed as they went by, one of
+ * those would be left in the field if the next box turned out wrong. So the
+ * calendar follows along, but the value only changes on Enter or on clicking away.
+ */
+function TypedDate({
+  selected,
+  isDisabled,
+  dayBox,
+  onDate,
+  onDone,
+}: {
+  selected: Date | null
+  isDisabled: (day: Date) => boolean
+  dayBox: React.RefObject<HTMLInputElement | null>
+  /** What the boxes come to, on every change: a usable date, or `null`. */
+  onDate: (date: Date | null) => void
+  /** Enter on a usable date. */
+  onDone: (date: Date) => void
+}) {
+  const t = useT()
+  const id = React.useId()
+  const monthBox = React.useRef<HTMLInputElement>(null)
+  const yearBox = React.useRef<HTMLInputElement>(null)
+  const [parts, setParts] = React.useState<DateParts>(() => ({
+    d: selected ? pad2(selected.getDate()) : "",
+    m: selected ? pad2(selected.getMonth() + 1) : "",
+    y: selected ? String(selected.getFullYear()) : "",
+  }))
+
+  const date = partsToDate(parts)
+  const complete = Boolean(parts.d && parts.m && parts.y.length === 4)
+  const wrong = complete && (!date || isDisabled(date))
+
+  // `lastLead` is the highest digit that can still start a two-digit value: the
+  // box moves on after a 4 for the day or a 2 for the month, as no 40th or 20th
+  // month is coming. The year is a fixed length and has nowhere to move on to.
+  const boxes = [
+    { key: "d", label: t("datePicker.day"), size: 2, lastLead: 3, ref: dayBox, prev: null, next: monthBox },
+    { key: "m", label: t("datePicker.month"), size: 2, lastLead: 1, ref: monthBox, prev: dayBox, next: yearBox },
+    { key: "y", label: t("datePicker.year"), size: 4, lastLead: 9, ref: yearBox, prev: monthBox, next: null },
+  ] as const
+
+  return (
+    <div className="mb-3 border-b border-border pb-3">
+      <div className="grid grid-cols-[1fr_1fr_1.5fr] gap-2">
+        {boxes.map((box) => (
+          <div key={box.key} className="min-w-0">
+            <label
+              htmlFor={`${id}-${box.key}`}
+              className="mb-1 block text-[11px] font-medium text-text-muted"
+            >
+              {box.label}
+            </label>
+            <Input
+              ref={box.ref}
+              id={`${id}-${box.key}`}
+              dir="ltr"
+              inputMode="numeric"
+              autoComplete="off"
+              aria-invalid={wrong || undefined}
+              className="h-11 text-center text-base tabular-nums md:h-8 md:text-[13px]"
+              value={parts[box.key]}
+              onFocus={(event) => event.target.select()}
+              onChange={(event) => {
+                const text = toLatinDigits(event.target.value).replace(/\D/g, "").slice(0, box.size)
+                const grew = text.length > parts[box.key].length
+                const next = { ...parts, [box.key]: text }
+                setParts(next)
+
+                const typed = partsToDate(next)
+                onDate(typed && !isDisabled(typed) ? typed : null)
+
+                if (grew && (text.length === box.size || Number(text) > box.lastLead)) {
+                  box.next?.current?.focus()
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  if (date && !wrong) onDone(date)
+                } else if (event.key === "Backspace" && !parts[box.key]) {
+                  box.prev?.current?.focus()
+                }
+              }}
+            />
+          </div>
+        ))}
+      </div>
+      {wrong && <p className="mt-1.5 text-xs text-danger">{t("datePicker.invalid")}</p>}
+    </div>
+  )
+}
+
+/**
+ * The grid behind the month or the year in the header. Scrolls to the highlighted
+ * cell on the way in, which is what makes a hundred-odd years quick to get
+ * through: it opens on the year on screen, not on 1926.
+ */
+function PickGrid({ className, children }: { className?: string; children: React.ReactNode }) {
+  const grid = React.useRef<HTMLDivElement>(null)
+
+  React.useLayoutEffect(() => {
+    const box = grid.current
+    const active = box?.querySelector<HTMLElement>("[aria-pressed='true']")
+    if (box && active) {
+      box.scrollTop = active.offsetTop - box.clientHeight / 2 + active.offsetHeight / 2
+    }
+  }, [])
+
+  return (
+    <div ref={grid} className={cn("relative mt-2 grid content-start gap-1", className)}>
+      {children}
+    </div>
+  )
+}
+
+function PickCell({
+  active,
+  disabled,
+  className,
+  onClick,
+  children,
+}: {
+  active: boolean
+  disabled?: boolean
+  className?: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "flex min-w-0 items-center justify-center rounded-md",
+        "transition-colors duration-120 outline-none",
+        "focus-visible:ring-2 focus-visible:ring-ring",
+        active
+          ? "bg-text text-background"
+          : "text-text-secondary hover:bg-[rgba(0,0,0,0.05)] hover:text-text dark:hover:bg-[rgba(255,255,255,0.06)]",
+        disabled && "cursor-not-allowed opacity-40 hover:bg-transparent",
+        className
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+/** The month or the year in the header, drawn so it reads as something to open. */
+function ViewButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-7 min-w-0 items-center gap-1 rounded-md border border-border px-2",
+        "text-[13px] font-medium whitespace-nowrap text-text",
+        "transition-colors duration-120 outline-none hover:border-border-strong",
+        "focus-visible:ring-2 focus-visible:ring-ring"
+      )}
+    >
+      <span className="min-w-0 truncate tabular-nums">{children}</span>
+      <ChevronDown className="size-3 shrink-0 text-text-muted" strokeWidth={1.75} aria-hidden />
+    </button>
   )
 }
 

@@ -269,6 +269,7 @@ export function EditableField({
                 disabled={saving}
                 invalid={!!error}
                 defaultOpen
+                numeric
                 className={cn("w-full", CONTROL)}
               />
             ) : isPhone ? (

@@ -9,7 +9,7 @@ import type { DesignDocument, DesignVariable } from "./design"
 
 /**
  * The fake data behind the editor's card preview: one value per variable, chosen
- * by its type.
+ * by its type, and a picture for every image slot whatever its type says.
  *
  * It reads `design.vars` rather than the editor's list because that is what the
  * issue form and the renderer read, so it also covers a variable an element is
@@ -110,5 +110,17 @@ export function sampleCardValues(
 
   const values: CardValues = {}
   for (const variable of design.vars) values[variable.name] = sampleFor(variable)
+
+  // The slot has the last word. A saved design can bind an image element to a
+  // variable with no type, `file`, `text` or an older word for a photo. None of
+  // those reach the pictures above, and the slot would stay an empty `{name}`.
+  for (const page of design.pages) {
+    for (const element of page.elements) {
+      if (element.kind !== "image" || !element.variable) continue
+      if (values[element.variable]?.src) continue
+      values[element.variable] = { ...values[element.variable], src: SAMPLE_PHOTO }
+    }
+  }
+
   return values
 }

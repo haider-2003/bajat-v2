@@ -126,7 +126,7 @@ export function DynamicField({
             // stores — nothing between here and the wire reformats a date.
             value={typeof value === "string" ? value : ""}
             onChange={(next) => onChange(next || null)}
-            placeholder={t("issue.form.datePlaceholder")}
+            numeric
             label={field.label}
             disabled={disabled}
             className="h-11 text-base md:h-9 md:text-sm"

@@ -11,6 +11,8 @@ import { useT } from "@/i18n/context"
 import { displayImageSrc } from "@/utils/download-image"
 import { cn } from "@/lib/utils"
 
+import { frameWidth, RotateButtons, TurningFace, useCardTurns } from "./card-turn"
+
 /**
  * The rendered card, lying on a stage — the one object every identity screen
  * shows (the printer's preview, the Requests detail, the ID Flow review).
@@ -97,6 +99,8 @@ export function CardStage({
 
   const hasBack = Boolean(card.backImage)
   const flipped = face === "back" && hasBack
+  const { turns, sideways, rotate } = useCardTurns(flipped ? "back" : "front")
+  const hasArtwork = hasBack || Boolean(card.frontImage)
 
   return (
     <div
@@ -126,8 +130,15 @@ export function CardStage({
         </div>
       </div>
 
-      <div style={{ width: `min(100%, 340px, calc(var(--stage-h) * ${ratio}))` }}>
-        <div className="perspective-[1400px]" style={{ aspectRatio: ratio }}>
+      <div
+        style={{
+          width: frameWidth(`min(340px, calc(var(--stage-h) * ${ratio}))`, ratio, sideways),
+        }}
+      >
+        <div
+          className="perspective-[1400px]"
+          style={{ aspectRatio: sideways ? 1 / ratio : ratio }}
+        >
           {/* Three layers: a box holding the `perspective`, a `transform-3d`
               flipper that turns, and two faces stacked on it with their backs
               hidden — the rear one pre-turned 180° so it faces out once the
@@ -144,6 +155,9 @@ export function CardStage({
             <CardFace
               label={t("printer.front")}
               src={card.frontImage}
+              ratio={ratio}
+              sideways={sideways}
+              quarterTurns={turns.front}
               onMeasure={setRatio}
               onRefresh={onRefresh}
               refreshing={refreshing}
@@ -153,6 +167,9 @@ export function CardStage({
                 className="rotate-y-180"
                 label={t("printer.back")}
                 src={card.backImage}
+                ratio={ratio}
+                sideways={sideways}
+                quarterTurns={turns.back}
                 onRefresh={onRefresh}
                 refreshing={refreshing}
               />
@@ -161,40 +178,41 @@ export function CardStage({
         </div>
       </div>
 
-      {hasBack ? (
-        <div className="flex items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 md:h-8"
-            aria-pressed={flipped}
-            onClick={() => setFace(flipped ? "front" : "back")}
-          >
-            <FlipHorizontal
-              data-icon="inline-start"
-              strokeWidth={1.75}
-              // The glyph turns with the card.
-              className={cn(
-                "transition-transform duration-500 motion-reduce:transition-none",
-                flipped && "-scale-x-100"
-              )}
-            />
-            {t("issue.flipCard")}
-          </Button>
-          <span className="text-xs font-medium text-text-muted">
-            {flipped ? t("printer.back") : t("printer.front")}
-          </span>
+      {/* A card whose artwork has not been generated at all has no sides yet and
+          nothing to turn, and the face itself says so. */}
+      {hasArtwork && (
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {hasBack && (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 md:h-8"
+              aria-pressed={flipped}
+              onClick={() => setFace(flipped ? "front" : "back")}
+            >
+              <FlipHorizontal
+                data-icon="inline-start"
+                strokeWidth={1.75}
+                // The glyph turns with the card.
+                className={cn(
+                  "transition-transform duration-500 motion-reduce:transition-none",
+                  flipped && "-scale-x-100"
+                )}
+              />
+              {t("issue.flipCard")}
+            </Button>
+          )}
+          <RotateButtons onRotate={rotate} />
+          {hasBack ? (
+            <span className="text-xs font-medium text-text-muted">
+              {flipped ? t("printer.back") : t("printer.front")}
+            </span>
+          ) : (
+            // Said once, quietly. Without it a one-sided card is indistinguishable
+            // from a two-sided one whose back failed to render.
+            <p className="text-xs text-text-placeholder">{t("printer.singleSided")}</p>
+          )}
         </div>
-      ) : (
-        // Said once, quietly. Without it a one-sided card is indistinguishable
-        // from a two-sided one whose back failed to render — but only once
-        // there is a front to compare it to: a card whose artwork has not been
-        // generated at all has no sides yet, and the face itself says so.
-        card.frontImage && (
-          <p className="text-xs text-text-placeholder">
-            {t("printer.singleSided")}
-          </p>
-        )
       )}
     </div>
   )
@@ -212,6 +230,9 @@ function CardFace({
   className,
   label,
   src,
+  ratio,
+  sideways,
+  quarterTurns,
   onMeasure,
   onRefresh,
   refreshing,
@@ -219,6 +240,9 @@ function CardFace({
   className?: string
   label: string
   src: string | null | undefined
+  ratio: number
+  sideways: boolean
+  quarterTurns: number
   /** Only the front reports its shape — see the note on `CardStage`. */
   onMeasure?: (ratio: number) => void
   onRefresh: () => void
@@ -240,14 +264,14 @@ function CardFace({
   return (
     <div
       className={cn(
-        "absolute inset-0 flex items-center justify-center overflow-hidden",
-        "rounded-xl backface-hidden",
+        "absolute inset-0 rounded-xl backface-hidden",
         // A painted card is the artwork edge to edge, with nothing framing it
-        // but its own shadow. An empty one is a placeholder, and says so with a
-        // dashed outline.
+        // but its own shadow. The shadow stays out here on the frame so that it
+        // keeps falling downwards when the artwork inside is turned. An empty
+        // card is a placeholder, and says so with a dashed outline.
         painted
-          ? cn("bg-surface", CARD_SHADOW)
-          : "border border-dashed border-border-strong bg-surface",
+          ? CARD_SHADOW
+          : "flex items-center justify-center overflow-hidden border border-dashed border-border-strong bg-surface",
         className
       )}
     >
@@ -279,24 +303,31 @@ function CardFace({
           </button>
         </div>
       ) : (
-        // A pre-signed URL on a host the image optimizer is not configured
-        // for, and one that expires in five minutes: caching it through
-        // /_next/image would cache a 403.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={displayImageSrc(src)}
-          alt={t("printer.faceAlt", { face: label })}
-          onError={() => setBrokenSrc(src)}
-          onLoad={(event) => {
-            const { naturalWidth, naturalHeight } = event.currentTarget
-            if (naturalWidth > 0 && naturalHeight > 0) {
-              onMeasure?.(naturalWidth / naturalHeight)
-            }
-          }}
-          // The frame is the image's own shape, so `cover` and `contain` agree
-          // — `cover` is the one that still bleeds if they ever disagree.
-          className="size-full object-cover"
-        />
+        <TurningFace
+          ratio={ratio}
+          sideways={sideways}
+          quarterTurns={quarterTurns}
+          className="overflow-hidden rounded-xl bg-surface"
+        >
+          {/* A pre-signed URL on a host the image optimizer is not configured
+              for, and one that expires in five minutes: caching it through
+              /_next/image would cache a 403. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={displayImageSrc(src)}
+            alt={t("printer.faceAlt", { face: label })}
+            onError={() => setBrokenSrc(src)}
+            onLoad={(event) => {
+              const { naturalWidth, naturalHeight } = event.currentTarget
+              if (naturalWidth > 0 && naturalHeight > 0) {
+                onMeasure?.(naturalWidth / naturalHeight)
+              }
+            }}
+            // The box is the image's own shape, so `cover` and `contain` agree
+            // — `cover` is the one that still bleeds if they ever disagree.
+            className="size-full object-cover"
+          />
+        </TurningFace>
       )}
     </div>
   )

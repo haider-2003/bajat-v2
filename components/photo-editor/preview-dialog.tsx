@@ -5,6 +5,12 @@ import { FlipHorizontal } from "lucide-react"
 
 import { CardFaceRender } from "@/components/id-card/card-render"
 import { CARD_SHADOW } from "@/components/id-card/card-stage"
+import {
+  frameWidth,
+  RotateButtons,
+  TurningFace,
+  useCardTurns,
+} from "@/components/id-card/card-turn"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -84,6 +90,7 @@ function PreviewBody() {
   const front = design?.pages[0]
   const back = design?.pages[1]
   const showBack = flipped && Boolean(back)
+  const { turns, sideways, rotate } = useCardTurns(showBack ? "back" : "front")
 
   /* Form-only variables and files never reach the card, so without this their
      fake data would be invisible and they would look forgotten. */
@@ -104,34 +111,46 @@ function PreviewBody() {
         {/* Full-bleed against the body's gutter, as on the printer's preview. */}
         <div className="-mx-5 flex flex-col items-center gap-4 border-y border-border-subtle bg-surface-sunken px-5 py-6">
           {front ? (
-            <FlippingCard front={front} back={back} values={values} flipped={showBack} />
+            <FlippingCard
+              front={front}
+              back={back}
+              values={values}
+              flipped={showBack}
+              sideways={sideways}
+              turns={turns}
+            />
           ) : (
             <p className="py-10 text-center text-[13px] text-text-muted">
               {t("issue.noPreview")}
             </p>
           )}
 
-          {back && (
-            <div className="flex items-center gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 md:h-8"
-                onClick={() => setFlipped(!showBack)}
-              >
-                <FlipHorizontal
-                  data-icon="inline-start"
-                  strokeWidth={1.75}
-                  className={cn(
-                    "transition-transform duration-500 motion-reduce:transition-none",
-                    showBack && "-scale-x-100"
-                  )}
-                />
-                {t("issue.flipCard")}
-              </Button>
-              <span className="text-xs font-medium text-text-muted">
-                {showBack ? t("printer.back") : t("printer.front")}
-              </span>
+          {front && (
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {back && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 md:h-8"
+                  onClick={() => setFlipped(!showBack)}
+                >
+                  <FlipHorizontal
+                    data-icon="inline-start"
+                    strokeWidth={1.75}
+                    className={cn(
+                      "transition-transform duration-500 motion-reduce:transition-none",
+                      showBack && "-scale-x-100"
+                    )}
+                  />
+                  {t("issue.flipCard")}
+                </Button>
+              )}
+              <RotateButtons onRotate={rotate} />
+              {back && (
+                <span className="text-xs font-medium text-text-muted">
+                  {showBack ? t("printer.back") : t("printer.front")}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -182,11 +201,15 @@ function FlippingCard({
   back,
   values,
   flipped,
+  sideways,
+  turns,
 }: {
   front: CardFaceProps["page"]
   back: CardFaceProps["page"] | undefined
   values: CardFaceProps["values"]
   flipped: boolean
+  sideways: boolean
+  turns: { front: number; back: number }
 }) {
   const ref = React.useRef<HTMLDivElement>(null)
   const [width, setWidth] = React.useState(0)
@@ -194,7 +217,10 @@ function FlippingCard({
   React.useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    const measure = () => setWidth(el.getBoundingClientRect().width)
+    // `offsetWidth`, not the bounding box: the first measure lands during the
+    // dialog's entry animation, whose 0.98 scale the box would include, and no
+    // resize follows to correct it.
+    const measure = () => setWidth(el.offsetWidth)
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(el)
@@ -202,15 +228,20 @@ function FlippingCard({
   }, [])
 
   const ratio = front.width / front.height
+  // `width` is the frame. Turned, the card's own width is the frame's height.
+  const cardWidth = sideways ? width * ratio : width
 
   return (
     <div
       ref={ref}
       className="max-w-full"
-      style={{ width: `min(100%, 460px, calc(52vh * ${ratio}))` }}
+      style={{ width: frameWidth(`min(460px, calc(52vh * ${ratio}))`, ratio, sideways) }}
     >
       {width > 0 && (
-        <div className="perspective-[1400px]" style={{ height: width / ratio }}>
+        <div
+          className="perspective-[1400px]"
+          style={{ height: sideways ? width * ratio : width / ratio }}
+        >
           <div
             className={cn(
               "relative size-full transform-3d",
@@ -219,12 +250,21 @@ function FlippingCard({
               flipped && "rotate-y-180"
             )}
           >
-            <div className="absolute inset-0 backface-hidden">
-              <CardFaceRender page={front} values={values} width={width} className={CARD_SHADOW} />
+            <div className={cn("absolute inset-0 rounded-lg backface-hidden", CARD_SHADOW)}>
+              <TurningFace ratio={ratio} sideways={sideways} quarterTurns={turns.front}>
+                <CardFaceRender page={front} values={values} width={cardWidth} />
+              </TurningFace>
             </div>
             {back && (
-              <div className="absolute inset-0 rotate-y-180 backface-hidden">
-                <CardFaceRender page={back} values={values} width={width} className={CARD_SHADOW} />
+              <div
+                className={cn(
+                  "absolute inset-0 rotate-y-180 rounded-lg backface-hidden",
+                  CARD_SHADOW
+                )}
+              >
+                <TurningFace ratio={ratio} sideways={sideways} quarterTurns={turns.back}>
+                  <CardFaceRender page={back} values={values} width={cardWidth} />
+                </TurningFace>
               </div>
             )}
           </div>

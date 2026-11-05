@@ -14,6 +14,12 @@ import {
 } from "lucide-react"
 
 import { CardFaceRender, type CardValues } from "@/components/id-card/card-render"
+import {
+  frameWidth,
+  RotateButtons,
+  TurningFace,
+  useCardTurns,
+} from "@/components/id-card/card-turn"
 import { DynamicField, isWideField } from "@/components/id-card/dynamic-field"
 import { Button } from "@/components/ui/button"
 import { SoftBadge } from "@/components/ui/data-bits"
@@ -851,9 +857,12 @@ function CardStage({
   const front = pages[0]
   const back = pages[1]
   const flipped = face === "back" && Boolean(back)
-  const height = front && width > 0 ? (front.height * width) / front.width : 0
+  const { turns, sideways, rotate } = useCardTurns(flipped ? "back" : "front")
   /** Width ÷ height; a CR-80 stands in for the skeleton and the empty box. */
   const ratio = front ? front.width / front.height : 85.6 / 54
+  // `width` is the frame. Turned, the card's own width is the frame's height.
+  const cardWidth = sideways ? width * ratio : width
+  const height = sideways ? width * ratio : width / ratio
 
   return (
     <aside
@@ -876,7 +885,11 @@ function CardStage({
         <div
           ref={ref}
           style={{
-            width: `min(100%, max(var(--stage-min), min(${CARD_MAX}px, calc(var(--stage-h) * ${ratio}))))`,
+            width: frameWidth(
+              `max(var(--stage-min), min(${CARD_MAX}px, calc(var(--stage-h) * ${ratio})))`,
+              ratio,
+              sideways
+            ),
           }}
         >
           {loading ? (
@@ -898,22 +911,21 @@ function CardStage({
                     flipped && "rotate-y-180"
                   )}
                 >
-                  <div className="absolute inset-0 backface-hidden">
-                    <CardFaceRender
-                      page={front}
-                      values={values}
-                      width={width}
-                      className={CARD_SHADOW}
-                    />
+                  <div className={cn("absolute inset-0 rounded-lg backface-hidden", CARD_SHADOW)}>
+                    <TurningFace ratio={ratio} sideways={sideways} quarterTurns={turns.front}>
+                      <CardFaceRender page={front} values={values} width={cardWidth} />
+                    </TurningFace>
                   </div>
                   {back && (
-                    <div className="absolute inset-0 rotate-y-180 backface-hidden">
-                      <CardFaceRender
-                        page={back}
-                        values={values}
-                        width={width}
-                        className={CARD_SHADOW}
-                      />
+                    <div
+                      className={cn(
+                        "absolute inset-0 rotate-y-180 rounded-lg backface-hidden",
+                        CARD_SHADOW
+                      )}
+                    >
+                      <TurningFace ratio={ratio} sideways={sideways} quarterTurns={turns.back}>
+                        <CardFaceRender page={back} values={values} width={cardWidth} />
+                      </TurningFace>
                     </div>
                   )}
                 </div>
@@ -922,28 +934,33 @@ function CardStage({
           )}
         </div>
 
-        {back && (
-          <div className="flex items-center gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-10 md:h-8"
-              onClick={() => onFaceChange(flipped ? "front" : "back")}
-            >
-              <FlipHorizontal
-                data-icon="inline-start"
-                strokeWidth={1.75}
-                // The glyph turns with the card.
-                className={cn(
-                  "transition-transform duration-500 motion-reduce:transition-none",
-                  flipped && "-scale-x-100"
-                )}
-              />
-              {t("issue.flipCard")}
-            </Button>
-            <span className="text-xs font-medium text-text-muted">
-              {flipped ? t("printer.back") : t("printer.front")}
-            </span>
+        {front && !loading && !failed && (
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {back && (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 md:h-8"
+                onClick={() => onFaceChange(flipped ? "front" : "back")}
+              >
+                <FlipHorizontal
+                  data-icon="inline-start"
+                  strokeWidth={1.75}
+                  // The glyph turns with the card.
+                  className={cn(
+                    "transition-transform duration-500 motion-reduce:transition-none",
+                    flipped && "-scale-x-100"
+                  )}
+                />
+                {t("issue.flipCard")}
+              </Button>
+            )}
+            <RotateButtons onRotate={rotate} />
+            {back && (
+              <span className="text-xs font-medium text-text-muted">
+                {flipped ? t("printer.back") : t("printer.front")}
+              </span>
+            )}
           </div>
         )}
       </div>
