@@ -166,6 +166,13 @@ export function placeElement(
   return best
 }
 
+/**
+ * The face a copy goes to. Only the first face is the front — the rest of the
+ * editor names every later one "Back" — so this is the one rule that agrees with
+ * those labels, and a legacy document with a third page still has an answer.
+ */
+export const otherFace = (page: number) => (page === 0 ? 1 : 0)
+
 export function blankDocument(): EditorDocument {
   return {
     width: ID_CARD_WIDTH,
@@ -239,6 +246,10 @@ type EditorState = {
   updateElement: (id: string, patch: Partial<CanvasElement>) => void
   removeElement: (id: string) => void
   duplicateElement: (id: string) => void
+  /** Copies an element onto another face. Its variable binding comes with it. */
+  copyElementToFace: (id: string, page: number) => void
+  /** Moves an element onto another face. A locked element stays where it is. */
+  moveElementToFace: (id: string, page: number) => void
   reorderElement: (id: string, how: "front" | "forward" | "backward" | "back") => void
   setPageBackground: (page: number, color: string) => void
   setDocumentSize: (width: number, height: number) => void
@@ -410,6 +421,58 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set({ doc, selectedId: copy.id, dirty: true })
   },
 
+  /**
+   * The way a variable gets onto both faces without being defined twice.
+   *
+   * Only the element is new. `variables` is untouched, because §6.1 emits one
+   * `vars[]` entry however many elements share a binding, so the form asks once
+   * and both faces print the same value.
+   *
+   * It keeps the source's position when that spot is free, so the two faces
+   * line up, and looks for a gap when it isn't. A lock does not carry over: the
+   * copy almost always needs nudging into place on its new face.
+   *
+   * `activePage` moves with the selection because the stage snaps a drag against
+   * the active page's elements — left behind, the first drag of the copy would
+   * snap to the face it just came from.
+   */
+  copyElementToFace: (id, page) => {
+    const source = get().element(id)
+    if (!source || !get().doc.pages[page]) return
+    get().pushHistory()
+    const doc = clone(get().doc)
+    const copy: CanvasElement = {
+      ...clone(source),
+      id: newId("e"),
+      ...placeElement(doc, page, source, source),
+    }
+    delete copy.locked
+    doc.pages[page].elements.push(copy)
+    set({ doc, activePage: page, selectedId: copy.id, dirty: true })
+  },
+
+  /**
+   * The same element on another face — only the page changes, so it keeps its
+   * id, style and binding. A drag cannot do this, being clamped to its own face.
+   *
+   * Placement and `activePage` follow `copyElementToFace`, for the same reasons.
+   * A lock is refused here rather than carried across: it already stops a drag
+   * and a nudge, and "locked" has to mean this element stays where it is.
+   */
+  moveElementToFace: (id, page) => {
+    const source = get().element(id)
+    const from = get().pageOf(id)
+    if (!source || source.locked || from === page || !get().doc.pages[page]) return
+    get().pushHistory()
+    const doc = clone(get().doc)
+    doc.pages[from].elements = doc.pages[from].elements.filter((e) => e.id !== id)
+    doc.pages[page].elements.push({
+      ...clone(source),
+      ...placeElement(doc, page, source, source),
+    })
+    set({ doc, activePage: page, selectedId: id, dirty: true })
+  },
+
   reorderElement: (id, how) => {
     get().pushHistory()
     const doc = clone(get().doc)
@@ -458,9 +521,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     if (element) get().pushHistory()
     const doc = clone(get().doc)
     if (element) doc.pages[get().activePage].elements.push(element)
+    const { variables } = get()
     set({
       doc,
-      variables: [...get().variables, variable],
+      // A name already in the list is the same variable placed again. Its one
+      // definition is updated rather than listed twice, because `vars[]` keeps
+      // only the first per key and anything in a second would be lost on save.
+      variables: variables.some((v) => v.name === variable.name)
+        ? variables.map((v) => (v.name === variable.name ? variable : v))
+        : [...variables, variable],
       selectedId: element ? element.id : get().selectedId,
       dirty: true,
     })

@@ -432,7 +432,7 @@ export function PhotoEditor({
               the document, and the lane goes underneath. */}
           <div className="flex flex-none flex-wrap items-start gap-2 lg:gap-3">
             <DocBar />
-            <PropertyBar />
+            <PropertyBar onNotify={notify} />
             <ActionBar
               onOpenSettings={() => setSettingsOpen(true)}
               onExport={exportJson}

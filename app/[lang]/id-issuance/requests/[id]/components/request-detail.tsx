@@ -23,7 +23,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { SoftBadge } from "@/components/ui/data-bits"
 import { useAuthStore } from "@/features/auth/store"
 import { useChangeIdStatus, useGetId } from "@/features/ids/api"
-import { identityName, identityPhone, requestFields } from "@/features/ids/fields"
+import { cardFields, cardholderField, cardName, cardTemplateId } from "@/features/ids/fields"
 import { ledgerVerbs, statusMeta } from "@/features/ids/status"
 import type { IDCard, StatusName } from "@/features/ids/types"
 import { useGetTemplate } from "@/features/templates/api"
@@ -32,10 +32,10 @@ import { useT } from "@/i18n/context"
 import { useFormatDate } from "@/i18n/format"
 import { Link, useLocaleRouter } from "@/i18n/navigation"
 import { cn } from "@/lib/utils"
-import { displayImageSrc, downloadCardFaces } from "@/utils/download-image"
-import { EMPTY_VALUE, formatPhone, formatText } from "@/utils/format"
+import { downloadCardFaces } from "@/utils/download-image"
+import { EMPTY_VALUE, formatText } from "@/utils/format"
 
-import { EditableField } from "./editable-field"
+import { EditableField, EditableMedia } from "./editable-field"
 
 /**
  * One issued card, and everything the ledger can do to it —
@@ -46,9 +46,12 @@ import { EditableField } from "./editable-field"
  * `GET /identity/{id}` is the card. `GET /template/{templateId}` follows it,
  * for one thing only: the design's `vars[]`, which is where the *labels* and
  * *types* of the keys in `request` live. The card's embedded template is the
- * thin copy — a title and a face — and without the full one every field is a
- * humanised key edited as free text. The page renders as soon as the card is
- * in; the labels sharpen when the template lands.
+ * thin copy — a title and a face — and a card can come back without even that,
+ * so the id comes from wherever the card has it (`cardTemplateId`). The page
+ * renders as soon as the card is in; the labels sharpen and the template's
+ * fields open up once that read settles. If it never yields a design, the fields
+ * are still editable, on humanised keys and a best guess at each control
+ * (`cardFields`).
  *
  * ### What can be done depends on where the card is
  *
@@ -88,11 +91,14 @@ export function RequestDetail({ id }: { id: number }) {
   const card = cardQuery.data ?? null
 
   // Chained on the card: disabled until it names its template.
-  const templateQuery = useGetTemplate(card?.template?.id)
+  const templateId = card ? cardTemplateId(card) : undefined
+  const templateQuery = useGetTemplate(templateId)
   const design = React.useMemo(
     () => readDesign(templateQuery.data?.template),
     [templateQuery.data]
   )
+  // The embedded copy when there is one, otherwise the read above.
+  const templateTitle = card?.template?.title ?? templateQuery.data?.title
 
   const [deleting, setDeleting] = React.useState(false)
 
@@ -125,8 +131,9 @@ export function RequestDetail({ id }: { id: number }) {
     )
   }
 
-  const name = identityName(card)
+  const name = cardName(card)
   const meta = statusMeta(t, card.status)
+  const canEdit = can("update-identity")
 
   return (
     <>
@@ -147,8 +154,7 @@ export function RequestDetail({ id }: { id: number }) {
             <SoftBadge tone={meta.tone}>{meta.label}</SoftBadge>
           </div>
           <p className="mt-1 text-[13px] text-text-muted">
-            {formatText(card.template?.title)}
-            {card.organization?.name ? " · " + card.organization.name : ""}
+            {[templateTitle, card.organization?.name].filter(Boolean).join(" · ") || EMPTY_VALUE}
           </p>
         </div>
 
@@ -187,19 +193,22 @@ export function RequestDetail({ id }: { id: number }) {
           <DecisionPanel card={card} />
 
           <Section title={t("printer.details")}>
-            <Detail label={t("ids.columns.cardholder")} value={formatText(name)} />
-            <Detail
-              label={t("members.columns.phone")}
-              value={formatPhone(identityPhone(card))}
-              mono
-            />
+            {[
+              cardholderField(card, "name", t("ids.columns.cardholder")),
+              cardholderField(card, "phone", t("members.columns.phone")),
+            ]
+              // An absent value is dropped for a viewer, as `Detail` drops it.
+              .filter((field) => field.value || canEdit)
+              .map((field) => (
+                <EditableField key={field.key} card={card} field={field} canEdit={canEdit} />
+              ))}
             <Detail
               label={t("filters.attributes.organization")}
               value={formatText(card.organization?.name)}
             />
             <Detail
               label={t("templates.singular")}
-              value={formatText(card.template?.title)}
+              value={formatText(templateTitle)}
             />
             <Detail label={t("ids.columns.issued")} value={formatDate(card.createdAt)} />
             <Detail
@@ -212,9 +221,9 @@ export function RequestDetail({ id }: { id: number }) {
 
           <TemplateFields
             card={card}
-            design={design}
-            canEdit={can("update-identity")}
-            loadingLabels={templateQuery.isPending && !!card.template?.id}
+            // `isPending` is also true of a disabled query, hence the id.
+            design={templateId && templateQuery.isPending ? undefined : design}
+            canEdit={canEdit}
           />
         </div>
       </div>
@@ -369,7 +378,7 @@ function DecisionPanel({ card }: { card: IDCard }) {
 function cardTerms(t: ReturnType<typeof useT>, card: IDCard) {
   return [
     { label: t("ids.columns.card"), value: `#${card.id}` },
-    { label: t("ids.columns.cardholder"), value: formatText(identityName(card)) },
+    { label: t("ids.columns.cardholder"), value: formatText(cardName(card)) },
     { label: t("templates.singular"), value: formatText(card.template?.title) },
     { label: t("common.status"), value: statusMeta(t, card.status).label },
   ]
@@ -453,55 +462,50 @@ function ArtworkActions({
 
 /**
  * The template's own variables — whatever this design happens to collect —
- * each one editable in place where the design allows it.
+ * each one editable in place unless the server generates it. An empty one is
+ * only worth a row to someone who can fill it in.
  */
 function TemplateFields({
   card,
   design,
   canEdit,
-  loadingLabels,
 }: {
   card: IDCard
-  design: ReturnType<typeof readDesign>
+  /** `undefined` while the template is on its way; `null` if it has no design. */
+  design: ReturnType<typeof readDesign> | undefined
   canEdit: boolean
-  /** The template is still on its way: labels may sharpen shortly. */
-  loadingLabels: boolean
 }) {
   const t = useT()
-  const fields = React.useMemo(() => requestFields(card, design), [card, design])
-  const textFields = fields.filter((field) => !field.image)
-  const imageFields = fields.filter((field) => field.image)
+  const fields = React.useMemo(
+    () =>
+      cardFields(card, design).filter((field) => field.value || (canEdit && field.input)),
+    [card, design, canEdit]
+  )
+  const textFields = fields.filter((field) => !field.media)
+  const mediaFields = fields.filter((field) => field.media)
 
   if (fields.length === 0) return null
 
+  const hint = design === undefined
+    ? t("ids.fields.loadingLabels")
+    : !canEdit
+      ? undefined
+      : !design
+        ? t("ids.fields.noDesign")
+        : fields.some((field) => field.locked)
+          ? t("ids.fields.editHintLocked")
+          : t("ids.fields.editHint")
+
   return (
-    <Section
-      title={t("printer.templateFields")}
-      hint={loadingLabels ? t("ids.fields.loadingLabels") : t("ids.fields.editHint")}
-    >
+    <Section title={t("printer.templateFields")} hint={hint}>
       {textFields.map((field) => (
         <EditableField key={field.key} card={card} field={field} canEdit={canEdit} />
       ))}
 
-      {imageFields.length > 0 && (
+      {mediaFields.length > 0 && (
         <div className="col-span-full flex flex-wrap gap-3">
-          {imageFields.map((field) => (
-            <figure key={field.key} className="w-20">
-              {/* eslint-disable-next-line @next/next/no-img-element -- a
-                  pre-signed URL that expires in five minutes; the optimizer
-                  would cache a 403. */}
-              <img
-                src={displayImageSrc(field.value)}
-                alt={field.label}
-                className="size-20 rounded-lg border border-border object-cover"
-              />
-              <figcaption
-                title={field.key}
-                className="mt-1.5 truncate text-[11px] text-text-muted"
-              >
-                {field.label}
-              </figcaption>
-            </figure>
+          {mediaFields.map((field) => (
+            <EditableMedia key={field.key} card={card} field={field} canEdit={canEdit} />
           ))}
         </div>
       )}

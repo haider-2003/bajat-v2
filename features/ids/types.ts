@@ -235,7 +235,8 @@ export type RejectIdInput = {
  * `"by system"` literal `CreateIDCardInput` sends (spec §9.17).
  */
 export type UpdateIdVarsInput = {
-  template_id: number
+  /** Absent only for a card that names its template nowhere — `cardTemplateId`. */
+  template_id?: number
   organization_id?: number
   identity: number
 } & Record<string, string | number | File | null | undefined>

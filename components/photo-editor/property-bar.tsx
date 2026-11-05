@@ -2,10 +2,12 @@
 
 import * as React from "react"
 import {
+  ArrowUpDown,
   Blend,
   Bold,
   Brush,
   Copy,
+  CopyPlus,
   Italic,
   Link2,
   MoreHorizontal,
@@ -38,7 +40,7 @@ import {
   variableMeta,
 } from "@/features/templates/editor-constants"
 import { fontStack } from "@/features/templates/editor-fonts"
-import { useEditorStore } from "@/features/templates/editor-store"
+import { otherFace, useEditorStore } from "@/features/templates/editor-store"
 import { useT } from "@/i18n/context"
 import type { TranslationKey } from "@/i18n/translate"
 import type { CanvasElement, TextAlign } from "@/features/templates/editor-types"
@@ -179,7 +181,11 @@ function AlignIcon({ path }: { path: string }) {
   }
 }
 
-export function PropertyBar() {
+export function PropertyBar({
+  onNotify,
+}: {
+  onNotify: (message: string, tone?: "ok" | "bad") => void
+}) {
   const t = useT()
   const selectedId = useEditorStore((s) => s.selectedId)
   const doc = useEditorStore((s) => s.doc)
@@ -190,6 +196,8 @@ export function PropertyBar() {
   const push = useEditorStore((s) => s.pushHistory)
   const remove = useEditorStore((s) => s.removeElement)
   const duplicate = useEditorStore((s) => s.duplicateElement)
+  const copyToFace = useEditorStore((s) => s.copyElementToFace)
+  const moveToFace = useEditorStore((s) => s.moveElementToFace)
   const reorder = useEditorStore((s) => s.reorderElement)
   const armStyle = useEditorStore((s) => s.armStyle)
 
@@ -222,6 +230,7 @@ export function PropertyBar() {
   const clampX = (v: number) => Math.max(0, Math.min(v, doc.width - element.width))
   const clampY = (v: number) => Math.max(0, Math.min(v, doc.height - element.height))
   const variable = element.variable ? variables.find((v) => v.name === element.variable) : null
+  const other = otherFace(doc.pages.findIndex((p) => p.elements.includes(element)))
 
   /* ---- the controls. Each is built once and rendered in exactly one place,
      because `fit` puts every section in the bar or in the sheet, never both. */
@@ -741,6 +750,37 @@ export function PropertyBar() {
             <Copy className="size-4" strokeWidth={1.6} />
             {t("templates.duplicate")}
           </DropdownMenuItem>
+          {doc.pages.length > 1 && (
+            <>
+              <DropdownMenuItem
+                onClick={() => {
+                  copyToFace(element.id, other)
+                  onNotify(
+                    t(other === 0 ? "editor.vars.copiedToFront" : "editor.vars.copiedToBack"),
+                    "ok"
+                  )
+                }}
+              >
+                <CopyPlus className="size-4" strokeWidth={1.6} />
+                {t(other === 0 ? "editor.vars.copyToFront" : "editor.vars.copyToBack")}
+              </DropdownMenuItem>
+              {/* Greyed rather than hidden when locked: "Unlock" is two rows up,
+                  and an action that vanishes gives no clue why. */}
+              <DropdownMenuItem
+                disabled={element.locked}
+                onClick={() => {
+                  moveToFace(element.id, other)
+                  onNotify(
+                    t(other === 0 ? "editor.vars.movedToFront" : "editor.vars.movedToBack"),
+                    "ok"
+                  )
+                }}
+              >
+                <ArrowUpDown className="size-4" strokeWidth={1.6} />
+                {t(other === 0 ? "editor.vars.moveToFront" : "editor.vars.moveToBack")}
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuItem variant="destructive" onClick={() => remove(element.id)}>
             <Trash2 className="size-4" strokeWidth={1.6} />
             {t("common.delete")}

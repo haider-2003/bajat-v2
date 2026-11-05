@@ -2,7 +2,9 @@
 
 import * as React from "react"
 import {
+  ArrowUpDown,
   ChevronLeft,
+  CopyPlus,
   EyeOff,
   FileIcon,
   Image as ImageIcon,
@@ -27,7 +29,7 @@ import {
   VARIABLE_TYPES,
   variableMeta,
 } from "@/features/templates/editor-constants"
-import { newId, placeElement, useEditorStore } from "@/features/templates/editor-store"
+import { newId, otherFace, placeElement, useEditorStore } from "@/features/templates/editor-store"
 import type {
   CanvasElement,
   EditorVariable,
@@ -204,9 +206,13 @@ export function VariablesPanel({
  *
  * "From member" and "not in form" stay on that second line rather than becoming
  * tags of their own, because a tag is a colour, and four colours in a 264px
- * column is decoration rather than hierarchy. The two actions — reset a
- * sequence, delete — are icons that appear on hover, so they cost the row no
- * height at all.
+ * column is decoration rather than hierarchy. The actions — copy or move to the
+ * other face, reset a sequence, delete — are icons that appear on hover, so they
+ * cost the row no height at all.
+ *
+ * A variable can be bound to more than one element — that is how it prints on
+ * both faces — so the row reads every binding, not just the first. It stays lit
+ * whichever copy is selected, and a repeat click walks to the next one.
  */
 function VariableRow({
   variable,
@@ -224,9 +230,19 @@ function VariableRow({
   const select = useEditorStore((s) => s.select)
   const setActivePage = useEditorStore((s) => s.setActivePage)
   const removeVariable = useEditorStore((s) => s.removeVariable)
+  const copyElementToFace = useEditorStore((s) => s.copyElementToFace)
+  const moveElementToFace = useEditorStore((s) => s.moveElementToFace)
 
-  const bound = findBoundElement(doc, variable.name)
-  const isSelected = bound?.id === selectedId
+  const bound = findBoundElements(doc, variable.name)
+  const isSelected = bound.some((b) => b.id === selectedId)
+  const onBothFaces = new Set(bound.map((b) => b.page)).size > 1
+  // Nothing printed means nothing to copy or move.
+  const other = bound.length > 0 && doc.pages.length > 1 ? otherFace(bound[0].page) : null
+  // Already on both faces, a copy has nowhere left to go.
+  const copyTo = onBothFaces ? null : other
+  // The row only moves when "the variable" means one element, and one that is
+  // free to go. With several, the ⋯ menu on the element itself says which.
+  const moveTo = bound.length === 1 && !bound[0].locked ? other : null
 
   const Glyph = meta.element === "image" ? ImageIcon : meta.element === "text" ? TypeIcon : FileIcon
 
@@ -248,12 +264,14 @@ function VariableRow({
     variable.arabicNumbers ? "٠١٢٣" : null,
     meta.member ? t("editor.vars.fromMember") : null,
     meta.formHidden ? t("editor.vars.notInForm") : null,
+    onBothFaces ? t("editor.vars.onBothFaces") : null,
   ].filter(Boolean)
 
   const open = () => {
-    if (!bound) return
-    setActivePage(bound.page)
-    select(bound.id)
+    if (bound.length === 0) return
+    const next = bound[(bound.findIndex((b) => b.id === selectedId) + 1) % bound.length]
+    setActivePage(next.page)
+    select(next.id)
   }
 
   return (
@@ -263,6 +281,9 @@ function VariableRow({
       aria-pressed={isSelected}
       onClick={open}
       onKeyDown={(e) => {
+        // Keys pressed on the row's own buttons are theirs. Swallowing them here
+        // cancels the click, and Enter on "copy" would select the row instead.
+        if (e.target !== e.currentTarget) return
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()
           open()
@@ -271,7 +292,7 @@ function VariableRow({
       className={cn(
         "group/var relative rounded-[10px] px-2 py-[7px]",
         "outline-none transition-colors duration-100 focus-visible:ring-2 focus-visible:ring-ring",
-        bound ? "cursor-pointer hover:bg-[var(--editor-hover)]" : "cursor-default",
+        bound.length > 0 ? "cursor-pointer hover:bg-[var(--editor-hover)]" : "cursor-default",
         isSelected && "bg-accent-soft shadow-[inset_0_0_0_1px_var(--color-accent-border)]"
       )}
     >
@@ -322,13 +343,62 @@ function VariableRow({
       </div>
 
       {/* Parked over the type label rather than in the flow, so hovering a row
-          cannot change its height or shuffle the column. */}
+          cannot change its height or shuffle the column. The opaque backing is
+          what keeps a long label from running through the icons. */}
       <div
         className={cn(
-          "absolute top-1/2 end-1.5 flex -translate-y-1/2 items-center gap-0.5",
+          "absolute top-1/2 end-1.5 flex -translate-y-1/2 items-center gap-0.5 rounded-[9px] bg-[var(--editor-float)]",
           "opacity-0 transition-opacity group-hover/var:opacity-100 focus-within:opacity-100"
         )}
       >
+        {copyTo !== null && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <IconButton
+                  icon={CopyPlus}
+                  size="sm"
+                  label={`${t(copyTo === 0 ? "editor.vars.copyToFront" : "editor.vars.copyToBack")}: ${variable.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    copyElementToFace(bound[0].id, copyTo)
+                    onNotify(
+                      t(copyTo === 0 ? "editor.vars.copiedToFront" : "editor.vars.copiedToBack"),
+                      "ok"
+                    )
+                  }}
+                />
+              }
+            />
+            <TooltipContent side="top">
+              {t(copyTo === 0 ? "editor.vars.copyToFront" : "editor.vars.copyToBack")}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {moveTo !== null && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <IconButton
+                  icon={ArrowUpDown}
+                  size="sm"
+                  label={`${t(moveTo === 0 ? "editor.vars.moveToFront" : "editor.vars.moveToBack")}: ${variable.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    moveElementToFace(bound[0].id, moveTo)
+                    onNotify(
+                      t(moveTo === 0 ? "editor.vars.movedToFront" : "editor.vars.movedToBack"),
+                      "ok"
+                    )
+                  }}
+                />
+              }
+            />
+            <TooltipContent side="top">
+              {t(moveTo === 0 ? "editor.vars.moveToFront" : "editor.vars.moveToBack")}
+            </TooltipContent>
+          </Tooltip>
+        )}
         {meta.sequence && (
           <Tooltip>
             <TooltipTrigger
@@ -401,6 +471,16 @@ function DraftForm({
   const [error, setError] = React.useState("")
   const meta = variableMeta(draft.type)
   const key = formatVariableName(draft.name)
+
+  /**
+   * A name already in use places that variable again rather than defining a
+   * second one: the name is the data key, and one key holds one value.
+   *
+   * A file is the exception. It has no element to place and the form already
+   * asks for it once, so there is nothing to add and the duplicate message stays.
+   */
+  const existing = key ? variables.find((v) => formatVariableName(v.name) === key) : undefined
+  const addingAgain = existing && variableMeta(existing.type).element ? existing : null
 
   /**
    * §10.1's fifteen, as the dropdown wants them: grouped by who supplies the
@@ -482,8 +562,9 @@ function DraftForm({
 
   const canSubmit =
     draft.name.trim() !== "" &&
-    draft.label.trim() !== "" &&
-    (!meta.options || meta.fixedOptions || draft.options.length > 0)
+    (addingAgain !== null ||
+      (draft.label.trim() !== "" &&
+        (!meta.options || meta.fixedOptions || draft.options.length > 0)))
 
   const submit = () => {
     // Reserved-name check — those two keys belong to the member record (§10.4).
@@ -491,7 +572,7 @@ function DraftForm({
       setError(t("editor.vars.reservedName", { key }))
       return
     }
-    if (variables.some((v) => formatVariableName(v.name) === key)) {
+    if (existing && !addingAgain) {
       setError(t("editor.vars.duplicateName", { key }))
       return
     }
@@ -500,30 +581,37 @@ function DraftForm({
       return
     }
 
-    const isVisible = meta.forceInvisible ? false : draft.isVisible
-    const variable: EditorVariable = {
-      // Visible variables keep the raw name and normalize at export; invisible
-      // ones normalize immediately (§10.3).
-      name: isVisible ? draft.name.trim() : key,
-      label: draft.label.trim(),
-      type: draft.type,
-      isVisible,
+    const isVisible = addingAgain ? true : meta.forceInvisible ? false : draft.isVisible
+    const variable: EditorVariable = addingAgain
+      ? { ...addingAgain, isVisible }
+      : {
+          // Visible variables keep the raw name and normalize at export;
+          // invisible ones normalize immediately (§10.3).
+          name: isVisible ? draft.name.trim() : key,
+          label: draft.label.trim(),
+          type: draft.type,
+          isVisible,
+        }
+    if (!addingAgain) {
+      if (meta.options) {
+        variable.options = meta.fixedOptions ? [...GENDER_OPTIONS] : [...draft.options]
+      }
+      if (meta.random) variable.randomNumberLength = draft.randomNumberLength
+      if (meta.sequence) variable.startingNumber = draft.startingNumber
+      if (meta.numeric && draft.arabicNumbers) variable.arabicNumbers = true
     }
-    if (meta.options) {
-      variable.options = meta.fixedOptions ? [...GENDER_OPTIONS] : [...draft.options]
-    }
-    if (meta.random) variable.randomNumberLength = draft.randomNumberLength
-    if (meta.sequence) variable.startingNumber = draft.startingNumber
-    if (meta.numeric && draft.arabicNumbers) variable.arabicNumbers = true
 
+    // Read off the definition, not the draft: placing an existing variable again
+    // prints what it already is, whichever type the dropdown happens to show.
+    const kind = variableMeta(variable.type).element
     let element: CanvasElement | null = null
-    if (isVisible && meta.element) {
+    if (isVisible && kind) {
       const id = newId("v")
       const size =
-        meta.element === "image"
+        kind === "image"
           ? {
-              width: draft.type === "signature" ? 200 : 150,
-              height: draft.type === "signature" ? 80 : 150,
+              width: variable.type === "signature" ? 200 : 150,
+              height: variable.type === "signature" ? 80 : 150,
             }
           : { width: 200, height: 30 }
       // Two variables added in a row used to land on the same pixel, printing
@@ -531,7 +619,7 @@ function DraftForm({
       const spot = placeElement(doc, activePage, size)
 
       element =
-        meta.element === "image"
+        kind === "image"
           ? {
               id,
               kind: "image",
@@ -634,172 +722,187 @@ function DraftForm({
           )}
         </div>
 
-        <div className="mt-3.5">
-          <FieldLabel required locked={meta.lockLabel}>
-            {t("editor.vars.label")}
-          </FieldLabel>
-          <Field locked={meta.lockLabel}>
-            <input
-              value={draft.label}
-              placeholder={t("editor.vars.labelPlaceholder")}
-              onChange={(e) => {
-                setDraft({ ...draft, label: e.target.value })
-                setError("")
-              }}
-              className="w-full border-0 bg-transparent p-0 text-[13px] text-text outline-none"
-            />
-          </Field>
-        </div>
-
-        {meta.options && (
-          <div className="mt-3.5">
-            <FieldLabel required>{t("editor.vars.options")}</FieldLabel>
-            {meta.fixedOptions ? (
-              <>
-                {GENDER_OPTIONS.map((o) => (
-                  <div
-                    key={o}
-                    className="mb-1 flex h-[30px] items-center rounded-lg bg-[var(--editor-well)] px-2.5 text-[12.5px]"
-                  >
-                    {o}
-                  </div>
-                ))}
-                <Hint>{t("editor.vars.fixedOptions")}</Hint>
-              </>
-            ) : (
-              <>
-                {draft.options.map((o, i) => (
-                  <div
-                    key={`${o}-${i}`}
-                    className="mb-1 flex h-[30px] items-center gap-1.5 rounded-lg bg-[var(--editor-well)] pe-1.5 ps-2.5 text-[12.5px]"
-                  >
-                    <span className="min-w-0 flex-1 truncate">{o}</span>
-                    <IconButton
-                      icon={X}
-                      size="sm"
-                      label={t("editor.vars.removeOption", { option: o })}
-                      onClick={() =>
-                        setDraft({
-                          ...draft,
-                          options: draft.options.filter((_, index) => index !== i),
-                        })
-                      }
-                    />
-                  </div>
-                ))}
-                <div className="mt-0.5 flex gap-1.5">
-                  <Field>
-                    <input
-                      value={draft.pending}
-                      placeholder={t("editor.vars.addOption")}
-                      onChange={(e) => setDraft({ ...draft, pending: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key !== "Enter" || !draft.pending.trim()) return
-                        e.preventDefault()
-                        setDraft({
-                          ...draft,
-                          options: [...draft.options, draft.pending.trim()],
-                          pending: "",
-                        })
-                      }}
-                      className="w-full border-0 bg-transparent p-0 text-[13px] text-text outline-none"
-                    />
-                  </Field>
-                  <IconButton
-                    icon={Plus}
-                    label={t("editor.vars.addOption")}
-                    onClick={() => {
-                      if (!draft.pending.trim()) return
-                      setDraft({
-                        ...draft,
-                        options: [...draft.options, draft.pending.trim()],
-                        pending: "",
-                      })
-                    }}
-                  />
-                </div>
-                {meta.preloadProvinces && <Hint>{t("editor.vars.provincesHint")}</Hint>}
-                {draft.options.length === 0 && (
-                  <p className="mt-1.5 text-[11.5px] text-danger">
-                    {t("editor.vars.optionRequired")}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {meta.random && (
-          <div className="mt-3.5">
-            <FieldLabel>{t("editor.vars.digits")}</FieldLabel>
-            <Field>
-              <input
-                type="number"
-                value={draft.randomNumberLength}
-                onChange={(e) =>
-                  setDraft({ ...draft, randomNumberLength: Number(e.target.value) || 8 })
-                }
-                className="w-full border-0 bg-transparent p-0 font-mono text-xs text-text outline-none"
-              />
-            </Field>
-          </div>
-        )}
-
-        {meta.sequence && (
-          <div className="mt-3.5">
-            <FieldLabel>{t("editor.vars.startingNumber")}</FieldLabel>
-            <Field>
-              <input
-                type="number"
-                value={draft.startingNumber}
-                onChange={(e) =>
-                  setDraft({ ...draft, startingNumber: Number(e.target.value) || 1 })
-                }
-                className="w-full border-0 bg-transparent p-0 font-mono text-xs text-text outline-none"
-              />
-            </Field>
-          </div>
-        )}
-
-        {meta.numeric && (
-          <div className="mt-2.5">
-            <Toggle
-              checked={draft.arabicNumbers}
-              onToggle={() => setDraft({ ...draft, arabicNumbers: !draft.arabicNumbers })}
-              title={t("editor.vars.arabicNumerals")}
-              description={t("editor.vars.arabicNumeralsHint")}
-            />
-          </div>
-        )}
-
-        <div className="mt-2.5">
-          <Toggle
-            checked={draft.isVisible}
-            locked={meta.forceInvisible || meta.forceVisible}
-            onToggle={() => setDraft({ ...draft, isVisible: !draft.isVisible })}
-            title={t("editor.vars.showOnCard")}
-            description={
-              meta.forceInvisible
-                ? t("editor.vars.filesNeverPrinted")
-                : meta.forceVisible
-                  ? t("editor.vars.memberAlwaysPrinted")
-                  : draft.isVisible
-                    ? t("editor.vars.createsElement")
-                    : t("editor.vars.formOnlyNotPrinted")
-            }
-          />
-        </div>
-
-        {meta.formHidden && (
+        {addingAgain && (
           <div className="mt-2.5">
             <Callout>
-              {t("editor.vars.generatedBefore")}{" "}
-              <strong className="font-medium text-text">
-                {t("editor.vars.generatedEmphasis")}
-              </strong>
-              .
+              {t("editor.vars.addingAgain", {
+                key,
+                type: t(variableMeta(addingAgain.type).labelKey),
+              })}
             </Callout>
           </div>
+        )}
+
+        {!addingAgain && (
+          <>
+            <div className="mt-3.5">
+              <FieldLabel required locked={meta.lockLabel}>
+                {t("editor.vars.label")}
+              </FieldLabel>
+              <Field locked={meta.lockLabel}>
+                <input
+                  value={draft.label}
+                  placeholder={t("editor.vars.labelPlaceholder")}
+                  onChange={(e) => {
+                    setDraft({ ...draft, label: e.target.value })
+                    setError("")
+                  }}
+                  className="w-full border-0 bg-transparent p-0 text-[13px] text-text outline-none"
+                />
+              </Field>
+            </div>
+
+            {meta.options && (
+              <div className="mt-3.5">
+                <FieldLabel required>{t("editor.vars.options")}</FieldLabel>
+                {meta.fixedOptions ? (
+                  <>
+                    {GENDER_OPTIONS.map((o) => (
+                      <div
+                        key={o}
+                        className="mb-1 flex h-[30px] items-center rounded-lg bg-[var(--editor-well)] px-2.5 text-[12.5px]"
+                      >
+                        {o}
+                      </div>
+                    ))}
+                    <Hint>{t("editor.vars.fixedOptions")}</Hint>
+                  </>
+                ) : (
+                  <>
+                    {draft.options.map((o, i) => (
+                      <div
+                        key={`${o}-${i}`}
+                        className="mb-1 flex h-[30px] items-center gap-1.5 rounded-lg bg-[var(--editor-well)] pe-1.5 ps-2.5 text-[12.5px]"
+                      >
+                        <span className="min-w-0 flex-1 truncate">{o}</span>
+                        <IconButton
+                          icon={X}
+                          size="sm"
+                          label={t("editor.vars.removeOption", { option: o })}
+                          onClick={() =>
+                            setDraft({
+                              ...draft,
+                              options: draft.options.filter((_, index) => index !== i),
+                            })
+                          }
+                        />
+                      </div>
+                    ))}
+                    <div className="mt-0.5 flex gap-1.5">
+                      <Field>
+                        <input
+                          value={draft.pending}
+                          placeholder={t("editor.vars.addOption")}
+                          onChange={(e) => setDraft({ ...draft, pending: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter" || !draft.pending.trim()) return
+                            e.preventDefault()
+                            setDraft({
+                              ...draft,
+                              options: [...draft.options, draft.pending.trim()],
+                              pending: "",
+                            })
+                          }}
+                          className="w-full border-0 bg-transparent p-0 text-[13px] text-text outline-none"
+                        />
+                      </Field>
+                      <IconButton
+                        icon={Plus}
+                        label={t("editor.vars.addOption")}
+                        onClick={() => {
+                          if (!draft.pending.trim()) return
+                          setDraft({
+                            ...draft,
+                            options: [...draft.options, draft.pending.trim()],
+                            pending: "",
+                          })
+                        }}
+                      />
+                    </div>
+                    {meta.preloadProvinces && <Hint>{t("editor.vars.provincesHint")}</Hint>}
+                    {draft.options.length === 0 && (
+                      <p className="mt-1.5 text-[11.5px] text-danger">
+                        {t("editor.vars.optionRequired")}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {meta.random && (
+              <div className="mt-3.5">
+                <FieldLabel>{t("editor.vars.digits")}</FieldLabel>
+                <Field>
+                  <input
+                    type="number"
+                    value={draft.randomNumberLength}
+                    onChange={(e) =>
+                      setDraft({ ...draft, randomNumberLength: Number(e.target.value) || 8 })
+                    }
+                    className="w-full border-0 bg-transparent p-0 font-mono text-xs text-text outline-none"
+                  />
+                </Field>
+              </div>
+            )}
+
+            {meta.sequence && (
+              <div className="mt-3.5">
+                <FieldLabel>{t("editor.vars.startingNumber")}</FieldLabel>
+                <Field>
+                  <input
+                    type="number"
+                    value={draft.startingNumber}
+                    onChange={(e) =>
+                      setDraft({ ...draft, startingNumber: Number(e.target.value) || 1 })
+                    }
+                    className="w-full border-0 bg-transparent p-0 font-mono text-xs text-text outline-none"
+                  />
+                </Field>
+              </div>
+            )}
+
+            {meta.numeric && (
+              <div className="mt-2.5">
+                <Toggle
+                  checked={draft.arabicNumbers}
+                  onToggle={() => setDraft({ ...draft, arabicNumbers: !draft.arabicNumbers })}
+                  title={t("editor.vars.arabicNumerals")}
+                  description={t("editor.vars.arabicNumeralsHint")}
+                />
+              </div>
+            )}
+
+            <div className="mt-2.5">
+              <Toggle
+                checked={draft.isVisible}
+                locked={meta.forceInvisible || meta.forceVisible}
+                onToggle={() => setDraft({ ...draft, isVisible: !draft.isVisible })}
+                title={t("editor.vars.showOnCard")}
+                description={
+                  meta.forceInvisible
+                    ? t("editor.vars.filesNeverPrinted")
+                    : meta.forceVisible
+                      ? t("editor.vars.memberAlwaysPrinted")
+                      : draft.isVisible
+                        ? t("editor.vars.createsElement")
+                        : t("editor.vars.formOnlyNotPrinted")
+                }
+              />
+            </div>
+
+            {meta.formHidden && (
+              <div className="mt-2.5">
+                <Callout>
+                  {t("editor.vars.generatedBefore")}{" "}
+                  <strong className="font-medium text-text">
+                    {t("editor.vars.generatedEmphasis")}
+                  </strong>
+                  .
+                </Callout>
+              </div>
+            )}
+          </>
         )}
 
         {error && (
@@ -827,16 +930,16 @@ function DraftForm({
   )
 }
 
-/** The first element on any page bound to `name`, with its page index. */
-function findBoundElement(
+/** Every element bound to `name`, in page then z-order, with its page index. */
+function findBoundElements(
   doc: { pages: { elements: CanvasElement[] }[] },
   name: string
 ) {
-  for (let i = 0; i < doc.pages.length; i += 1) {
-    const found = doc.pages[i].elements.find((e) => e.variable === name)
-    if (found) return { page: i, id: found.id }
-  }
-  return null
+  return doc.pages.flatMap((page, index) =>
+    page.elements
+      .filter((e) => e.variable === name)
+      .map((e) => ({ page: index, id: e.id, locked: e.locked }))
+  )
 }
 
 export function PanelHead({
